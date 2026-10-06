@@ -1,0 +1,14 @@
+{
+    "window.zoomLevel": 0.5,
+    "dart.lineLength": 240,
+    "editor.wordWrapColumn": 240,
+    "editor.wordWrap": "wordWrapColumn",
+    "editor.rulers": [240],
+    "editor.fontSize": 14,
+    "[dart]": {
+        "editor.rulers": [240],
+        "editor.wordWrap": "wordWrapColumn",
+        "editor.wordWrapColumn": 240,
+        "editor.fontSize": 14
+    }
+}

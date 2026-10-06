@@ -1,0 +1,17 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+	{
+            "label": "dart_frog: dev",
+            "type": "shell",
+            "command": "dart_frog",
+            "args": [
+                "dev"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/aicmhcs_server"
+            },
+            "problemMatcher": []
+        }
+    ]
+}
