@@ -5,7 +5,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT/backend"
+cd "$ROOT/server"
 
 PORT="${AICMHCS_PORT:-8080}"
 

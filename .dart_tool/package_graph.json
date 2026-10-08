@@ -1,8 +1,8 @@
 {
   "roots": [
     "_",
-    "aicmhcs_client",
-    "aicmhcs_server"
+    "client",
+    "server"
   ],
   "packages": [
     {
@@ -12,7 +12,7 @@
       "devDependencies": []
     },
     {
-      "name": "aicmhcs_client",
+      "name": "client",
       "version": "1.0.0+1",
       "dependencies": [
         "crypto",
@@ -35,7 +35,7 @@
       ]
     },
     {
-      "name": "aicmhcs_server",
+      "name": "server",
       "version": "0.1.0",
       "dependencies": [
         "crypto",

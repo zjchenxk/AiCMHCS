@@ -806,14 +806,14 @@
       "languageVersion": "3.8"
     },
     {
-      "name": "aicmhcs_client",
-      "rootUri": "../aicmhcs_client",
+      "name": "client",
+      "rootUri": "../client",
       "packageUri": "lib/",
       "languageVersion": "3.8"
     },
     {
-      "name": "aicmhcs_server",
-      "rootUri": "../aicmhcs_server",
+      "name": "server",
+      "rootUri": "../server",
       "packageUri": "lib/",
       "languageVersion": "3.11"
     }

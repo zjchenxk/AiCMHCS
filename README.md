@@ -21,7 +21,7 @@ pub.dev 上没有达梦官方/社区 Dart 驱动。本框架依据 DM8 自带头
 1. **DLL 依赖解析**：Windows 按绝对路径加载 DLL 时不检索其所在目录，
    `dmdpi → dmcomm → libcrypto-3-x64` 依赖链会全部报“找不到模块”。
    `Dpi.open()` 收集驱动目录及 dependencies 子目录的 DLL 做**多轮加载
-   直到不动点**，逐层解开依赖（`backend/lib/dm/dpi.dart`）。
+   直到不动点**，逐层解开依赖（`server/lib/dm/dpi.dart`）。
 2. **中文字符集**：数据库实例为 GB18030（`SF_GET_UNICODE_FLAG()=0`）。
    框架全程使用 DPI 的 **W 系列（UTF-16）接口**执行语句、读列名与数据，
    由 DPI 自动完成 GB18030 ↔ UTF-16 转码，Dart 侧始终处理 Unicode，
@@ -34,7 +34,7 @@ pub.dev 上没有达梦官方/社区 Dart 驱动。本框架依据 DM8 自带头
 
 ```
 AiCMHCS/
-├── aicmhcs_client/                 # Flutter Web 前端
+├── client/                 # Flutter Web 前端
 │   ├── lib/
 │   │   ├── main.dart
 │   │   ├── models/user.dart
@@ -42,7 +42,7 @@ AiCMHCS/
 │   │   ├── services/auth_api.dart
 │   │   └── theme/app_theme.dart
 │   └── web/index.html
-├── aicmhcs_server/                  # Dart Frog 后端
+├── server/                  # Dart Frog 后端
 │   ├── main.dart             # 自定义入口：启动时初始化 DB 网关并注入
 │   ├── routes/
 │   │   ├── _middleware.dart  # CORS + 全局异常兜底
@@ -81,7 +81,7 @@ AiCMHCS/
 ### 1. 初始化数据库（建表空间/账号/表/演示数据，可重复执行）
 
 ```bash
-./scripts/init_db.sh
+./tools/init_db.sh
 ```
 
 脚本以 SYSDBA 执行 `01`（重建应用账号 AICMHCS，默认表空间 AICMHCS），
@@ -90,7 +90,7 @@ AiCMHCS/
 ### 2. 启动后端（http://localhost:8080）
 
 ```bash
-./scripts/start_backend.sh
+./tools/start_backend.sh
 ```
 
 > 注意：`dart_frog dev` 需要交互终端（无终端时 stdin 报错退出），
@@ -100,9 +100,9 @@ AiCMHCS/
 ### 3. 启动前端（http://localhost:5173）
 
 ```bash
-./scripts/serve_frontend.sh          # 构建产物 + 静态托管
+./tools/serve_frontend.sh          # 构建产物 + 静态托管
 # 或开发模式：
-cd frontend && flutter run -d chrome # 或 -d web-server --web-port 5173
+cd client && flutter run -d chrome # 或 -d web-server --web-port 5173
 ```
 
 后端地址默认 `http://localhost:8080`，可用编译参数覆盖：
@@ -154,11 +154,11 @@ cd frontend && flutter run -d chrome # 或 -d web-server --web-port 5173
   LOGIN_RESULT(SUCCESS|FAIL)/FAIL_REASON
 
 口令算法：`sha256(salt + password)` 十六进制，存储 `salt:hash`；
-后端 `AuthService` 与 `backend/tool/generate_demo_data.dart` 保持一致。
+后端 `AuthService` 与 `server/tool/generate_demo_data.dart` 保持一致。
 修改演示数据后重新生成：
 
 ```bash
-cd backend && dart run tool/generate_demo_data.dart > ../database/03_demo_data.sql
+cd server && dart run tool/generate_demo_data.dart > ../database/03_demo_data.sql
 ```
 
 ## 配置（环境变量）
@@ -170,12 +170,12 @@ cd backend && dart run tool/generate_demo_data.dart > ../database/03_demo_data.s
 | AICMHCS_DB_USER | AICMHCS | 应用账号（最小权限，不用 SYSDBA） |
 | AICMHCS_DB_PASSWORD | Aicmhcs@2026 | 应用账号口令 |
 | DM_HOME | C:\dmdbms | 达梦安装目录（定位 dmdpi.dll） |
-| DM_SYSDBA_PWD | （见 scripts/init_db.sh） | 仅初始化脚本用，生产环境务必覆盖 |
+| DM_SYSDBA_PWD | （见 tools/init_db.sh） | 仅初始化脚本用，生产环境务必覆盖 |
 
 ## 测试与验证
 
-- `cd backend && dart test` —— 口令散列/令牌单元测试
-- `cd backend && dart analyze` / `cd frontend && flutter analyze`
+- `cd server && dart test` —— 口令散列/令牌单元测试
+- `cd server && dart analyze` / `cd client && flutter analyze`
 - 浏览器实测记录见 `gui-test-screenshots/`：T1 登录页布局与中文渲染、
   T2 错误口令提示、T3 登录成功页（王心怡/儿童心理医生）均通过
 
@@ -185,5 +185,5 @@ cd backend && dart run tool/generate_demo_data.dart > ../database/03_demo_data.s
 - **中文乱码**：本框架 W 路径已解决；若自行扩展 SQL 拼接，注意参数绑定
   只支持 ASCII（见上文“已知限制”）
 - **端口占用（10048）**：`netstat -ano | findstr :8080` 找到 PID 后
-  `taskkill /F /PID <pid>`，或直接重跑 `scripts/start_backend.sh`（会先清理）
+  `taskkill /F /PID <pid>`，或直接重跑 `tools/start_backend.sh`（会先清理）
 - **初始化脚本中文报错**：确认 SQL 文件为 UTF-8、机器装有 iconv（Git Bash 自带）

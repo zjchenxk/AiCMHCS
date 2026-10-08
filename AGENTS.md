@@ -12,19 +12,17 @@ AiCMHCS（智慧儿童心理保健系统）：为满足国家信创要求，技�
 ## 仓库结构与生成物
 
 ```
-aicmhcs_client/   Flutter 应用（MVVM，原 aicmhcs_flutter 更名并入）
-aicmhcs_server/   Dart Frog 后端：routes / lib(dm, models, services) / tool / test
+client/   Flutter 应用（MVVM，原 aicmhcs_flutter 更名并入）
+server/   Dart Frog 后端：routes / lib(dm, models, services) / tool / test
 database/         DM8 SQL 脚本：01 表空间+账号(SYSDBA 执行) / 02 建表 / 03 演示数据
 tools/            init_db.sh / start_backend.sh / serve_frontend.sh（Git Bash 运行）
 ```
 
 **禁止手动编辑**（生成物，改动会被覆盖）：
 
-- `database/03_demo_data.sql` — 由 `aicmhcs_server/tool/generate_demo_data.dart` 生成；
-- `aicmhcs_server/build/**`、`aicmhcs_server/.dart_frog/**` — `dart_frog build/dev` 的产物；
-- `aicmhcs_client/{android,ios,linux,macos,windows}/flutter/generated_*` 等平台生成文件。
-
-**遗留路径不一致（注意）**：`README.md` 与 `tools/*.sh` 中残留旧骨架的 `backend/`、`frontend/`、`scripts/` 目录名，实际目录为 `aicmhcs_server/`、`aicmhcs_client/`、`tools/`。其中 `tools/start_backend.sh`、`tools/serve_frontend.sh` 因 `cd` 旧路径当前**无法直接运行**，请按实际目录手动执行其中的命令；修订这些脚本时记得同步目录名。
+- `database/03_demo_data.sql` — 由 `server/tool/generate_demo_data.dart` 生成；
+- `server/build/**`、`server/.dart_frog/**` — `dart_frog build/dev` 的产物；
+- `client/{android,ios,linux,macos,windows}/flutter/generated_*` 等平台生成文件。
 
 ## 常用命令
 
@@ -37,19 +35,19 @@ flutter pub get
 ./tools/init_db.sh
 
 # 重新生成演示数据（改了生成脚本或演示账号后）
-cd aicmhcs_server && dart run tool/generate_demo_data.dart > ../database/03_demo_data.sql
+cd server && dart run tool/generate_demo_data.dart > ../database/03_demo_data.sql
 
 # 启动后端（http://localhost:8080；dart_frog dev 需要交互终端，支持热重载）
-cd aicmhcs_server && dart_frog dev
+cd server && dart_frog dev
 # 无终端环境（后台/CI）用生产模式：
-cd aicmhcs_server && dart_frog build && dart run build/bin/server.dart
+cd server && dart_frog build && dart run build/bin/server.dart
 
 # 启动前端（Web 调试）
-cd aicmhcs_client && flutter run -d chrome      # 或 -d web-server --web-port 5173
+cd client && flutter run -d chrome      # 或 -d web-server --web-port 5173
 
 # 检查（提交前执行；后端测试为纯单元测试，无需数据库）
-cd aicmhcs_server && dart analyze && dart format --set-exit-if-changed . && dart test
-cd aicmhcs_client && flutter analyze && dart format --set-exit-if-changed . && flutter test
+cd server && dart analyze && dart format --set-exit-if-changed . && dart test
+cd client && flutter analyze && dart format --set-exit-if-changed . && flutter test
 ```
 
 端口约定：后端 API `8080`（环境变量 `AICMHCS_PORT` 可覆盖）、前端静态托管 `5173`、DM8 `5236`。
@@ -60,7 +58,7 @@ cd aicmhcs_client && flutter analyze && dart format --set-exit-if-changed . && f
 
 ## 架构与代码约定
 
-### 后端（aicmhcs_server，Dart Frog）
+### 后端（server，Dart Frog）
 
 分层：`routes/`（HTTP 适配，文件路径即 URL）→ `services/`（业务逻辑）→ `lib/dm/`（DM8 数据库网关）；`lib/models/` 手写业务模型。**没有任何代码生成环节**（无 serverpod generate、无 migration，协议就是手写 JSON + 手写模型）。
 
@@ -83,7 +81,7 @@ cd aicmhcs_client && flutter analyze && dart format --set-exit-if-changed . && f
 - 数据库模式为 `AICMHCS`。现有表：`SYS_USER`（系统用户）、`SYS_LOGIN_LOG`（登录审计），系统表前缀 `SYS_`；
 - **DDL 约定**（`database/*.sql`）：表/列名全大写；中文注释用 `COMMENT ON TABLE/COLUMN`；主键 `BIGINT IDENTITY(1,1)`，约束命名 `PK_<表>` / `UK_<表>_<字段>`；时间列 `TIMESTAMP(0)`。脚本是**达梦方言，不要写 PostgreSQL 语法**；建表脚本以 `DROP TABLE IF EXISTS` 开头（重建式，可重复执行但有破坏性）；`init_db.sh` 目前只执行 01–03，新增编号脚本需同步加入该脚本。
 
-### 前端（aicmhcs_client）— MVVM
+### 前端（client）— MVVM
 
 - **导入约定**：统一 `import 'package:material_ui/material_ui.dart';`（全仓库 0 处 `flutter/material.dart`），新页面遵循；
 - **全局对象**在 `lib/main.dart`：`token`（登录令牌）、`getIt`（服务定位器）——Serverpod 的 `client` 已随迁移移除；
@@ -97,7 +95,7 @@ cd aicmhcs_client && flutter analyze && dart format --set-exit-if-changed . && f
 - 新后端响应为**明文 JSON**（无 AES 加密、无 MD5 签名）；
 - 客户端 `utils/security_util.dart` 为旧架构遗留（AES-128-CBC + MD5，密钥/IV 硬编码），当前无任何调用方——保留但**不要在新代码中扩展使用**；若要恢复报文加密，需前后端同步设计。
 
-## UI 风格设定（aicmhcs_client）
+## UI 风格设定（client）
 
 整体视觉：**毛玻璃 + 扁平化**，基于 Material 3，所有颜色跟随当前主题（`Theme.of(context).colorScheme`），**禁止硬编码颜色**（`Colors.white`、`Color(0xFF...)` 等）。
 
@@ -149,13 +147,13 @@ cd aicmhcs_client && flutter analyze && dart format --set-exit-if-changed . && f
 ## 新增一个全栈功能的标准流程
 
 1. 在 `database/` 新增/修改建表脚本（沿用编号与 DDL 约定），必要时同步 `tools/init_db.sh`；执行 `./tools/init_db.sh` 应用；
-2. 在 `aicmhcs_server/lib/models/` 写模型（`fromRow`/`toJson`）；
-3. 在 `aicmhcs_server/lib/services/` 写业务服务（构造注入 `DmGateway`）；需在路由中直接读取的，在 `main.dart` 用 `provider<T>` 注入；
-4. 在 `aicmhcs_server/routes/api/<模块>/` 写路由（统一响应格式 + `_error` helper + 业务异常转换）；
-5. `cd aicmhcs_server && dart analyze && dart test`；
-6. 在 `aicmhcs_client/lib/services/` 写 HTTP 服务（校验 `code/message/data` 后 `fromJson`），注册到 `setupServiceLocator()`；
+2. 在 `server/lib/models/` 写模型（`fromRow`/`toJson`）；
+3. 在 `server/lib/services/` 写业务服务（构造注入 `DmGateway`）；需在路由中直接读取的，在 `main.dart` 用 `provider<T>` 注入；
+4. 在 `server/routes/api/<模块>/` 写路由（统一响应格式 + `_error` helper + 业务异常转换）；
+5. `cd server && dart analyze && dart test`；
+6. 在 `client/lib/services/` 写 HTTP 服务（校验 `code/message/data` 后 `fromJson`），注册到 `setupServiceLocator()`；
 7. 写 ViewModel 并注册到 `MultiProvider`；写页面（遵循「UI 风格设定」章节），注册菜单与路由；
-8. `cd aicmhcs_client && flutter analyze && flutter test`。
+8. `cd client && flutter analyze && flutter test`。
 
 ## 代码风格
 
@@ -166,8 +164,8 @@ cd aicmhcs_client && flutter analyze && dart format --set-exit-if-changed . && f
 
 ## 测试
 
-- 后端测试位于 `aicmhcs_server/test/`，为纯单元测试（口令散列、令牌逻辑），**不需要**数据库或 Docker，直接 `dart test`；
-- 前端测试位于 `aicmhcs_client/test/`，用 `flutter test`；
+- 后端测试位于 `server/test/`，为纯单元测试（口令散列、令牌逻辑），**不需要**数据库或 Docker，直接 `dart test`；
+- 前端测试位于 `client/test/`，用 `flutter test`；
 - 原 GitHub Actions CI 已随信创迁移移除（仓库无 `.github/` 目录）。
 
 ## 当前已知 Mock / 待接线（勿误判为已接通）

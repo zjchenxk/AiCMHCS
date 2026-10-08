@@ -2,28 +2,28 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "aicmhcs_client",
-            "cwd": "${workspaceFolder}/aicmhcs_client",
+            "name": "client",
+            "cwd": "${workspaceFolder}/client",
             "request": "launch",
             "type": "dart",
             "program": "lib/main.dart",
             "deviceId": "chrome"
         },
         {
-            "name": "aicmhcs_server",
-            "cwd": "${workspaceFolder}/aicmhcs_server",
+            "name": "server",
+            "cwd": "${workspaceFolder}/server",
             "request": "launch",
             "type": "dart",
             "preLaunchTask": "dart_frog: build",
-            "program": "${workspaceFolder}/aicmhcs_server/build/bin/server.dart"
+            "program": "${workspaceFolder}/server/build/bin/server.dart"
         }
     ],
     "compounds": [
         {
             "name": "aicmhcs (full stack)",
             "configurations": [
-                "aicmhcs_server",
-                "aicmhcs_client"
+                "server",
+                "client"
             ],
             "presentation": {
                 "order": 1

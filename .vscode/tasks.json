@@ -13,7 +13,7 @@
                 "build"
             ],
             "options": {
-                "cwd": "${workspaceFolder}/aicmhcs_server"
+                "cwd": "${workspaceFolder}/server"
             },
             "problemMatcher": []
         }
