@@ -159,7 +159,7 @@
     },
     {
       "name": "cupertino_ui",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "dependencies": [
         "collection",
         "flutter",
@@ -169,7 +169,7 @@
     },
     {
       "name": "material_ui",
-      "version": "1.5.0",
+      "version": "1.6.0",
       "dependencies": [
         "collection",
         "cupertino_ui",
