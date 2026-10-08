@@ -1,11 +1,7 @@
 import 'dart:convert';
 import 'package:client/main.dart';
-import 'package:client/models/basic/city.dart';
-import 'package:client/models/basic/county.dart';
-import 'package:client/models/basic/province.dart';
-import 'package:client/models/basic/town.dart';
-import 'package:client/models/basic/village.dart';
 import 'package:client/utils/security_util.dart';
+import 'package:common/model.dart';
 
 class AdminDivisionsService {
   /// 获取省/自治区/直辖市列表
@@ -15,7 +11,7 @@ class AdminDivisionsService {
       throw Exception('用户未登录或登录已过期，请重新登录！');
     }
 
-    var encryptedResponse ='';// await client.adminDivisions.getProvinces(token!);
+    var encryptedResponse = ''; // await client.adminDivisions.getProvinces(token!);
     if (encryptedResponse.isEmpty) {
       throw Exception('获取省/自治区/直辖市列表失败！响应消息为空');
     }
@@ -61,7 +57,7 @@ class AdminDivisionsService {
       throw Exception('用户未登录或登录已过期，请重新登录！');
     }
 
-    var encryptedResponse = '';// await client.adminDivisions.getCitiesByProvince(token!, provinceCode);
+    var encryptedResponse = ''; // await client.adminDivisions.getCitiesByProvince(token!, provinceCode);
     if (encryptedResponse.isEmpty) {
       throw Exception('获取市/州列表失败！响应消息为空');
     }
@@ -107,7 +103,7 @@ class AdminDivisionsService {
       throw Exception('用户未登录或登录已过期，请重新登录！');
     }
 
-    var encryptedResponse ='';// await client.adminDivisions.getCountiesByCity(token!, cityCode);
+    var encryptedResponse = ''; // await client.adminDivisions.getCountiesByCity(token!, cityCode);
     if (encryptedResponse.isEmpty) {
       throw Exception('获取县/区/旗列表失败！响应消息为空');
     }
@@ -153,7 +149,7 @@ class AdminDivisionsService {
       throw Exception('用户未登录或登录已过期，请重新登录！');
     }
 
-    var encryptedResponse ='';// await client.adminDivisions.getTownsByCounty(token!, countyCode);
+    var encryptedResponse = ''; // await client.adminDivisions.getTownsByCounty(token!, countyCode);
     if (encryptedResponse.isEmpty) {
       throw Exception('获取乡镇/街道列表失败！响应消息为空');
     }
@@ -199,7 +195,7 @@ class AdminDivisionsService {
       throw Exception('用户未登录或登录已过期，请重新登录！');
     }
 
-    var encryptedResponse ='';// await client.adminDivisions.getVillagesByTown(token!, townCode);
+    var encryptedResponse = ''; // await client.adminDivisions.getVillagesByTown(token!, townCode);
     if (encryptedResponse.isEmpty) {
       throw Exception('获取村/居委会列表失败！响应消息为空');
     }

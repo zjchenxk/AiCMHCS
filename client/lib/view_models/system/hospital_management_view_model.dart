@@ -1,11 +1,8 @@
 import 'package:client/main.dart';
-import 'package:client/models/basic/city.dart';
-import 'package:client/models/basic/county.dart';
-import 'package:client/models/basic/province.dart';
-import 'package:client/models/basic/town.dart';
 import 'package:client/models/hospital_info.dart';
 import 'package:client/models/hospital_tree_node.dart';
 import 'package:client/services/admin_divisions_service.dart';
+import 'package:common/model.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// 图片尺寸限制常量

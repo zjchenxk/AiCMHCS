@@ -7,4 +7,5 @@ environment:
 workspace:
   - client
   - server
+  - common
 
