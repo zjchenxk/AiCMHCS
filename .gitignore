@@ -1,3 +1,2 @@
-# Dart 工具本地编译缓存（dart test 快照与增量 kernel），自动生成、勿提交
-**/.dart_tool/pub/bin/
-**/.dart_tool/test/
+# Dart 工具本地目录（依赖解析配置与编译缓存），自动生成、勿提交
+**/.dart_tool/
