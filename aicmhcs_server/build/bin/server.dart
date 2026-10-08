@@ -15,14 +15,16 @@ import '../routes/api/auth/login.dart' as api_auth_login;
 import '../routes/_middleware.dart' as middleware;
 
 void main() async {
-  final address = InternetAddress.tryParse('') ?? InternetAddress.anyIPv6;
+  final address = InternetAddress.anyIPv6;
   final port = int.tryParse(Platform.environment['PORT'] ?? '8080') ?? 8080;
-  hotReload(() => createServer(address, port));
+  createServer(address, port);
 }
 
-Future<HttpServer> createServer(InternetAddress address, int port) {
+Future<HttpServer> createServer(InternetAddress address, int port) async {
   final handler = Cascade().add(buildRootHandler()).handler;
-  return entrypoint.run(handler, address, port);
+  final server = await entrypoint.run(handler, address, port);
+  print('\x1B[92m✓\x1B[0m Running on http://${server.address.host}:${server.port}');
+  return server;
 }
 
 Handler buildRootHandler() {

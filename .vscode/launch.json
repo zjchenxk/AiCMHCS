@@ -7,16 +7,15 @@
             "request": "launch",
             "type": "dart",
             "program": "lib/main.dart",
-            "deviceId": "chrome",
-            "args": ["-d", "chrome"]
+            "deviceId": "chrome"
         },
         {
             "name": "aicmhcs_server",
             "cwd": "${workspaceFolder}/aicmhcs_server",
             "request": "launch",
             "type": "dart",
-            "preLaunchTask": "dart_frog: dev",
-            "program": "main.dart"
+            "preLaunchTask": "dart_frog: build",
+            "program": "${workspaceFolder}/aicmhcs_server/build/bin/server.dart"
         }
     ],
     "compounds": [

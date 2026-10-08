@@ -1,12 +1,16 @@
 {
     "version": "2.0.0",
     "tasks": [
-	{
-            "label": "dart_frog: dev",
+        {
+            "label": "dart_frog: build",
             "type": "shell",
-            "command": "dart_frog",
+            "command": "dart",
             "args": [
-                "dev"
+                "pub",
+                "global",
+                "run",
+                "dart_frog_cli:dart_frog",
+                "build"
             ],
             "options": {
                 "cwd": "${workspaceFolder}/aicmhcs_server"
