@@ -1,7 +1,25 @@
 import 'package:client/main.dart';
+import 'package:client/services/auth_service.dart';
 import 'package:material_ui/material_ui.dart';
 
 class LoginViewModel extends ChangeNotifier {
+  /// 可选注入认证服务（便于测试替换）；为空时运行期经 getIt 解析。
+  LoginViewModel({AuthService? authService}) : _authService = authService {
+    _userCodeFocusNode.addListener(() {
+      if (!_userCodeFocusNode.hasFocus) {
+        _validateUserCode();
+      }
+    });
+
+    _passwordFocusNode.addListener(() {
+      if (!_passwordFocusNode.hasFocus) {
+        _validatePassword();
+      }
+    });
+  }
+
+  final AuthService? _authService;
+
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   final _userCodeController = TextEditingController();
@@ -35,20 +53,6 @@ class LoginViewModel extends ChangeNotifier {
 
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
-
-  LoginViewModel() {
-    _userCodeFocusNode.addListener(() {
-      if (!_userCodeFocusNode.hasFocus) {
-        _validateUserCode();
-      }
-    });
-
-    _passwordFocusNode.addListener(() {
-      if (!_passwordFocusNode.hasFocus) {
-        _validatePassword();
-      }
-    });
-  }
 
   void selectDept(String? dept) {
     _selectedDept = dept;
@@ -106,16 +110,18 @@ class LoginViewModel extends ChangeNotifier {
         _validatePassword();
         _validateDept();
 
-        if (_userCodeError == null && _passwordError == null && _deptError == null) {
-          // final userCode = _userCodeController.text;
-          // final password = _passwordController.text;
-          // final dept = _selectedDept;
+        if (_userCodeError == null &&
+            _passwordError == null &&
+            _deptError == null) {
+          final userCode = _userCodeController.text;
+          final password = _passwordController.text;
+          //final dept = _selectedDept;
 
           //登录系统
-          // final AuthenticationService service = getIt<AuthenticationService>();
-          // token = await service.login(userRole, userCode, password);
+          final service = _authService ?? getIt<AuthService>();
+          final data = await service.login(userCode, password);
 
-          token = "aicmhcs";
+          token = data['token'] as String;
 
           _isLoading = false;
           notifyListeners();
@@ -130,7 +136,10 @@ class LoginViewModel extends ChangeNotifier {
       return false;
     } catch (e) {
       _isLoading = false;
-      _errorMessage = e.toString().replaceFirst(RegExp(r'^\w*(Exception|Error):\s*'), '');
+      _errorMessage = e.toString().replaceFirst(
+        RegExp(r'^\w*(Exception|Error):\s*'),
+        '',
+      );
       notifyListeners();
 
       return false;
