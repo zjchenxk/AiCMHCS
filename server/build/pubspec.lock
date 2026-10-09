@@ -57,6 +57,13 @@ packages:
       url: "https://mirrors.cloud.tencent.com/dart-pub/"
     source: hosted
     version: "1.19.1"
+  common:
+    dependency: "direct main"
+    description:
+      path: "../../common"
+      relative: true
+    source: path
+    version: "0.1.0"
   convert:
     dependency: transitive
     description:

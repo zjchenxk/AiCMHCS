@@ -22,5 +22,9 @@ FROG="$LOCALAPPDATA/Pub/Cache/bin/dart_frog.bat"
 if [ ! -f "$FROG" ]; then FROG="dart_frog"; fi
 "$FROG" build
 
+# 修复 dart_frog 对 pub workspace 共享包生成的坏 path（见脚本头注释）
+dart run tool/fix_build_overrides.dart
+
 echo "== 启动后端 http://localhost:$PORT =="
+export PORT  # build/bin/server.dart 读取环境变量 PORT，默认 8080
 exec dart run "build/bin/server.dart"

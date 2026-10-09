@@ -1,2 +1,2 @@
-dependency_overrides: {}
+dependency_overrides: {common: {path: ..\..\common}}
 resolution: null

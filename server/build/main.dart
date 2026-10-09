@@ -1,9 +1,9 @@
 import 'dart:io';
 
+import 'package:dart_frog/dart_frog.dart';
 import 'package:server/app_config.dart';
 import 'package:server/dm/dm_gateway.dart';
 import 'package:server/services/auth_service.dart';
-import 'package:dart_frog/dart_frog.dart';
 
 /// dart_frog 自定义入口：先初始化数据库网关与认证服务，
 /// 再把它们注入中间件管线。

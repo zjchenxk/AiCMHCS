@@ -1,5 +1,5 @@
-import 'package:server/services/auth_service.dart';
 import 'package:dart_frog/dart_frog.dart';
+import 'package:server/services/auth_service.dart';
 
 /// GET /api/auth/me
 /// 请求头：Authorization: Bearer <token>

@@ -14,7 +14,7 @@
             "cwd": "${workspaceFolder}/server",
             "request": "launch",
             "type": "dart",
-            "preLaunchTask": "dart_frog: build",
+            "preLaunchTask": "dart_frog: build (with fix)",
             "program": "${workspaceFolder}/server/build/bin/server.dart"
         }
     ],

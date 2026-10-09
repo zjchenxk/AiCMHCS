@@ -1,5 +1,5 @@
-import 'package:server/services/auth_service.dart';
 import 'package:dart_frog/dart_frog.dart';
+import 'package:server/services/auth_service.dart';
 
 /// POST /api/auth/login
 /// 请求体：{"username": "...", "password": "..."}
@@ -27,8 +27,10 @@ Future<Response> onRequest(RequestContext context) async {
 
   final username = body['username'];
   final password = body['password'];
-  if (username is! String || password is! String ||
-      username.trim().isEmpty || password.isEmpty) {
+  if (username is! String ||
+      password is! String ||
+      username.trim().isEmpty ||
+      password.isEmpty) {
     return _error(400, 40001, '用户名和密码不能为空');
   }
 
@@ -58,6 +60,6 @@ Future<Response> onRequest(RequestContext context) async {
 }
 
 Response _error(int status, int code, String message) => Response.json(
-      statusCode: status,
-      body: {'code': code, 'message': message, 'data': null},
-    );
+  statusCode: status,
+  body: {'code': code, 'message': message, 'data': null},
+);

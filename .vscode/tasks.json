@@ -16,6 +16,28 @@
                 "cwd": "${workspaceFolder}/server"
             },
             "problemMatcher": []
+        },
+        {
+            "label": "fix: build overrides",
+            "type": "shell",
+            "command": "dart",
+            "args": [
+                "run",
+                "tool/fix_build_overrides.dart"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/server"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "dart_frog: build (with fix)",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "dart_frog: build",
+                "fix: build overrides"
+            ],
+            "problemMatcher": []
         }
     ]
 }
