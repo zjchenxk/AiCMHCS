@@ -25,11 +25,11 @@ Future<Response> onRequest(RequestContext context) async {
     return _error(400, 40002, '请求体格式错误，应为 JSON 对象');
   }
 
-  final username = body['username'];
+  final userCode = body['usercode'];
   final password = body['password'];
-  if (username is! String ||
+  if (userCode is! String ||
       password is! String ||
-      username.trim().isEmpty ||
+      userCode.trim().isEmpty ||
       password.isEmpty) {
     return _error(400, 40001, '用户名和密码不能为空');
   }
@@ -41,7 +41,7 @@ Future<Response> onRequest(RequestContext context) async {
 
   final auth = context.read<AuthService>();
   try {
-    final session = await auth.login(username, password, ip: ip);
+    final session = await auth.login(userCode, password, ip: ip);
     return Response.json(
       body: {
         'code': 0,
