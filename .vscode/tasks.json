@@ -15,6 +15,12 @@
             "options": {
                 "cwd": "${workspaceFolder}/server"
             },
+            // dart_frog CLI 1.2.14 对 pub workspace 会打印两条无害的
+            // Exists failed 警告（由后续 fix 任务修复产物），静默成功输出避免困扰；
+            // 构建失败时 VS Code 仍会展示输出。
+            "presentation": {
+                "reveal": "silent"
+            },
             "problemMatcher": []
         },
         {
