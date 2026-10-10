@@ -59,19 +59,19 @@ class AuthService {
 
   /// 登录：校验用户名口令、写审计日志、更新最近登录时间、签发令牌。
   Future<LoginSession> login(
-    String username,
+    String userCode,
     String password, {
     String? ip,
   }) async {
-    final uname = username.trim();
-    if (uname.isEmpty || password.isEmpty) {
+    final uCode = userCode.trim();
+    if (uCode.isEmpty || password.isEmpty) {
       throw const AuthException(400, 40001, '用户名和密码不能为空');
     }
 
     final result = await _db.query(
-      'SELECT ID, USERNAME, PASSWORD, REAL_NAME, ROLE_CODE, PHONE, STATUS, '
-      'LAST_LOGIN_AT FROM SYS_USER WHERE USERNAME = ?',
-      [uname],
+      'SELECT ID, USER_CODE, PASSWORD, USER_NAME, ROLE_CODE, PHONE, STATUS, '
+      'LAST_LOGIN_AT FROM SYS_USER WHERE USER_CODE = ?',
+      [uCode],
     );
 
     UserInfo? user;
@@ -88,11 +88,11 @@ class AuthService {
 
     // 用户不存在与口令错误统一提示，避免账号枚举。
     if (user == null) {
-      await _logLogin(null, uname, ip, 'FAIL', '用户名或密码错误');
+      await _logLogin(null, uCode, ip, 'FAIL', '用户名或密码错误');
       throw const AuthException(401, 40101, '用户名或密码错误');
     }
     if (status != '1') {
-      await _logLogin(user.id, uname, ip, 'FAIL', '账号已停用');
+      await _logLogin(user.id, uCode, ip, 'FAIL', '账号已停用');
       throw const AuthException(403, 40301, '账号已被停用，请联系管理员');
     }
 
@@ -100,7 +100,7 @@ class AuthService {
       'UPDATE SYS_USER SET LAST_LOGIN_AT = CURRENT_TIMESTAMP WHERE ID = ?',
       [user.id.toString()],
     );
-    await _logLogin(user.id, uname, ip, 'SUCCESS', null);
+    await _logLogin(user.id, uCode, ip, 'SUCCESS', null);
 
     _pruneExpired();
     final token = _randomHex(32);
@@ -126,7 +126,7 @@ class AuthService {
   /// 解释会乱码），改为转义后经 W 路径内联执行。
   Future<void> _logLogin(
     int? userId,
-    String username,
+    String userCode,
     String? ip,
     String result,
     String? failReason,
@@ -135,8 +135,8 @@ class AuthService {
       final uid = userId?.toString() ?? 'NULL';
       await _db.executeDirect(
         'INSERT INTO SYS_LOGIN_LOG '
-        '(USER_ID, USERNAME, LOGIN_IP, LOGIN_RESULT, FAIL_REASON) '
-        'VALUES ($uid, ${_lit(username)}, ${_lit(ip)}, '
+        '(USER_ID, USER_CODE, LOGIN_IP, LOGIN_RESULT, FAIL_REASON) '
+        'VALUES ($uid, ${_lit(userCode)}, ${_lit(ip)}, '
         '${_lit(result)}, ${_lit(failReason)})',
       );
     } catch (_) {
