@@ -3,14 +3,16 @@ import 'dart:convert';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
 
-/// 认证服务：登录并返回 {token, user}（user 为后端 UserInfo 的 JSON）
+/// 认证服务：登录并返回 {token, user}（user 为后端 LoginUser 的 JSON）
 class AuthService {
   http.Client client = http.Client();
   String apiUrl = '';
 
   /// 启动时从 assets/config.json 读取后端地址。
   Future<void> loadConfig() async {
-    final config = jsonDecode(await rootBundle.loadString('assets/config.json')) as Map<String, dynamic>;
+    final config =
+        jsonDecode(await rootBundle.loadString('assets/config.json'))
+            as Map<String, dynamic>;
     apiUrl = config['apiUrl'] as String;
   }
 

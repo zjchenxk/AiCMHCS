@@ -1,5 +1,5 @@
 import 'package:client/models/child_info.dart';
-import 'package:client/models/login_user.dart';
+import 'package:common/model.dart';
 import 'package:client/views/home/home_page.dart';
 import 'package:client/views/system/hospital_management_page.dart';
 import 'package:material_ui/material_ui.dart';
@@ -19,6 +19,10 @@ Map<String, MenuPageBuilder> menuRoutes = {
 };
 
 /// 简化注册的辅助函数（普通 function，不用 tear-off 时也可直接写 lambda）
-MenuPageBuilder _buildPage(Widget Function({required LoginUser loginUser, required ChildInfo child}) ctor) {
-  return (context, loginUser, child) => ctor(loginUser: loginUser, child: child);
+MenuPageBuilder _buildPage(
+  Widget Function({required LoginUser loginUser, required ChildInfo child})
+  ctor,
+) {
+  return (context, loginUser, child) =>
+      ctor(loginUser: loginUser, child: child);
 }

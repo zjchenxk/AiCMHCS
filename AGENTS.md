@@ -4,7 +4,7 @@
 
 ## 项目概述
 
-AiCMHCS（智慧儿童心理保健系统）：为满足国家信创要求，技术栈已从 Serverpod + PostgreSQL 整体迁移为 **Dart Frog + 达梦 DM8**。现为 Dart Workspace 组织的两个子包，不再依赖 Serverpod、PostgreSQL、Redis 或 Docker。注释、文档、提交信息一律使用**中文**。
+AiCMHCS（智慧儿童心理保健系统）：为满足国家信创要求，技术栈已从 Serverpod + PostgreSQL 整体迁移为 **Dart Frog + 达梦 DM8**。现为 Dart Workspace 组织的三个子包（client / server / common），不再依赖 Serverpod、PostgreSQL、Redis 或 Docker。注释、文档、提交信息一律使用**中文**。
 
 - DM8 没有官方/社区 Dart 驱动，后端通过 **DPI 原生接口（`dart:ffi` 直绑 `dmdpi.dll`）** 访问数据库；
 - 运行后端需本机安装 DM8（默认 `C:\dmdbms`，实例端口 5236），并安装 dart_frog CLI：`dart pub global activate dart_frog_cli`。
@@ -13,7 +13,8 @@ AiCMHCS（智慧儿童心理保健系统）：为满足国家信创要求，技�
 
 ```
 client/   Flutter 应用（MVVM，原 aicmhcs_flutter 更名并入）
-server/   Dart Frog 后端：routes / lib(dm, models, services) / tool / test
+server/   Dart Frog 后端：routes / lib(dm, services) / tool / test
+common/   前后端共享模型包：lib/models（basic 行政区划 / system 医院、登录用户）
 database/         DM8 SQL 脚本：01 表空间+账号(SYSDBA 执行) / 02 建表 / 03 演示数据
 tools/            init_db.sh / start_backend.sh / serve_frontend.sh（Git Bash 运行）
 ```
@@ -27,7 +28,7 @@ tools/            init_db.sh / start_backend.sh / serve_frontend.sh（Git Bash �
 ## 常用命令
 
 ```bash
-# 依赖（必须在仓库根目录执行，Workspace 会解析两个子包）
+# 依赖（必须在仓库根目录执行，Workspace 会解析三个子包）
 flutter pub get
 
 # 初始化数据库（Git Bash；建表空间/账号/表/演示数据，可重复执行）
@@ -60,7 +61,7 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 
 ### 后端（server，Dart Frog）
 
-分层：`routes/`（HTTP 适配，文件路径即 URL）→ `services/`（业务逻辑）→ `lib/dm/`（DM8 数据库网关）；`lib/models/` 手写业务模型。**没有任何代码生成环节**（无 serverpod generate、无 migration，协议就是手写 JSON + 手写模型）。
+分层：`routes/`（HTTP 适配，文件路径即 URL）→ `services/`（业务逻辑）→ `lib/dm/`（DM8 数据库网关）；共享业务模型在 `common/lib/models/`（统一经 `package:common/model.dart` barrel 导入），DB 行解析（`fromRow` 类函数）留在服务层。**没有任何代码生成环节**（无 serverpod generate、无 migration，协议就是手写 JSON + 手写模型）。
 
 - **入口注入**：`main.dart` 自定义 `run()` 在启动时创建 `DmGateway`、`AuthService`，经 `handler.use(provider<T>(...))` 注入管线；路由内 `context.read<T>()` 获取。新增单例服务照此在 `main.dart` 注册；
 - **统一响应（明文 JSON，不再 AES 加密）**：`{'code': 0|非0, 'message': '...', 'data': ...}`，`code == 0` 表示成功。业务码与 HTTP 状态对应：40001/40002→400、40101/40102/40103→401、40301→403、40500→405、50000→500（全局兜底）。参照 `routes/api/auth/login.dart` 的 `_error` helper；
@@ -73,7 +74,7 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 - 业务代码**不要直接使用 `Dpi` / `DmConnection`**（FFI 调用同步阻塞，会卡住 HTTP 事件循环），统一经 `DmGateway` 访问；
 - `DmGateway`（`lib/dm/dm_gateway.dart`）把连接放进独立 isolate 串行执行：`query`/`ping` 失败自动重连并重试一次，`execute`/`executeDirect` **不重试**（防重复写入），默认 30 秒超时。`Dpi.open()` 已处理 DLL 依赖链多轮加载（`dmdpi → dmcomm → libcrypto`），勿重复造轮子；
 - **字符集**：全程走 DPI 的 W 系列（UTF-16）接口，数据库实例为 GB18030 时由 DPI 自动转码，Dart 侧始终处理 Unicode，中文无乱码。但 `dpi_bind_param` 无宽字符版本——**绑定参数只支持 ASCII**；含中文的值必须单引号翻倍转义后经 SQL 内联（参照 `AuthService._lit()` 与 `_logLogin()`）；
-- SQL 占位符为 `?`；`DmResult` 所有列以字符串返回（NULL 为 null），数值/时间由模型层按需转换（参照 `UserInfo.fromRow`）。
+- SQL 占位符为 `?`；`DmResult` 所有列以字符串返回（NULL 为 null），数值/时间由模型层按需转换（参照 `AuthService._loginUserFromRow`）。
 
 ### 口令与数据库对象
 
@@ -147,7 +148,7 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 ## 新增一个全栈功能的标准流程
 
 1. 在 `database/` 新增/修改建表脚本（沿用编号与 DDL 约定），必要时同步 `tools/init_db.sh`；执行 `./tools/init_db.sh` 应用；
-2. 在 `server/lib/models/` 写模型（`fromRow`/`toJson`）；
+2. 在 `common/lib/models/<模块>/` 写共享模型（`fromJson`/`toJson`，并在 `common/lib/model.dart` 追加 export）；DB 行解析放 `server` 服务层（如 `AuthService._loginUserFromRow`）；
 3. 在 `server/lib/services/` 写业务服务（构造注入 `DmGateway`）；需在路由中直接读取的，在 `main.dart` 用 `provider<T>` 注入；
 4. 在 `server/routes/api/<模块>/` 写路由（统一响应格式 + `_error` helper + 业务异常转换）；
 5. `cd server && dart analyze && dart test`；

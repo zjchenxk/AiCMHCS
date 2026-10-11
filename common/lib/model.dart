@@ -7,3 +7,4 @@ export 'models/basic/county.dart';
 export 'models/basic/town.dart';
 export 'models/basic/village.dart';
 export 'models/system/hospital.dart';
+export 'models/system/login_user.dart';

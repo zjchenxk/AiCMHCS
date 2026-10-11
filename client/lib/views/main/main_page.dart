@@ -4,7 +4,7 @@ import 'package:client/utils/theme_data_util.dart';
 import 'package:client/views/help/help_center_page.dart';
 import 'package:client/widgets/glass_panel.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:client/models/login_user.dart';
+import 'package:common/model.dart';
 import 'package:client/models/menu_item.dart';
 import 'package:client/providers/font_provider.dart';
 import 'package:client/routes/menu_routes.dart';
@@ -65,7 +65,12 @@ class _MainPageState extends State<MainPage> {
   }
 
   // 毛玻璃容器
-  Widget _glassPanel({required Widget child, double blur = 20, required Color color, required BorderRadius radius}) {
+  Widget _glassPanel({
+    required Widget child,
+    double blur = 20,
+    required Color color,
+    required BorderRadius radius,
+  }) {
     return ClipRRect(
       borderRadius: radius,
       child: BackdropFilter(
@@ -75,7 +80,9 @@ class _MainPageState extends State<MainPage> {
             color: color,
             borderRadius: radius,
             border: Border.all(
-              color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.3),
+              color: Theme.of(
+                context,
+              ).colorScheme.outlineVariant.withValues(alpha: 0.3),
               width: 0.5,
             ),
           ),
@@ -176,7 +183,9 @@ class _MainPageState extends State<MainPage> {
               Text(
                 '欢迎回来！',
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
+                  color: theme.colorScheme.onPrimaryContainer.withValues(
+                    alpha: 0.7,
+                  ),
                 ),
               ),
               for (final (label, value) in items)
@@ -189,7 +198,8 @@ class _MainPageState extends State<MainPage> {
                         Text(
                           '$label:',
                           style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
+                            color: theme.colorScheme.onPrimaryContainer
+                                .withValues(alpha: 0.7),
                           ),
                         ),
                         const SizedBox(width: 4),
@@ -242,11 +252,17 @@ class _MainPageState extends State<MainPage> {
             ),
           ),
         ),
-        padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 6)),
+        padding: const WidgetStatePropertyAll(
+          EdgeInsets.symmetric(vertical: 6),
+        ),
       ),
       menuChildren: [
         MenuItemButton(
-          leadingIcon: Icon(Icons.key_outlined, size: 18, color: theme.colorScheme.primary),
+          leadingIcon: Icon(
+            Icons.key_outlined,
+            size: 18,
+            color: theme.colorScheme.primary,
+          ),
           style: MenuItemButton.styleFrom(
             minimumSize: const Size.fromHeight(44),
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -254,13 +270,19 @@ class _MainPageState extends State<MainPage> {
           onPressed: () => _showChangePasswordDialog(context),
           child: Text(
             '修改密码',
-            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurface,
+            ),
           ),
         ),
         const Divider(height: 9, thickness: 0.5),
 
         MenuItemButton(
-          leadingIcon: Icon(Icons.swap_horiz, size: 18, color: theme.colorScheme.primary),
+          leadingIcon: Icon(
+            Icons.swap_horiz,
+            size: 18,
+            color: theme.colorScheme.primary,
+          ),
           style: MenuItemButton.styleFrom(
             minimumSize: const Size.fromHeight(44),
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -268,13 +290,19 @@ class _MainPageState extends State<MainPage> {
           onPressed: () => _showSwitchDeptDialog(context, theme),
           child: Text(
             '切换科室',
-            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurface,
+            ),
           ),
         ),
         const Divider(height: 9, thickness: 0.5),
 
         MenuItemButton(
-          leadingIcon: Icon(Icons.logout, size: 18, color: theme.colorScheme.error),
+          leadingIcon: Icon(
+            Icons.logout,
+            size: 18,
+            color: theme.colorScheme.error,
+          ),
           style: MenuItemButton.styleFrom(
             minimumSize: const Size.fromHeight(44),
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -282,15 +310,21 @@ class _MainPageState extends State<MainPage> {
           onPressed: () => _logout(context),
           child: Text(
             '注销退出',
-            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.error,
+            ),
           ),
         ),
       ],
       builder: (context, controller, child) => InkWell(
         borderRadius: BorderRadius.circular(10),
         // 显式三态高亮色
-        hoverColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.15),
-        highlightColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.28),
+        hoverColor: theme.colorScheme.onPrimaryContainer.withValues(
+          alpha: 0.15,
+        ),
+        highlightColor: theme.colorScheme.onPrimaryContainer.withValues(
+          alpha: 0.28,
+        ),
         onTap: () => controller.isOpen ? controller.close() : controller.open(),
         child: child,
       ),
@@ -313,7 +347,9 @@ class _MainPageState extends State<MainPage> {
             const SizedBox(width: 8),
             Text(
               userName,
-              style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onPrimaryContainer,
+              ),
             ),
           ],
         ),
@@ -347,12 +383,18 @@ class _MainPageState extends State<MainPage> {
             ),
           ),
         ),
-        padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 6)),
+        padding: const WidgetStatePropertyAll(
+          EdgeInsets.symmetric(vertical: 6),
+        ),
       ),
       menuChildren: [
         // 设置字体菜单
         SubmenuButton(
-          leadingIcon: Icon(Icons.format_size, size: 18, color: theme.colorScheme.primary),
+          leadingIcon: Icon(
+            Icons.format_size,
+            size: 18,
+            color: theme.colorScheme.primary,
+          ),
           style: SubmenuButton.styleFrom(
             minimumSize: const Size.fromHeight(44),
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -366,21 +408,30 @@ class _MainPageState extends State<MainPage> {
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                 ),
                 // 设置并缓存字体比例（FontProvider 内部持久化 + 通知全局刷新）
-                onPressed: () => context.read<FontProvider>().setFontScale(option),
+                onPressed: () =>
+                    context.read<FontProvider>().setFontScale(option),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     // 当前比例 → 勾选标记
                     SizedBox(
                       width: 20,
-                      child: option == fontScale ? Icon(Icons.check, size: 18, color: theme.colorScheme.primary) : null,
+                      child: option == fontScale
+                          ? Icon(
+                              Icons.check,
+                              size: 18,
+                              color: theme.colorScheme.primary,
+                            )
+                          : null,
                     ),
                     const SizedBox(width: 8),
                     Text(
                       '${(option * 100).round()}%',
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.onSurface,
-                        fontWeight: option == fontScale ? FontWeight.bold : FontWeight.w400,
+                        fontWeight: option == fontScale
+                            ? FontWeight.bold
+                            : FontWeight.w400,
                       ),
                     ),
                   ],
@@ -389,13 +440,19 @@ class _MainPageState extends State<MainPage> {
           ],
           child: Text(
             '设置字体',
-            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurface,
+            ),
           ),
         ),
 
         // 设置主题菜单
         SubmenuButton(
-          leadingIcon: Icon(Icons.palette_outlined, size: 18, color: theme.colorScheme.primary),
+          leadingIcon: Icon(
+            Icons.palette_outlined,
+            size: 18,
+            color: theme.colorScheme.primary,
+          ),
           style: SubmenuButton.styleFrom(
             minimumSize: const Size.fromHeight(44),
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -409,21 +466,30 @@ class _MainPageState extends State<MainPage> {
                 ),
                 // 切换主题：ThemeProvider 内部持久化 + notifyListeners，
                 // MyApp 的 watch 触发 MaterialApp 重建 → 全 UI 换主题
-                onPressed: () => context.read<ThemeProvider>().switchTheme(name),
+                onPressed: () =>
+                    context.read<ThemeProvider>().switchTheme(name),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     // 当前主题 → 勾选标记
                     SizedBox(
                       width: 20,
-                      child: name == currentThemeName ? Icon(Icons.check, size: 18, color: theme.colorScheme.primary) : null,
+                      child: name == currentThemeName
+                          ? Icon(
+                              Icons.check,
+                              size: 18,
+                              color: theme.colorScheme.primary,
+                            )
+                          : null,
                     ),
                     const SizedBox(width: 8),
                     Text(
                       name,
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.onSurface,
-                        fontWeight: name == currentThemeName ? FontWeight.bold : FontWeight.w400,
+                        fontWeight: name == currentThemeName
+                            ? FontWeight.bold
+                            : FontWeight.w400,
                       ),
                     ),
                     // 预览色块：直接展示该主题的主色，更直观
@@ -446,7 +512,9 @@ class _MainPageState extends State<MainPage> {
           ],
           child: Text(
             '设置主题',
-            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurface,
+            ),
           ),
         ),
       ],
@@ -455,9 +523,14 @@ class _MainPageState extends State<MainPage> {
         message: '设置',
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
-          hoverColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.15),
-          highlightColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.28),
-          onTap: () => controller.isOpen ? controller.close() : controller.open(),
+          hoverColor: theme.colorScheme.onPrimaryContainer.withValues(
+            alpha: 0.15,
+          ),
+          highlightColor: theme.colorScheme.onPrimaryContainer.withValues(
+            alpha: 0.28,
+          ),
+          onTap: () =>
+              controller.isOpen ? controller.close() : controller.open(),
           child: child,
         ),
       ),
@@ -487,11 +560,17 @@ class _MainPageState extends State<MainPage> {
             ),
           ),
         ),
-        padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 6)),
+        padding: const WidgetStatePropertyAll(
+          EdgeInsets.symmetric(vertical: 6),
+        ),
       ),
       menuChildren: [
         MenuItemButton(
-          leadingIcon: Icon(Icons.help_outline, size: 18, color: theme.colorScheme.primary),
+          leadingIcon: Icon(
+            Icons.help_outline,
+            size: 18,
+            color: theme.colorScheme.primary,
+          ),
           style: MenuItemButton.styleFrom(
             minimumSize: const Size.fromHeight(44),
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -502,13 +581,19 @@ class _MainPageState extends State<MainPage> {
           },
           child: Text(
             '帮助中心',
-            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurface,
+            ),
           ),
         ),
         const Divider(height: 9, thickness: 0.5),
 
         MenuItemButton(
-          leadingIcon: Icon(Icons.info_outline, size: 18, color: theme.colorScheme.primary),
+          leadingIcon: Icon(
+            Icons.info_outline,
+            size: 18,
+            color: theme.colorScheme.primary,
+          ),
           style: MenuItemButton.styleFrom(
             minimumSize: const Size.fromHeight(44),
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -516,7 +601,9 @@ class _MainPageState extends State<MainPage> {
           onPressed: () => _showAboutDialog(theme),
           child: Text(
             '关于',
-            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurface,
+            ),
           ),
         ),
       ],
@@ -525,9 +612,14 @@ class _MainPageState extends State<MainPage> {
         message: '帮助',
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
-          hoverColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.15),
-          highlightColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.28),
-          onTap: () => controller.isOpen ? controller.close() : controller.open(),
+          hoverColor: theme.colorScheme.onPrimaryContainer.withValues(
+            alpha: 0.15,
+          ),
+          highlightColor: theme.colorScheme.onPrimaryContainer.withValues(
+            alpha: 0.28,
+          ),
+          onTap: () =>
+              controller.isOpen ? controller.close() : controller.open(),
           child: child,
         ),
       ),
@@ -575,20 +667,39 @@ class _MainPageState extends State<MainPage> {
                       ? OverflowBox(
                           alignment: AlignmentDirectional.centerStart,
                           minWidth: 0,
-                          maxWidth: 207, // 240 − margin16 − border1 − listPadding16
+                          maxWidth:
+                              207, // 240 − margin16 − border1 − listPadding16
                           child: SizedBox(
                             width: 207,
                             child: ListView.builder(
-                              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 4,
+                                horizontal: 8,
+                              ),
                               itemCount: menus.length,
-                              itemBuilder: (context, index) => _buildMenuItem(theme, mainViewModel, menus[index], [], true),
+                              itemBuilder: (context, index) => _buildMenuItem(
+                                theme,
+                                mainViewModel,
+                                menus[index],
+                                [],
+                                true,
+                              ),
                             ),
                           ),
                         )
                       : ListView.builder(
-                          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 4,
+                            horizontal: 8,
+                          ),
                           itemCount: menus.length,
-                          itemBuilder: (context, index) => _buildMenuItem(theme, mainViewModel, menus[index], [], false),
+                          itemBuilder: (context, index) => _buildMenuItem(
+                            theme,
+                            mainViewModel,
+                            menus[index],
+                            [],
+                            false,
+                          ),
                         ),
                 ),
               ],
@@ -599,7 +710,11 @@ class _MainPageState extends State<MainPage> {
     );
   }
 
-  Widget _buildCollapseHeader(ThemeData theme, MainViewModel mainViewModel, bool isWide) {
+  Widget _buildCollapseHeader(
+    ThemeData theme,
+    MainViewModel mainViewModel,
+    bool isWide,
+  ) {
     return Container(
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -624,14 +739,20 @@ class _MainPageState extends State<MainPage> {
           InkWell(
             borderRadius: BorderRadius.circular(10),
             // 显式三态高亮色
-            hoverColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.15),
-            highlightColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.28),
+            hoverColor: theme.colorScheme.onPrimaryContainer.withValues(
+              alpha: 0.15,
+            ),
+            highlightColor: theme.colorScheme.onPrimaryContainer.withValues(
+              alpha: 0.28,
+            ),
             onTap: () => mainViewModel.toggleCollapse(),
             child: SizedBox(
               width: 32,
               height: 32,
               child: Icon(
-                mainViewModel.collapsed ? Icons.keyboard_double_arrow_right : Icons.keyboard_double_arrow_left,
+                mainViewModel.collapsed
+                    ? Icons.keyboard_double_arrow_right
+                    : Icons.keyboard_double_arrow_left,
                 color: theme.colorScheme.onPrimaryContainer,
                 size: 18,
               ),
@@ -647,11 +768,19 @@ class _MainPageState extends State<MainPage> {
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
       child: TextField(
         controller: _searchController,
-        style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer),
+        style: theme.textTheme.bodyMedium?.copyWith(
+          color: theme.colorScheme.onPrimaryContainer,
+        ),
         decoration: InputDecoration(
           hintText: '搜索功能菜单...',
-          hintStyle: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.5)),
-          prefixIcon: Icon(Icons.search, color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.6), size: 18),
+          hintStyle: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.5),
+          ),
+          prefixIcon: Icon(
+            Icons.search,
+            color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.6),
+            size: 18,
+          ),
           isDense: true,
           contentPadding: const EdgeInsets.symmetric(vertical: 8),
           filled: true,
@@ -670,7 +799,13 @@ class _MainPageState extends State<MainPage> {
     );
   }
 
-  Widget _buildMenuItem(ThemeData theme, MainViewModel mainViewModel, MenuItem menu, List<String> parentPath, bool isWide) {
+  Widget _buildMenuItem(
+    ThemeData theme,
+    MainViewModel mainViewModel,
+    MenuItem menu,
+    List<String> parentPath,
+    bool isWide,
+  ) {
     final hasChildren = menu.children.isNotEmpty;
     final expanded = mainViewModel.isExpanded(menu.id);
     final selected = mainViewModel.selectedMenuId == menu.id;
@@ -682,11 +817,19 @@ class _MainPageState extends State<MainPage> {
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
           // 显式三态高亮色
-          hoverColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.15),
-          highlightColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.28),
-          splashColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.20),
+          hoverColor: theme.colorScheme.onPrimaryContainer.withValues(
+            alpha: 0.15,
+          ),
+          highlightColor: theme.colorScheme.onPrimaryContainer.withValues(
+            alpha: 0.28,
+          ),
+          splashColor: theme.colorScheme.onPrimaryContainer.withValues(
+            alpha: 0.20,
+          ),
           onTap: () {
-            hasChildren ? mainViewModel.toggleExpand(menu.id) : mainViewModel.selectMenu(menu, path);
+            hasChildren
+                ? mainViewModel.toggleExpand(menu.id)
+                : mainViewModel.selectMenu(menu, path);
           },
           child: Container(
             height: 44,
@@ -699,7 +842,11 @@ class _MainPageState extends State<MainPage> {
               child: Icon(
                 menu.icon,
                 size: 20,
-                color: selected ? theme.colorScheme.onPrimary : theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
+                color: selected
+                    ? theme.colorScheme.onPrimary
+                    : theme.colorScheme.onPrimaryContainer.withValues(
+                        alpha: 0.7,
+                      ),
               ),
             ),
           ),
@@ -713,11 +860,19 @@ class _MainPageState extends State<MainPage> {
         InkWell(
           borderRadius: BorderRadius.circular(10),
           // 显式三态高亮色
-          hoverColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.15),
-          highlightColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.28),
-          splashColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.20),
+          hoverColor: theme.colorScheme.onPrimaryContainer.withValues(
+            alpha: 0.15,
+          ),
+          highlightColor: theme.colorScheme.onPrimaryContainer.withValues(
+            alpha: 0.28,
+          ),
+          splashColor: theme.colorScheme.onPrimaryContainer.withValues(
+            alpha: 0.20,
+          ),
           onTap: () {
-            hasChildren ? mainViewModel.toggleExpand(menu.id) : mainViewModel.selectMenu(menu, path);
+            hasChildren
+                ? mainViewModel.toggleExpand(menu.id)
+                : mainViewModel.selectMenu(menu, path);
           },
           child: Container(
             margin: const EdgeInsets.symmetric(vertical: 2),
@@ -731,14 +886,20 @@ class _MainPageState extends State<MainPage> {
                 Icon(
                   menu.icon,
                   size: 18,
-                  color: selected ? theme.colorScheme.onPrimary : theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
+                  color: selected
+                      ? theme.colorScheme.onPrimary
+                      : theme.colorScheme.onPrimaryContainer.withValues(
+                          alpha: 0.7,
+                        ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     menu.title,
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      color: selected ? theme.colorScheme.onPrimary : theme.colorScheme.onPrimaryContainer,
+                      color: selected
+                          ? theme.colorScheme.onPrimary
+                          : theme.colorScheme.onPrimaryContainer,
                       fontWeight: selected ? FontWeight.bold : FontWeight.w400,
                     ),
                     overflow: TextOverflow.ellipsis,
@@ -750,7 +911,9 @@ class _MainPageState extends State<MainPage> {
                     duration: const Duration(milliseconds: 200),
                     child: Icon(
                       Icons.keyboard_arrow_down,
-                      color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.6),
+                      color: theme.colorScheme.onPrimaryContainer.withValues(
+                        alpha: 0.6,
+                      ),
                       size: 18,
                     ),
                   ),
@@ -762,11 +925,18 @@ class _MainPageState extends State<MainPage> {
         // 二级子菜单
         AnimatedCrossFade(
           duration: const Duration(milliseconds: 200),
-          crossFadeState: expanded || mainViewModel.searchKeyword.isNotEmpty ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+          crossFadeState: expanded || mainViewModel.searchKeyword.isNotEmpty
+              ? CrossFadeState.showFirst
+              : CrossFadeState.showSecond,
           firstChild: Padding(
             padding: const EdgeInsets.only(left: 20),
             child: Column(
-              children: menu.children.map((c) => _buildMenuItem(theme, mainViewModel, c, path, isWide)).toList(),
+              children: menu.children
+                  .map(
+                    (c) =>
+                        _buildMenuItem(theme, mainViewModel, c, path, isWide),
+                  )
+                  .toList(),
             ),
           ),
           secondChild: const SizedBox(width: double.infinity),
@@ -803,11 +973,18 @@ class _MainPageState extends State<MainPage> {
                   padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
                   child: Row(
                     children: [
-                      Icon(Icons.help_outline, color: theme.colorScheme.primary, size: 18),
+                      Icon(
+                        Icons.help_outline,
+                        color: theme.colorScheme.primary,
+                        size: 18,
+                      ),
                       const SizedBox(width: 6),
                       Text(
                         '帮助中心',
-                        style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.bold),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ],
                   ),
@@ -829,7 +1006,11 @@ class _MainPageState extends State<MainPage> {
           workspace = KeyedSubtree(
             // 用菜单 id 作为 key：切换菜单时旧页面销毁、新页面重建
             key: ValueKey(menu!.id),
-            child: builder(context, mainViewModel.loginUser, mainViewModel.child),
+            child: builder(
+              context,
+              mainViewModel.loginUser,
+              mainViewModel.child,
+            ),
           );
         } else {
           // 未注册路由 / 未选择菜单时的工作区占位
@@ -837,11 +1018,19 @@ class _MainPageState extends State<MainPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.dashboard_customize, size: 64, color: theme.colorScheme.primary.withValues(alpha: 0.3)),
+                Icon(
+                  Icons.dashboard_customize,
+                  size: 64,
+                  color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                ),
                 const SizedBox(height: 16),
                 Text(
-                  selectedMenuId == null ? '请从左侧选择功能菜单' : '当前功能：${mainViewModel.selectedMenuTitle ?? ''}',
-                  style: theme.textTheme.bodyLarge?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
+                  selectedMenuId == null
+                      ? '请从左侧选择功能菜单'
+                      : '当前功能：${mainViewModel.selectedMenuTitle ?? ''}',
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                  ),
                 ),
               ],
             ),
@@ -869,7 +1058,10 @@ class _MainPageState extends State<MainPage> {
     final mainViewModel = context.read<MainViewModel>();
     final username = mainViewModel.loginUser.userCode; // 或 userName，取决于服务端登录名
 
-    final changed = await ChangePasswordDialog.show(context, username: username);
+    final changed = await ChangePasswordDialog.show(
+      context,
+      username: username,
+    );
     if (changed == true && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -882,18 +1074,25 @@ class _MainPageState extends State<MainPage> {
   }
 
   // 切换科室
-  Future<void> _showSwitchDeptDialog(BuildContext context, ThemeData theme) async {
+  Future<void> _showSwitchDeptDialog(
+    BuildContext context,
+    ThemeData theme,
+  ) async {
     final mainViewModel = context.read<MainViewModel>();
 
     final selected = await showDialog<(String, String)>(
       context: context,
       builder: (dialogContext) {
-        String currentDeptId = mainViewModel.loginUser.deptId; // 弹窗内的局部选中态
+        String currentDeptId =
+            mainViewModel.loginUser.deptId ?? ''; // 弹窗内的局部选中态
 
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) => Dialog(
             backgroundColor: Colors.transparent,
-            insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 40,
+              vertical: 24,
+            ),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 360),
               child: GlassPanel(
@@ -907,7 +1106,11 @@ class _MainPageState extends State<MainPage> {
                       // 标题
                       Row(
                         children: [
-                          Icon(Icons.swap_horiz, color: theme.colorScheme.primary, size: 22),
+                          Icon(
+                            Icons.swap_horiz,
+                            color: theme.colorScheme.primary,
+                            size: 22,
+                          ),
                           const SizedBox(width: 10),
                           Text(
                             '切换科室',
@@ -932,7 +1135,8 @@ class _MainPageState extends State<MainPage> {
                           child: ListView(
                             shrinkWrap: true,
                             children: [
-                              for (final (deptId, deptName) in mainViewModel.availableDepts)
+                              for (final (deptId, deptName)
+                                  in mainViewModel.availableDepts)
                                 RadioListTile<String>(
                                   value: deptId,
                                   dense: true,
@@ -940,7 +1144,8 @@ class _MainPageState extends State<MainPage> {
                                   title: Text(
                                     deptName,
                                     style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: theme.colorScheme.onPrimaryContainer,
+                                      color:
+                                          theme.colorScheme.onPrimaryContainer,
                                     ),
                                   ),
                                 ),
@@ -958,20 +1163,28 @@ class _MainPageState extends State<MainPage> {
                             onPressed: () => Navigator.of(dialogContext).pop(),
                             child: Text(
                               '取消',
-                              style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: theme.colorScheme.onSurface,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 12),
                           FilledButton(
                             onPressed: () {
-                              final dept = mainViewModel.availableDepts.firstWhere((d) => d.$1 == currentDeptId, orElse: () => ('', ''));
+                              final dept = mainViewModel.availableDepts
+                                  .firstWhere(
+                                    (d) => d.$1 == currentDeptId,
+                                    orElse: () => ('', ''),
+                                  );
                               if (dept.$1.isNotEmpty) {
                                 Navigator.of(dialogContext).pop(dept);
                               }
                             },
                             child: Text(
                               '确定',
-                              style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimary),
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: theme.colorScheme.onPrimary,
+                              ),
                             ),
                           ),
                         ],
@@ -1000,7 +1213,9 @@ class _MainPageState extends State<MainPage> {
     context.read<MainViewModel>().resetForRelogin();
 
     // 跳转登录页并清空路由栈；rootNavigator 保证即使将来出现嵌套 Navigator 也操作的是根栈
-    Navigator.of(context, rootNavigator: true).pushReplacement(MaterialPageRoute(builder: (context) => const LoginPage()));
+    Navigator.of(context, rootNavigator: true).pushReplacement(
+      MaterialPageRoute(builder: (context) => const LoginPage()),
+    );
   }
 
   // 关于对话框（毛玻璃风格）
@@ -1029,7 +1244,9 @@ class _MainPageState extends State<MainPage> {
                       'assets/images/logo.svg',
                       width: 72,
                       height: 72,
-                      colorMapper: ThemeColorMapper(primary: theme.colorScheme.primary),
+                      colorMapper: ThemeColorMapper(
+                        primary: theme.colorScheme.primary,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     Text(
@@ -1053,7 +1270,11 @@ class _MainPageState extends State<MainPage> {
                     const SizedBox(height: 14),
                     Text(
                       '©2026 Chenxk Software Studio. All rights reserved.',
-                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 20),
                     // 关闭按钮（FilledButton 在毛玻璃上比 TextButton 更清晰）
@@ -1064,7 +1285,9 @@ class _MainPageState extends State<MainPage> {
                       ),
                       child: Text(
                         '关闭',
-                        style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimary),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onPrimary,
+                        ),
                       ),
                     ),
                   ],

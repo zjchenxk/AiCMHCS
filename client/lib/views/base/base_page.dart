@@ -1,5 +1,5 @@
 import 'package:client/models/child_info.dart';
-import 'package:client/models/login_user.dart';
+import 'package:common/model.dart';
 import 'package:material_ui/material_ui.dart';
 
 abstract class BasePage extends StatefulWidget {

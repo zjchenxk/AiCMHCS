@@ -1,6 +1,6 @@
 import 'package:client/models/child_info.dart';
-import 'package:client/models/login_user.dart';
 import 'package:client/models/menu_item.dart';
+import 'package:common/model.dart';
 import 'package:material_ui/material_ui.dart';
 
 class MainViewModel extends ChangeNotifier {
@@ -14,11 +14,11 @@ class MainViewModel extends ChangeNotifier {
   ];
 
   // 登录用户信息（示例数据，实际可从接口获取）
-  LoginUser loginUser = LoginUser(
-    userId: 'U001',
+  LoginUser loginUser = const LoginUser(
+    id: 1,
     userCode: '0001',
     userName: '张医生',
-    password: '123456',
+    roleCode: 'DOCTOR',
     organId: 'O001',
     organName: '首都医科大学附属北京儿童医院',
     branchId: 'B001',
@@ -42,14 +42,23 @@ class MainViewModel extends ChangeNotifier {
 
   // 功能菜单
   final List<MenuItem> menus = const [
-    MenuItem(id: 'home', title: '首页', icon: Icons.home_outlined, route: '/home'),
+    MenuItem(
+      id: 'home',
+      title: '首页',
+      icon: Icons.home_outlined,
+      route: '/home',
+    ),
     MenuItem(
       id: 'children',
       title: '儿童管理',
       icon: Icons.child_care,
       children: [
         MenuItem(id: 'children-build', title: '儿童建档', icon: Icons.folder_open),
-        MenuItem(id: 'children-photo', title: '儿童拍照', icon: Icons.camera_alt_outlined),
+        MenuItem(
+          id: 'children-photo',
+          title: '儿童拍照',
+          icon: Icons.camera_alt_outlined,
+        ),
       ],
     ),
     MenuItem(
@@ -93,9 +102,18 @@ class MainViewModel extends ChangeNotifier {
       title: '系统管理',
       icon: Icons.settings_outlined,
       children: [
-        MenuItem(id: 'hospital', title: '医院设置', icon: Icons.local_hospital_outlined, route: '/system/organ'),
+        MenuItem(
+          id: 'hospital',
+          title: '医院设置',
+          icon: Icons.local_hospital_outlined,
+          route: '/system/organ',
+        ),
         MenuItem(id: 'campus', title: '院区设置', icon: Icons.domain_outlined),
-        MenuItem(id: 'department', title: '科室设置', icon: Icons.meeting_room_outlined),
+        MenuItem(
+          id: 'department',
+          title: '科室设置',
+          icon: Icons.meeting_room_outlined,
+        ),
         MenuItem(id: 'staff', title: '人员设置', icon: Icons.people_outline),
         MenuItem(id: 'permission', title: '权限设置', icon: Icons.lock_outline),
       ],
@@ -151,7 +169,9 @@ class MainViewModel extends ChangeNotifier {
   }
 
   void toggleExpand(String menuId) {
-    _expandedIds.contains(menuId) ? _expandedIds.remove(menuId) : _expandedIds.add(menuId);
+    _expandedIds.contains(menuId)
+        ? _expandedIds.remove(menuId)
+        : _expandedIds.add(menuId);
     notifyListeners();
   }
 
@@ -164,7 +184,9 @@ class MainViewModel extends ChangeNotifier {
     }
     // 关键词变了 → 重新计算并更新缓存
     _filterCacheKey = _searchKeyword;
-    _cachedFilteredMenus = _searchKeyword.isEmpty ? menus : _filterMenus(menus, _searchKeyword);
+    _cachedFilteredMenus = _searchKeyword.isEmpty
+        ? menus
+        : _filterMenus(menus, _searchKeyword);
     return _cachedFilteredMenus!;
   }
 
