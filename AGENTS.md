@@ -40,8 +40,11 @@ cd server && dart run tool/generate_demo_data.dart > ../database/03_demo_data.sq
 
 # 启动后端（http://localhost:8080；dart_frog dev 需要交互终端，支持热重载）
 cd server && dart_frog dev
-# 无终端环境（后台/CI）用生产模式：
-cd server && dart_frog build && dart run build/bin/server.dart
+# 无终端环境（后台/CI）用生产模式（build 后必须跑修复脚本，
+# 否则 dart_frog 生成的 workspace 共享包 path 有误、服务起不来）：
+cd server && dart_frog build && dart run tool/fix_build_overrides.dart && dart run build/bin/server.dart
+# 一键脚本（旧进程清理 + 构建 + 修复 + 启动）：
+./tools/start_backend.sh
 
 # 启动前端（Web 调试）
 cd client && flutter run -d chrome      # 或 -d web-server --web-port 5173
@@ -86,15 +89,15 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 
 - **导入约定**：统一 `import 'package:material_ui/material_ui.dart';`（全仓库 0 处 `flutter/material.dart`），新页面遵循；
 - **全局对象**在 `lib/main.dart`：`token`（登录令牌）、`loginUser`（当前登录用户，登录成功由 LoginViewModel 写入、注销清空）、`getIt`（服务定位器）——Serverpod 的 `client` 已随迁移移除；
-- **Service 模式**（参照 `admin_divisions_service.dart` 的骨架）：检查 `token == null` → 调后端 → 逐项校验 `code/message/data` 键 → `X.fromJson` 还原模型。新 Service 要在 `main.dart` 的 `setupServiceLocator()` 中注册。注意：现有 Service 内的后端调用全部被注释（拿到空串后抛「响应消息为空」），是待接 Dart Frog API 的骨架，接线时补 HTTP 调用即可；
+- **Service 模式**（参照已接通的 `services/auth_service.dart`）：`loadConfig()` 启动时读 `assets/config.json` 的 `apiUrl` → 调后端 → 逐项校验 `code/message/data` 键 → 失败抛带 message 的异常、成功返回 data（上层 VM 再 `X.fromJson` 还原模型，如 `LoginViewModel` 解析 `LoginUser`）。新 Service 要在 `main.dart` 的 `setupServiceLocator()` 中注册。注意：`AdminDivisionsService` / `LogService` 仍是骨架（后端调用全部被注释，拿到空串后抛「响应消息为空」），接线时补 HTTP 调用即可；
 - **ViewModel 模式**（参照 `hospital_management_view_model.dart`）：私有字段 + getter、`_loading`/`_errorMsg` 状态、状态变更后 `notifyListeners()`、异步方法返回 `Future<bool>` 表示成败。新 ViewModel 必须注册到 `main.dart` 的 `MultiProvider`；
 - **新页面接入路由**：菜单项在 `main_view_model.dart` 的 `menus` 列表中定义（带 `route`），页面构造器注册到 `lib/routes/menu_routes.dart`（key 与 `MenuItem.route` 一致）；
-- 后端地址配置在 `assets/config.json` 的 `apiUrl`（当前尚无代码读取它）；客户端 pubspec 暂未引入 `http` 包，接通后端时需添加依赖并读取该配置。
+- 后端地址配置在 `assets/config.json` 的 `apiUrl`，由 `AuthService.loadConfig()` 在 `main()` 中读取；`http` 包已在 client 依赖中。
 
 ### 安全层现状
 
 - 新后端响应为**明文 JSON**（无 AES 加密、无 MD5 签名）；
-- 客户端 `utils/security_util.dart` 为旧架构遗留（AES-128-CBC + MD5，密钥/IV 硬编码），当前无任何调用方——保留但**不要在新代码中扩展使用**；若要恢复报文加密，需前后端同步设计。
+- 客户端 `utils/security_util.dart` 为旧架构遗留（AES-128-CBC + MD5，密钥/IV 硬编码），目前仅被**未接线**的 `AdminDivisionsService` / `LogService` 骨架引用——保留但**不要在新代码中使用**；将来接线这两个服务时按明文 JSON 协议重写调用，删除 AES/MD5 相关代码；若要恢复报文加密，需前后端同步设计。
 
 ## UI 风格设定（client）
 
@@ -166,13 +169,14 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 ## 测试
 
 - 后端测试位于 `server/test/`，为纯单元测试（口令散列、令牌逻辑），**不需要**数据库或 Docker，直接 `dart test`；
-- 前端测试位于 `client/test/`，用 `flutter test`；
+- 前端测试位于 `client/test/`，用 `flutter test`；现有登录链路 widget 测试（`FakeAuthService` 注入 `LoginViewModel`）：登录失败 SnackBar 提示、登录成功写入全局 `loginUser` 并同步 `MainViewModel` 工作副本——新增涉及登录/主界面的改动时仿照扩展；
 - 原 GitHub Actions CI 已随信创迁移移除（仓库无 `.github/` 目录）。
 
 ## 当前已知 Mock / 待接线（勿误判为已接通）
 
 - **后端已实现真实接口**：`POST /api/auth/login`、`GET /api/auth/me`、`GET /health`（数据库探活）——登录链路后端侧已通；
 - **客户端登录已接通**：`LoginViewModel.login()` 调用真实后端，成功后写入全局 `token` 与 `loginUser`（`LoginUser.fromJson` 解析），登录页跳转主界面前经 `MainViewModel.syncLoginUser()` 刷新工作副本，注销时两者清空。注意 `MainViewModel` 的医院/院区/科室仍为本地默认示例（`_defaultWorkUser`，后端暂无对应接口），登录页科室下拉选值（纯名称、无 ID）暂未映射进 `loginUser.deptId`；
+- **SYS_USER 列名不一致（待同步，当前会导致登录失败）**：代码侧已改用 `USER_CODE`/`USER_NAME`（`auth_service.dart` 的查询与 `_loginUserFromRow`、`SYS_LOGIN_LOG` 写入），但 `database/02_create_tables.sql`（含 `SYS_LOGIN_LOG` 列与 `UK_SYS_USER_USERNAME` 约束）和 `server/tool/generate_demo_data.dart` 仍是 `USERNAME`/`REAL_NAME`——按当前脚本初始化的库，登录查询会报列不存在。修复需三步同步：改 DDL 与生成脚本 → 重新生成 `03_demo_data.sql` → 执行 `./tools/init_db.sh` 重建；
 - 客户端 `AdminDivisionsService` / `LogService` 的后端调用全部被注释，行政区划联动当前**未接通**；医院管理加载与保存为 mock（`HospitalManagementViewModel` 中标注 `TODO`）。
 
 改动这些区域时保留 TODO 标注与被注释的调用代码，不要顺手删除。
