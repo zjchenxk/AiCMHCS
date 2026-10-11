@@ -7,7 +7,12 @@ class ThemeColorMapper extends ColorMapper {
   final Color primary;
 
   @override
-  Color substitute(String? id, String elementName, String attributeName, Color color) {
+  Color substitute(
+    String? id,
+    String elementName,
+    String attributeName,
+    Color color,
+  ) {
     // 原 Teal 主色
     if (color == const Color(0xFF006a60)) {
       return primary;

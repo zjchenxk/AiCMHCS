@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:isolate';
 
-import 'dm_database.dart';
+import 'package:server/dm/dm_database.dart';
 
 /// 数据库访问网关。
 ///
@@ -55,24 +55,24 @@ class DmGateway {
       throw StateError('初始化达梦数据库连接失败: ${ack['error']}');
     }
 
-    final gateway = DmGateway._(ack['port'] as SendPort, replies, errors);
+    final gateway = DmGateway._(ack['port']! as SendPort, replies, errors);
     errors.listen(gateway._onWorkerError);
     replies.listen(gateway._onMessage);
     return _cached = gateway;
   }
 
   Future<DmResult> query(String sql, [List<Object?> params = const []]) async =>
-      await _call('query', sql: sql, params: params) as DmResult;
+      (await _call('query', sql: sql, params: params))! as DmResult;
 
   Future<int> execute(String sql, [List<Object?> params = const []]) async =>
-      await _call('execute', sql: sql, params: params) as int;
+      (await _call('execute', sql: sql, params: params))! as int;
 
-  Future<void> executeDirect(String sql) async => await _call(
-        'executeDirect',
-        sql: sql,
-      );
+  Future<void> executeDirect(String sql) async => _call(
+    'executeDirect',
+    sql: sql,
+  );
 
-  Future<void> ping() async => await _call('ping');
+  Future<void> ping() async => _call('ping');
 
   Future<void> close() async {
     if (_closed) return;
@@ -124,8 +124,8 @@ class DmGateway {
   }
 
   void _onMessage(Object? message) {
-    final msg = message as Map<Object?, Object?>;
-    final completer = _pending[msg['id'] as int];
+    final msg = message! as Map<Object?, Object?>;
+    final completer = _pending[msg['id']! as int];
     if (completer == null || completer.isCompleted) return;
     if (msg['ok'] == true) {
       completer.complete(msg['data']);

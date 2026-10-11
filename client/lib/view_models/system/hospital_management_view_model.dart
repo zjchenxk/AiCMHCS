@@ -49,7 +49,8 @@ class HospitalManagementViewModel extends ChangeNotifier {
   bool get addressLoading => _addressLoading;
 
   /// 当前所选医院的信息
-  HospitalInfo? get selectedOrganInfo => _selectedNode == null ? null : _organInfoMap[_selectedNode!.id];
+  HospitalInfo? get selectedOrganInfo =>
+      _selectedNode == null ? null : _organInfoMap[_selectedNode!.id];
 
   /// 加载医院树（实际项目替换为接口请求）
   Future<void> loadOrganTree() async {
@@ -78,9 +79,21 @@ class HospitalManagementViewModel extends ChangeNotifier {
     _organInfoMap.clear();
 
     final root = HospitalTreeNode(id: 'H001', name: '示例人民医院');
-    final child1 = HospitalTreeNode(id: 'H001-01', name: '示例人民医院-第一分院', parentId: root.id);
-    final child2 = HospitalTreeNode(id: 'H001-02', name: '示例人民医院-第二分院', parentId: root.id);
-    final grandChild = HospitalTreeNode(id: 'H001-01-01', name: '第一分院-社区门诊', parentId: child1.id);
+    final child1 = HospitalTreeNode(
+      id: 'H001-01',
+      name: '示例人民医院-第一分院',
+      parentId: root.id,
+    );
+    final child2 = HospitalTreeNode(
+      id: 'H001-02',
+      name: '示例人民医院-第二分院',
+      parentId: root.id,
+    );
+    final grandChild = HospitalTreeNode(
+      id: 'H001-01-01',
+      name: '第一分院-社区门诊',
+      parentId: child1.id,
+    );
     child1.children.add(grandChild);
     root.children.addAll([child1, child2]);
 
@@ -189,7 +202,10 @@ class HospitalManagementViewModel extends ChangeNotifier {
       return true;
     } catch (e) {
       _addressLoading = false;
-      _errorMsg = e.toString().replaceFirst(RegExp(r'^\w*(Exception|Error):\s*'), '');
+      _errorMsg = e.toString().replaceFirst(
+        RegExp(r'^\w*(Exception|Error):\s*'),
+        '',
+      );
       notifyListeners();
 
       return false;
@@ -229,7 +245,10 @@ class HospitalManagementViewModel extends ChangeNotifier {
       return true;
     } catch (e) {
       _addressLoading = false;
-      _errorMsg = e.toString().replaceFirst(RegExp(r'^\w*(Exception|Error):\s*'), '');
+      _errorMsg = e.toString().replaceFirst(
+        RegExp(r'^\w*(Exception|Error):\s*'),
+        '',
+      );
       notifyListeners();
 
       return false;
@@ -267,7 +286,10 @@ class HospitalManagementViewModel extends ChangeNotifier {
       return true;
     } catch (e) {
       _addressLoading = false;
-      _errorMsg = e.toString().replaceFirst(RegExp(r'^\w*(Exception|Error):\s*'), '');
+      _errorMsg = e.toString().replaceFirst(
+        RegExp(r'^\w*(Exception|Error):\s*'),
+        '',
+      );
       notifyListeners();
 
       return false;
@@ -303,7 +325,10 @@ class HospitalManagementViewModel extends ChangeNotifier {
       return true;
     } catch (e) {
       _addressLoading = false;
-      _errorMsg = e.toString().replaceFirst(RegExp(r'^\w*(Exception|Error):\s*'), '');
+      _errorMsg = e.toString().replaceFirst(
+        RegExp(r'^\w*(Exception|Error):\s*'),
+        '',
+      );
       notifyListeners();
 
       return false;

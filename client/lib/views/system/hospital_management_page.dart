@@ -33,7 +33,9 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
   @override
   void dispose() {
     // 注意：实例来自 Provider 全局注入，这里只移除监听，不要 viewModel.dispose()
-    context.read<HospitalManagementViewModel>().removeListener(_onViewModelChanged);
+    context.read<HospitalManagementViewModel>().removeListener(
+      _onViewModelChanged,
+    );
     super.dispose();
   }
 
@@ -74,7 +76,9 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
     // 使用 watch 监听变化，VM notifyListeners 后自动刷新
     final viewModel = context.watch<HospitalManagementViewModel>();
 
-    return viewModel.loading ? const Center(child: CircularProgressIndicator()) : _buildBody(theme, viewModel);
+    return viewModel.loading
+        ? const Center(child: CircularProgressIndicator())
+        : _buildBody(theme, viewModel);
   }
 
   Widget _buildBody(ThemeData theme, HospitalManagementViewModel viewModel) {
@@ -91,7 +95,10 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
               children: [
                 Container(
                   height: 60,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
                   color: theme.colorScheme.primaryContainer,
                   child: Row(
                     children: [
@@ -118,7 +125,8 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
                           size: 20,
                           color: theme.colorScheme.primary,
                         ),
-                        onPressed: () => _showAddRootDialog(theme, Icons.home_work_outlined),
+                        onPressed: () =>
+                            _showAddRootDialog(theme, Icons.home_work_outlined),
                       ),
                     ],
                   ),
@@ -128,7 +136,11 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
                   child: viewModel.organTree.isEmpty
                       ? const Center(child: Text('暂无医院数据'))
                       : ListView(
-                          children: viewModel.organTree.map((n) => _buildTreeTile(theme, viewModel, n, 0)).toList(),
+                          children: viewModel.organTree
+                              .map(
+                                (n) => _buildTreeTile(theme, viewModel, n, 0),
+                              )
+                              .toList(),
                         ),
                 ),
               ],
@@ -150,7 +162,9 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
                     if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(ok ? '保存成功' : '保存失败：${viewModel.errorMsg ?? ''}'),
+                        content: Text(
+                          ok ? '保存成功' : '保存失败：${viewModel.errorMsg ?? ''}',
+                        ),
                         backgroundColor: ok ? Colors.green : Colors.red,
                       ),
                     );
@@ -162,7 +176,12 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
   }
 
   /// 递归构建树节点
-  Widget _buildTreeTile(ThemeData theme, HospitalManagementViewModel viewModel, HospitalTreeNode node, int depth) {
+  Widget _buildTreeTile(
+    ThemeData theme,
+    HospitalManagementViewModel viewModel,
+    HospitalTreeNode node,
+    int depth,
+  ) {
     final selected = viewModel.selectedNode?.id == node.id;
     return Column(
       children: [
@@ -187,7 +206,9 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
                   InkWell(
                     onTap: () => viewModel.toggleExpand(node),
                     child: Icon(
-                      node.expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
+                      node.expanded
+                          ? Icons.keyboard_arrow_down
+                          : Icons.keyboard_arrow_right,
                       size: 20,
                     ),
                   ),
@@ -198,7 +219,11 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
                       value: 'add',
                       child: Row(
                         children: [
-                          Icon(Icons.add_home_work_outlined, size: 18, color: theme.colorScheme.primary),
+                          Icon(
+                            Icons.add_home_work_outlined,
+                            size: 18,
+                            color: theme.colorScheme.primary,
+                          ),
                           const SizedBox(width: 10),
                           const Text('添加下级医院'),
                         ],
@@ -208,7 +233,11 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
                       value: 'delete',
                       child: Row(
                         children: [
-                          Icon(Icons.delete_outline, size: 18, color: theme.colorScheme.primary),
+                          Icon(
+                            Icons.delete_outline,
+                            size: 18,
+                            color: theme.colorScheme.primary,
+                          ),
                           const SizedBox(width: 10),
                           const Text('删除医院'),
                         ],
@@ -221,12 +250,18 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                     side: BorderSide(
-                      color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+                      color: theme.colorScheme.outlineVariant.withValues(
+                        alpha: 0.3,
+                      ),
                     ),
                   ),
                   onSelected: (action) {
                     if (action == 'add') {
-                      _showAddChildDialog(theme, Icons.home_work_outlined, node);
+                      _showAddChildDialog(
+                        theme,
+                        Icons.home_work_outlined,
+                        node,
+                      );
                     } else if (action == 'delete') {
                       _confirmDelete(theme, node);
                     }
@@ -238,7 +273,10 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
           selected: selected,
           onTap: () => viewModel.selectOrgan(node.id),
         ),
-        if (node.expanded) ...node.children.map((c) => _buildTreeTile(theme, viewModel, c, depth + 1)),
+        if (node.expanded)
+          ...node.children.map(
+            (c) => _buildTreeTile(theme, viewModel, c, depth + 1),
+          ),
       ],
     );
   }
@@ -255,13 +293,25 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
     });
   }
 
-  void _showAddChildDialog(ThemeData theme, IconData icon, HospitalTreeNode parent) {
+  void _showAddChildDialog(
+    ThemeData theme,
+    IconData icon,
+    HospitalTreeNode parent,
+  ) {
     _showNameDialog(theme, icon, '添加「${parent.name}」下级医院', (name) async {
-      await context.read<HospitalManagementViewModel>().addChildOrgan(parent, name);
+      await context.read<HospitalManagementViewModel>().addChildOrgan(
+        parent,
+        name,
+      );
     });
   }
 
-  void _showNameDialog(ThemeData theme, IconData icon, String title, Future<void> Function(String) onOk) {
+  void _showNameDialog(
+    ThemeData theme,
+    IconData icon,
+    String title,
+    Future<void> Function(String) onOk,
+  ) {
     final controller = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
@@ -290,7 +340,9 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
                         const SizedBox(width: 10),
                         Text(
                           title,
-                          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ],
                     ),
@@ -301,25 +353,42 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
                     TextFormField(
                       controller: controller,
                       autofocus: true,
-                      style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onPrimaryContainer,
+                      ),
                       decoration: InputDecoration(
                         labelText: '医院名称',
-                        labelStyle: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.6)),
+                        labelStyle: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onPrimaryContainer
+                              .withValues(alpha: 0.6),
+                        ),
                         // 毛玻璃底色：半透明 surface
                         filled: true,
-                        fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                        fillColor: theme.colorScheme.surfaceContainerHighest
+                            .withValues(alpha: 0.6),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 14,
+                        ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3)),
+                          borderSide: BorderSide(
+                            color: theme.colorScheme.outlineVariant.withValues(
+                              alpha: 0.3,
+                            ),
+                          ),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide(color: theme.colorScheme.primary),
+                          borderSide: BorderSide(
+                            color: theme.colorScheme.primary,
+                          ),
                         ),
                       ),
-                      onFieldSubmitted: (_) => _confirmName(ctx, formKey, controller, onOk),
-                      validator: (v) => (v == null || v.trim().isEmpty) ? '请输入医院名称' : null,
+                      onFieldSubmitted: (_) =>
+                          _confirmName(ctx, formKey, controller, onOk),
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? '请输入医院名称' : null,
                     ),
                     const SizedBox(height: 20),
 
@@ -331,7 +400,9 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
                           onPressed: () => Navigator.pop(ctx),
                           child: Text(
                             '取消',
-                            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurface,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -344,7 +415,9 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
                           },
                           child: Text(
                             '确定',
-                            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimary),
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onPrimary,
+                            ),
                           ),
                         ),
                       ],
@@ -359,7 +432,12 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
     );
   }
 
-  Future<void> _confirmName(BuildContext ctx, GlobalKey<FormState> formKey, TextEditingController controller, Future<void> Function(String) onOk) async {
+  Future<void> _confirmName(
+    BuildContext ctx,
+    GlobalKey<FormState> formKey,
+    TextEditingController controller,
+    Future<void> Function(String) onOk,
+  ) async {
     if (!formKey.currentState!.validate()) return;
     final name = controller.text.trim();
     Navigator.pop(ctx);
@@ -386,11 +464,17 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
                   // 标题
                   Row(
                     children: [
-                      Icon(Icons.delete_outline, color: theme.colorScheme.primary, size: 22),
+                      Icon(
+                        Icons.delete_outline,
+                        color: theme.colorScheme.primary,
+                        size: 22,
+                      ),
                       const SizedBox(width: 10),
                       Text(
                         '删除确认',
-                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ],
                   ),
@@ -409,20 +493,28 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
                         onPressed: () => Navigator.pop(ctx),
                         child: Text(
                           '取消',
-                          style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurface,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 12),
 
                       FilledButton(
-                        style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.red,
+                        ),
                         onPressed: () async {
                           Navigator.pop(ctx);
-                          await context.read<HospitalManagementViewModel>().removeOrgan(node);
+                          await context
+                              .read<HospitalManagementViewModel>()
+                              .removeOrgan(node);
                         },
                         child: Text(
                           '删除',
-                          style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimary),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onPrimary,
+                          ),
                         ),
                       ),
                     ],

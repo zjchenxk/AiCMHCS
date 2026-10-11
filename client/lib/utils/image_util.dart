@@ -8,7 +8,10 @@ import 'package:image_picker/image_picker.dart';
 class ImageUtil {
   /// 从相册选择图片，校验分辨率不超过 [maxSize]（宽或高均不超过），
   /// 校验通过则返回 base64 字符串，失败返回 null 并通过 [onError] 提示。
-  static Future<String?> pickAndConvert({required int maxSize, required void Function(String msg) onError}) async {
+  static Future<String?> pickAndConvert({
+    required int maxSize,
+    required void Function(String msg) onError,
+  }) async {
     try {
       final picked = await ImagePicker().pickImage(
         source: ImageSource.gallery,
@@ -19,8 +22,12 @@ class ImageUtil {
       final Uint8List bytes = await picked.readAsBytes();
 
       // 解码图片获取实际分辨率
-      final ui.ImmutableBuffer buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
-      final ui.ImageDescriptor descriptor = await ui.ImageDescriptor.encoded(buffer);
+      final ui.ImmutableBuffer buffer = await ui.ImmutableBuffer.fromUint8List(
+        bytes,
+      );
+      final ui.ImageDescriptor descriptor = await ui.ImageDescriptor.encoded(
+        buffer,
+      );
       final int w = descriptor.width;
       final int h = descriptor.height;
       descriptor.dispose();

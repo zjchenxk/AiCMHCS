@@ -24,7 +24,10 @@ void main() {
     });
 
     test('损坏的存储串返回校验失败', () {
-      expect(AuthService.verifyStoredPassword('not-a-valid-entry', 'x'), isFalse);
+      expect(
+        AuthService.verifyStoredPassword('not-a-valid-entry', 'x'),
+        isFalse,
+      );
     });
   });
 

@@ -15,7 +15,12 @@ class HospitalInfoForm extends StatefulWidget {
   final HospitalInfo info;
   final Future<void> Function(HospitalInfo info) onSave;
 
-  const HospitalInfoForm({super.key, required this.node, required this.info, required this.onSave});
+  const HospitalInfoForm({
+    super.key,
+    required this.node,
+    required this.info,
+    required this.onSave,
+  });
 
   @override
   State<HospitalInfoForm> createState() => _HospitalInfoFormState();
@@ -60,11 +65,15 @@ class _HospitalInfoFormState extends State<HospitalInfoForm> {
 
   void _showError(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
   }
 
   Future<void> _pickImage({required bool isLogo}) async {
-    final maxSize = isLogo ? OrganImageLimit.logoMaxSize : OrganImageLimit.sealMaxSize;
+    final maxSize = isLogo
+        ? OrganImageLimit.logoMaxSize
+        : OrganImageLimit.sealMaxSize;
     final base64Str = await ImageUtil.pickAndConvert(
       maxSize: maxSize,
       onError: _showError,
@@ -218,10 +227,14 @@ class _HospitalInfoFormState extends State<HospitalInfoForm> {
                             TextFormField(
                               controller: _orgCodeCtrl,
                               style: theme.textTheme.bodyMedium,
-                              textInputAction: TextInputAction.next, // 回车键显示"下一项"
-                              onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(), // 回车跳下一个
+                              textInputAction:
+                                  TextInputAction.next, // 回车键显示"下一项"
+                              onFieldSubmitted: (_) =>
+                                  FocusScope.of(context).nextFocus(), // 回车跳下一个
                               decoration: glassDecoration(theme, '组织机构代码'),
-                              validator: (v) => (v == null || v.trim().isEmpty) ? '请输入组织机构代码' : null,
+                              validator: (v) => (v == null || v.trim().isEmpty)
+                                  ? '请输入组织机构代码'
+                                  : null,
                             ),
                             const SizedBox(height: 12),
 
@@ -229,9 +242,16 @@ class _HospitalInfoFormState extends State<HospitalInfoForm> {
                               controller: _nameCtrl,
                               style: theme.textTheme.bodyMedium,
                               textInputAction: TextInputAction.next,
-                              onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(),
-                              decoration: glassDecoration(theme, '医院名称', required: true),
-                              validator: (v) => (v == null || v.trim().isEmpty) ? '请输入医院中文名称' : null,
+                              onFieldSubmitted: (_) =>
+                                  FocusScope.of(context).nextFocus(),
+                              decoration: glassDecoration(
+                                theme,
+                                '医院名称',
+                                required: true,
+                              ),
+                              validator: (v) => (v == null || v.trim().isEmpty)
+                                  ? '请输入医院中文名称'
+                                  : null,
                             ),
                             const SizedBox(height: 12),
 
@@ -239,7 +259,8 @@ class _HospitalInfoFormState extends State<HospitalInfoForm> {
                               controller: _nameEnCtrl,
                               style: theme.textTheme.bodyMedium,
                               textInputAction: TextInputAction.next,
-                              onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(),
+                              onFieldSubmitted: (_) =>
+                                  FocusScope.of(context).nextFocus(),
                               decoration: glassDecoration(theme, '医院英文名称'),
                             ),
                           ],
@@ -263,7 +284,9 @@ class _HospitalInfoFormState extends State<HospitalInfoForm> {
                               required: true,
                               items: viewModel.provinces ?? const [],
                               value: viewModel.selectedProvince,
-                              loading: viewModel.addressLoading && viewModel.cities == null,
+                              loading:
+                                  viewModel.addressLoading &&
+                                  viewModel.cities == null,
                               validator: (v) => v == null ? '请选择省份' : null,
                               onChanged: _onProvinceChanged,
                             ),
@@ -306,7 +329,8 @@ class _HospitalInfoFormState extends State<HospitalInfoForm> {
                               controller: _addressCtrl,
                               style: theme.textTheme.bodyMedium,
                               textInputAction: TextInputAction.next,
-                              onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(),
+                              onFieldSubmitted: (_) =>
+                                  FocusScope.of(context).nextFocus(),
                               decoration: glassDecoration(theme, '详细地址'),
                             ),
                           ],
@@ -342,7 +366,8 @@ class _HospitalInfoFormState extends State<HospitalInfoForm> {
                       _imageField(
                         theme,
                         label: '医院Logo',
-                        subtitle: '不超过 ${OrganImageLimit.logoMaxSize}x${OrganImageLimit.logoMaxSize}',
+                        subtitle:
+                            '不超过 ${OrganImageLimit.logoMaxSize}x${OrganImageLimit.logoMaxSize}',
                         base64: _logoBase64,
                         onPick: () => _pickImage(isLogo: true),
                         onRemove: () => setState(() => _logoBase64 = null),
@@ -353,7 +378,8 @@ class _HospitalInfoFormState extends State<HospitalInfoForm> {
                       _imageField(
                         theme,
                         label: '医院印章',
-                        subtitle: '不超过 ${OrganImageLimit.sealMaxSize}x${OrganImageLimit.sealMaxSize}',
+                        subtitle:
+                            '不超过 ${OrganImageLimit.sealMaxSize}x${OrganImageLimit.sealMaxSize}',
                         base64: _sealBase64,
                         onPick: () => _pickImage(isLogo: false),
                         onRemove: () => setState(() => _sealBase64 = null),
@@ -393,7 +419,12 @@ class _HospitalInfoFormState extends State<HospitalInfoForm> {
   );
 
   // 统一的毛玻璃输入框装饰
-  InputDecoration glassDecoration(ThemeData theme, String label, {String? helper, bool required = false}) {
+  InputDecoration glassDecoration(
+    ThemeData theme,
+    String label, {
+    String? helper,
+    bool required = false,
+  }) {
     return InputDecoration(
       label: required
           ? Text.rich(
@@ -417,7 +448,9 @@ class _HospitalInfoFormState extends State<HospitalInfoForm> {
       fillColor: theme.colorScheme.surface,
       border: glassBorder(Colors.white70),
       enabledBorder: glassBorder(Colors.white70),
-      focusedBorder: glassBorder(theme.colorScheme.primary.withValues(alpha: 0.8)),
+      focusedBorder: glassBorder(
+        theme.colorScheme.primary.withValues(alpha: 0.8),
+      ),
     );
   }
 
@@ -434,7 +467,9 @@ class _HospitalInfoFormState extends State<HospitalInfoForm> {
           const SizedBox(width: 6),
           Text(
             title,
-            style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),
@@ -442,18 +477,29 @@ class _HospitalInfoFormState extends State<HospitalInfoForm> {
   }
 
   /// 图片上传字段（预览 + 选择 + 删除）
-  Widget _imageField(ThemeData theme, {required String label, required String subtitle, String? base64, required VoidCallback onPick, required VoidCallback onRemove}) {
+  Widget _imageField(
+    ThemeData theme, {
+    required String label,
+    required String subtitle,
+    String? base64,
+    required VoidCallback onPick,
+    required VoidCallback onRemove,
+  }) {
     return Column(
       children: [
         Text(
           label,
-          style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
         ),
         const SizedBox(height: 4),
 
         Text(
           subtitle,
-          style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey.shade600),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: Colors.grey.shade600,
+          ),
         ),
         const SizedBox(height: 6),
 
@@ -468,7 +514,11 @@ class _HospitalInfoFormState extends State<HospitalInfoForm> {
           clipBehavior: Clip.antiAlias,
           child: base64 == null
               ? IconButton(
-                  icon: const Icon(Icons.add_a_photo, size: 32, color: Colors.grey),
+                  icon: const Icon(
+                    Icons.add_a_photo,
+                    size: 32,
+                    color: Colors.grey,
+                  ),
                   onPressed: onPick,
                 )
               : GestureDetector(

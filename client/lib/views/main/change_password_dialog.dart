@@ -65,7 +65,11 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                   // 标题
                   Row(
                     children: [
-                      Icon(Icons.key_outlined, color: theme.colorScheme.primary, size: 22),
+                      Icon(
+                        Icons.key_outlined,
+                        color: theme.colorScheme.primary,
+                        size: 22,
+                      ),
                       const SizedBox(width: 10),
                       Text(
                         '修改密码',
@@ -80,7 +84,9 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
 
                   Text(
                     '密码需包含大写字母、小写字母、数字和特殊字符，长度至少 8 位',
-                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
                   ),
                   const SizedBox(height: 16),
 
@@ -90,7 +96,8 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                     label: '原密码',
                     obscure: _obscureOld,
                     onToggle: () => setState(() => _obscureOld = !_obscureOld),
-                    validator: (v) => (v == null || v.isEmpty) ? '请输入原密码' : null,
+                    validator: (v) =>
+                        (v == null || v.isEmpty) ? '请输入原密码' : null,
                   ),
                   const SizedBox(height: 12),
 
@@ -107,8 +114,15 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                       final hasUpper = v.contains(RegExp(r'[A-Z]'));
                       final hasLower = v.contains(RegExp(r'[a-z]'));
                       final hasDigit = v.contains(RegExp(r'[0-9]'));
-                      final hasSpecial = v.contains(RegExp(r'[!@#$%^&*()_+\-=\[\]{};:"\\|,.<>/?~`]'));
-                      final kinds = [hasUpper, hasLower, hasDigit, hasSpecial].where((e) => e).length;
+                      final hasSpecial = v.contains(
+                        RegExp(r'[!@#$%^&*()_+\-=\[\]{};:"\\|,.<>/?~`]'),
+                      );
+                      final kinds = [
+                        hasUpper,
+                        hasLower,
+                        hasDigit,
+                        hasSpecial,
+                      ].where((e) => e).length;
                       if (kinds < 4) return '需包含大小写字母、数字和特殊字符';
                       return null;
                     },
@@ -120,7 +134,8 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                     controller: _confirmPwdController,
                     label: '确认新密码',
                     obscure: _obscureConfirm,
-                    onToggle: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                    onToggle: () =>
+                        setState(() => _obscureConfirm = !_obscureConfirm),
                     validator: (v) {
                       if (v == null || v.isEmpty) return '请再次输入新密码';
                       if (v != _newPwdController.text) return '两次输入的密码不一致';
@@ -134,26 +149,36 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       TextButton(
-                        onPressed: _submitting ? null : () => Navigator.of(context).pop(),
+                        onPressed: _submitting
+                            ? null
+                            : () => Navigator.of(context).pop(),
                         child: Text(
                           '取消',
-                          style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurface,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 12),
 
                       FilledButton(
                         onPressed: _submitting ? null : _submit,
-                        style: FilledButton.styleFrom(backgroundColor: theme.colorScheme.primary),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: theme.colorScheme.primary,
+                        ),
                         child: _submitting
                             ? const SizedBox(
                                 width: 18,
                                 height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : Text(
                                 '确定',
-                                style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimary),
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: theme.colorScheme.onPrimary,
+                                ),
                               ),
                       ),
                     ],
@@ -167,19 +192,35 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
     );
   }
 
-  Widget _buildPasswordField(ThemeData theme, {required TextEditingController controller, required String label, required bool obscure, required VoidCallback onToggle, required String? Function(String?) validator}) {
+  Widget _buildPasswordField(
+    ThemeData theme, {
+    required TextEditingController controller,
+    required String label,
+    required bool obscure,
+    required VoidCallback onToggle,
+    required String? Function(String?) validator,
+  }) {
     return TextFormField(
       controller: controller,
       obscureText: obscure,
       validator: validator,
-      style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer),
+      style: theme.textTheme.bodyMedium?.copyWith(
+        color: theme.colorScheme.onPrimaryContainer,
+      ),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.6)),
+        labelStyle: theme.textTheme.bodyMedium?.copyWith(
+          color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.6),
+        ),
         // 毛玻璃底色：半透明 surface
         filled: true,
-        fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        fillColor: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.6,
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 14,
+        ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide(
@@ -214,7 +255,11 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
     if (!_formKey.currentState!.validate()) return;
 
     // 表单校验通过后，再执行一次完整强密码校验（包含用户名/旧密码比对）
-    final error = _validateStrongPassword(_newPwdController.text, username: widget.username, oldPassword: _oldPwdController.text);
+    final error = _validateStrongPassword(
+      _newPwdController.text,
+      username: widget.username,
+      oldPassword: _oldPwdController.text,
+    );
     if (error != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -246,21 +291,33 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
 
   /// 三级等保强密码校验结果
   /// 返回 null 表示通过，否则返回错误提示文本
-  String? _validateStrongPassword(String password, {required String username, required String oldPassword}) {
+  String? _validateStrongPassword(
+    String password, {
+    required String username,
+    required String oldPassword,
+  }) {
     if (password.isEmpty) return '请输入新密码';
     if (password.length < 8) return '密码长度不能少于 8 位';
     if (password.length > 64) return '密码长度不能超过 64 位';
     if (password == oldPassword) return '新密码不能与原密码相同';
-    if (username.isNotEmpty && password.toLowerCase().contains(username.toLowerCase())) {
+    if (username.isNotEmpty &&
+        password.toLowerCase().contains(username.toLowerCase())) {
       return '密码不能包含用户名';
     }
 
     final hasUpper = password.contains(RegExp(r'[A-Z]'));
     final hasLower = password.contains(RegExp(r'[a-z]'));
     final hasDigit = password.contains(RegExp(r'[0-9]'));
-    final hasSpecial = password.contains(RegExp(r'''[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`€£¥§]'''));
+    final hasSpecial = password.contains(
+      RegExp(r'''[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`€£¥§]'''),
+    );
 
-    final kinds = [hasUpper, hasLower, hasDigit, hasSpecial].where((e) => e).length;
+    final kinds = [
+      hasUpper,
+      hasLower,
+      hasDigit,
+      hasSpecial,
+    ].where((e) => e).length;
     if (kinds < 4) {
       return '密码必须同时包含大写字母、小写字母、数字和特殊字符';
     }

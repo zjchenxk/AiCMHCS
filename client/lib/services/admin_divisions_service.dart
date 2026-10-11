@@ -11,7 +11,8 @@ class AdminDivisionsService {
       throw Exception('用户未登录或登录已过期，请重新登录！');
     }
 
-    var encryptedResponse = ''; // await client.adminDivisions.getProvinces(token!);
+    var encryptedResponse =
+        ''; // await client.adminDivisions.getProvinces(token!);
     if (encryptedResponse.isEmpty) {
       throw Exception('获取省/自治区/直辖市列表失败！响应消息为空');
     }
@@ -41,7 +42,8 @@ class AdminDivisionsService {
       throw Exception('获取省/自治区/直辖市列表失败！出参中未包含: data');
     }
 
-    List<Map<String, dynamic>> maps = (jsonResponse['data'] as List).cast<Map<String, dynamic>>();
+    List<Map<String, dynamic>> maps = (jsonResponse['data'] as List)
+        .cast<Map<String, dynamic>>();
     if (maps.isNotEmpty) {
       final provinces = maps.map((m) => Province.fromJson(m)).toList();
       return provinces;
@@ -57,7 +59,8 @@ class AdminDivisionsService {
       throw Exception('用户未登录或登录已过期，请重新登录！');
     }
 
-    var encryptedResponse = ''; // await client.adminDivisions.getCitiesByProvince(token!, provinceCode);
+    var encryptedResponse =
+        ''; // await client.adminDivisions.getCitiesByProvince(token!, provinceCode);
     if (encryptedResponse.isEmpty) {
       throw Exception('获取市/州列表失败！响应消息为空');
     }
@@ -87,7 +90,8 @@ class AdminDivisionsService {
       throw Exception('获取市/州列表失败！出参中未包含: data');
     }
 
-    List<Map<String, dynamic>> maps = (jsonResponse['data'] as List).cast<Map<String, dynamic>>();
+    List<Map<String, dynamic>> maps = (jsonResponse['data'] as List)
+        .cast<Map<String, dynamic>>();
     if (maps.isNotEmpty) {
       final cities = maps.map((m) => City.fromJson(m)).toList();
       return cities;
@@ -103,7 +107,8 @@ class AdminDivisionsService {
       throw Exception('用户未登录或登录已过期，请重新登录！');
     }
 
-    var encryptedResponse = ''; // await client.adminDivisions.getCountiesByCity(token!, cityCode);
+    var encryptedResponse =
+        ''; // await client.adminDivisions.getCountiesByCity(token!, cityCode);
     if (encryptedResponse.isEmpty) {
       throw Exception('获取县/区/旗列表失败！响应消息为空');
     }
@@ -133,7 +138,8 @@ class AdminDivisionsService {
       throw Exception('获取县/区/旗列表失败！出参中未包含: data');
     }
 
-    List<Map<String, dynamic>> maps = (jsonResponse['data'] as List).cast<Map<String, dynamic>>();
+    List<Map<String, dynamic>> maps = (jsonResponse['data'] as List)
+        .cast<Map<String, dynamic>>();
     if (maps.isNotEmpty) {
       final counties = maps.map((m) => County.fromJson(m)).toList();
       return counties;
@@ -149,7 +155,8 @@ class AdminDivisionsService {
       throw Exception('用户未登录或登录已过期，请重新登录！');
     }
 
-    var encryptedResponse = ''; // await client.adminDivisions.getTownsByCounty(token!, countyCode);
+    var encryptedResponse =
+        ''; // await client.adminDivisions.getTownsByCounty(token!, countyCode);
     if (encryptedResponse.isEmpty) {
       throw Exception('获取乡镇/街道列表失败！响应消息为空');
     }
@@ -179,7 +186,8 @@ class AdminDivisionsService {
       throw Exception('获取乡镇/街道列表失败！出参中未包含: data');
     }
 
-    List<Map<String, dynamic>> maps = (jsonResponse['data'] as List).cast<Map<String, dynamic>>();
+    List<Map<String, dynamic>> maps = (jsonResponse['data'] as List)
+        .cast<Map<String, dynamic>>();
     if (maps.isNotEmpty) {
       final towns = maps.map((m) => Town.fromJson(m)).toList();
       return towns;
@@ -195,7 +203,8 @@ class AdminDivisionsService {
       throw Exception('用户未登录或登录已过期，请重新登录！');
     }
 
-    var encryptedResponse = ''; // await client.adminDivisions.getVillagesByTown(token!, townCode);
+    var encryptedResponse =
+        ''; // await client.adminDivisions.getVillagesByTown(token!, townCode);
     if (encryptedResponse.isEmpty) {
       throw Exception('获取村/居委会列表失败！响应消息为空');
     }
@@ -225,7 +234,8 @@ class AdminDivisionsService {
       throw Exception('获取村/居委会列表失败！出参中未包含: data');
     }
 
-    List<Map<String, dynamic>> maps = (jsonResponse['data'] as List).cast<Map<String, dynamic>>();
+    List<Map<String, dynamic>> maps = (jsonResponse['data'] as List)
+        .cast<Map<String, dynamic>>();
     if (maps.isNotEmpty) {
       final villages = maps.map((m) => Village.fromJson(m)).toList();
       return villages;
