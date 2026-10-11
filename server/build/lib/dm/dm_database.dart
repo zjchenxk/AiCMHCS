@@ -2,8 +2,9 @@ import 'dart:convert';
 import 'dart:ffi';
 
 import 'package:ffi/ffi.dart';
+import 'package:server/dm/dm_gateway.dart' show DmGateway;
 
-import 'dpi.dart';
+import 'package:server/dm/dpi.dart';
 
 /// 达梦数据库异常，code 为达梦错误码，message 为服务器诊断消息。
 final class DmException implements Exception {
@@ -26,10 +27,12 @@ final class DmResult {
 
   /// 按列名取行的便捷视图。
   List<Map<String, String?>> get rowsAsMaps => rows
-      .map((row) => {
-            for (var i = 0; i < columns.length && i < row.length; i++)
-              columns[i]: row[i],
-          })
+      .map(
+        (row) => {
+          for (var i = 0; i < columns.length && i < row.length; i++)
+            columns[i]: row[i],
+        },
+      )
       .toList(growable: false);
 }
 
@@ -192,7 +195,10 @@ final class DmConnection {
   }
 
   void _prepareAndExecute(
-      Pointer<Void> stmt, String sql, List<Object?> params) {
+    Pointer<Void> stmt,
+    String sql,
+    List<Object?> params,
+  ) {
     if (params.isEmpty) {
       _execDirectW(stmt, sql);
       return;
@@ -289,15 +295,26 @@ final class DmConnection {
     try {
       for (var i = 1; i <= nCols; i++) {
         _check(
-          _dpi.descColumnW(stmt, i, nameBuf, 512, nameLen, sqlType, colSize,
-              decDigits, nullable),
+          _dpi.descColumnW(
+            stmt,
+            i,
+            nameBuf,
+            512,
+            nameLen,
+            sqlType,
+            colSize,
+            decDigits,
+            nullable,
+          ),
           stmt,
           '读取第 $i 列元数据失败',
         );
         final units = nameLen.value ~/ 2;
-        columns.add(String.fromCharCodes(
-          nameBuf.asTypedList(units < 0 ? 0 : units),
-        ));
+        columns.add(
+          String.fromCharCodes(
+            nameBuf.asTypedList(units < 0 ? 0 : units),
+          ),
+        );
       }
     } finally {
       calloc.free(nameBuf);
@@ -318,7 +335,7 @@ final class DmConnection {
         final rc = _dpi.fetch(stmt, rowNum);
         if (rc == Dpi.dsqlNoData) break;
         _check(rc, stmt, '读取数据行失败');
-        final row = List<String?>.filled(nCols, null, growable: false);
+        final row = List<String?>.filled(nCols, null);
         for (var i = 1; i <= nCols; i++) {
           final grc = _dpi.getDataW(
             stmt,

@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:common/model.dart';
 import 'package:crypto/crypto.dart';
 
-import '../dm/dm_gateway.dart';
-import '../models/user_info.dart';
+import 'package:server/dm/dm_gateway.dart';
 
 /// 认证类业务异常：httpStatus / code / message 直接映射到 HTTP 响应。
 final class AuthException implements Exception {
@@ -23,9 +23,19 @@ final class LoginSession {
   LoginSession(this.token, this.user, this.expiresAt);
 
   final String token;
-  final UserInfo user;
+  final LoginUser user;
   DateTime expiresAt;
 }
+
+/// 从数据库行解析登录用户（DmResult 各列均以字符串返回，数值按需转换）。
+LoginUser _loginUserFromRow(Map<String, String?> row) => LoginUser(
+  id: int.parse(row['ID'] ?? '0'),
+  userCode: row['USER_CODE'] ?? '',
+  userName: row['USER_NAME'] ?? '',
+  roleCode: row['ROLE_CODE'] ?? '',
+  phone: row['PHONE'],
+  lastLoginAt: row['LAST_LOGIN_AT'],
+);
 
 /// 登录认证服务：口令校验（盐 + SHA-256）、令牌签发与校验、登录审计。
 class AuthService {
@@ -74,15 +84,15 @@ class AuthService {
       [uCode],
     );
 
-    UserInfo? user;
-    String stored = '';
+    LoginUser? user;
+    var stored = '';
     String? status;
     if (result.rows.isNotEmpty) {
       final row = result.rowsAsMaps.first;
       stored = row['PASSWORD'] ?? '';
       status = row['STATUS'];
       if (verifyStoredPassword(stored, password)) {
-        user = UserInfo.fromRow(row);
+        user = _loginUserFromRow(row);
       }
     }
 
@@ -110,7 +120,7 @@ class AuthService {
   }
 
   /// 校验令牌并滑动续期。
-  Future<UserInfo> verify(String token) async {
+  Future<LoginUser> verify(String token) async {
     _pruneExpired();
     final session = _sessions[token];
     if (session == null) {

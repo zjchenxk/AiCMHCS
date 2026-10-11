@@ -16,7 +16,7 @@ Future<Response> onRequest(RequestContext context) async {
   }
 
   final authorization = context.request.headers['authorization'];
-  final token = authorization?.startsWith('Bearer ') == true
+  final token = authorization?.startsWith('Bearer ') ?? false
       ? authorization!.substring('Bearer '.length).trim()
       : null;
   if (token == null || token.isEmpty) {
@@ -39,6 +39,6 @@ Future<Response> onRequest(RequestContext context) async {
 }
 
 Response _error(int status, int code, String message) => Response.json(
-      statusCode: status,
-      body: {'code': code, 'message': message, 'data': null},
-    );
+  statusCode: status,
+  body: {'code': code, 'message': message, 'data': null},
+);
