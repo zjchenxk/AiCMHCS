@@ -1,3 +1,4 @@
+import 'package:client/main.dart';
 import 'package:client/providers/theme_provider.dart';
 import 'package:client/utils/theme_color_mapper_util.dart';
 import 'package:client/utils/theme_data_util.dart';
@@ -1047,7 +1048,9 @@ class _MainPageState extends State<MainPage> {
               width: 0.5,
             ),
           ),
-          child: Expanded(child: workspace),
+          // 外层 Selector 已处于 Row>Expanded 中（约束有限），直接放子组件即可；
+          // 不能再包 Expanded（ParentDataWidget 只能直接用于 Flex 子级）
+          child: workspace,
         );
       },
     );
@@ -1206,6 +1209,10 @@ class _MainPageState extends State<MainPage> {
 
   // 重新登录
   void _logout(BuildContext context) {
+    // 清空登录凭据与用户信息
+    token = null;
+    loginUser = null;
+
     // 清空登录页的输入状态（用户名/密码/科室/错误提示）
     context.read<LoginViewModel>().reset();
 

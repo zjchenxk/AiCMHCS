@@ -85,7 +85,7 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 ### 前端（client）— MVVM
 
 - **导入约定**：统一 `import 'package:material_ui/material_ui.dart';`（全仓库 0 处 `flutter/material.dart`），新页面遵循；
-- **全局对象**在 `lib/main.dart`：`token`（登录令牌）、`getIt`（服务定位器）——Serverpod 的 `client` 已随迁移移除；
+- **全局对象**在 `lib/main.dart`：`token`（登录令牌）、`loginUser`（当前登录用户，登录成功由 LoginViewModel 写入、注销清空）、`getIt`（服务定位器）——Serverpod 的 `client` 已随迁移移除；
 - **Service 模式**（参照 `admin_divisions_service.dart` 的骨架）：检查 `token == null` → 调后端 → 逐项校验 `code/message/data` 键 → `X.fromJson` 还原模型。新 Service 要在 `main.dart` 的 `setupServiceLocator()` 中注册。注意：现有 Service 内的后端调用全部被注释（拿到空串后抛「响应消息为空」），是待接 Dart Frog API 的骨架，接线时补 HTTP 调用即可；
 - **ViewModel 模式**（参照 `hospital_management_view_model.dart`）：私有字段 + getter、`_loading`/`_errorMsg` 状态、状态变更后 `notifyListeners()`、异步方法返回 `Future<bool>` 表示成败。新 ViewModel 必须注册到 `main.dart` 的 `MultiProvider`；
 - **新页面接入路由**：菜单项在 `main_view_model.dart` 的 `menus` 列表中定义（带 `route`），页面构造器注册到 `lib/routes/menu_routes.dart`（key 与 `MenuItem.route` 一致）；
@@ -172,7 +172,7 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 ## 当前已知 Mock / 待接线（勿误判为已接通）
 
 - **后端已实现真实接口**：`POST /api/auth/login`、`GET /api/auth/me`、`GET /health`（数据库探活）——登录链路后端侧已通；
-- **客户端登录仍是演示逻辑**：`LoginViewModel.login()` 中 token 硬编码 `'aicmhcs'`，未调用真实后端；
+- **客户端登录已接通**：`LoginViewModel.login()` 调用真实后端，成功后写入全局 `token` 与 `loginUser`（`LoginUser.fromJson` 解析），登录页跳转主界面前经 `MainViewModel.syncLoginUser()` 刷新工作副本，注销时两者清空。注意 `MainViewModel` 的医院/院区/科室仍为本地默认示例（`_defaultWorkUser`，后端暂无对应接口），登录页科室下拉选值（纯名称、无 ID）暂未映射进 `loginUser.deptId`；
 - 客户端 `AdminDivisionsService` / `LogService` 的后端调用全部被注释，行政区划联动当前**未接通**；医院管理加载与保存为 mock（`HospitalManagementViewModel` 中标注 `TODO`）。
 
 改动这些区域时保留 TODO 标注与被注释的调用代码，不要顺手删除。

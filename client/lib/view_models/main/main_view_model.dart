@@ -1,3 +1,4 @@
+import 'package:client/main.dart' as app;
 import 'package:client/models/child_info.dart';
 import 'package:client/models/menu_item.dart';
 import 'package:common/model.dart';
@@ -13,12 +14,12 @@ class MainViewModel extends ChangeNotifier {
     ('D005', '产科'),
   ];
 
-  // 登录用户信息（示例数据，实际可从接口获取）
-  LoginUser loginUser = const LoginUser(
-    id: 1,
-    userCode: '0001',
-    userName: '张医生',
-    roleCode: 'DOCTOR',
+  // 本地默认工作区（示例数据：医院/院区/科室后端暂不下发，实际从接口获取）
+  static const _defaultWorkUser = LoginUser(
+    id: 0,
+    userCode: '',
+    userName: '',
+    roleCode: '',
     organId: 'O001',
     organName: '首都医科大学附属北京儿童医院',
     branchId: 'B001',
@@ -26,6 +27,25 @@ class MainViewModel extends ChangeNotifier {
     deptId: 'D001',
     deptName: '儿童保健科',
   );
+
+  // 登录用户信息（登录前为本地默认占位，登录后经 syncLoginUser 刷新为真实身份）
+  LoginUser loginUser = _defaultWorkUser;
+
+  /// 登录成功后以全局 loginUser 刷新工作副本
+  /// （医院/院区/科室仍用本地默认，后端暂不下发）
+  void syncLoginUser() {
+    final user = app.loginUser;
+    if (user == null) return;
+    loginUser = user.copyWith(
+      organId: _defaultWorkUser.organId,
+      organName: _defaultWorkUser.organName,
+      branchId: _defaultWorkUser.branchId,
+      branchName: _defaultWorkUser.branchName,
+      deptId: _defaultWorkUser.deptId,
+      deptName: _defaultWorkUser.deptName,
+    );
+    notifyListeners();
+  }
 
   // 儿童信息（示例数据，实际可从接口获取）
   ChildInfo child = ChildInfo(
@@ -148,7 +168,7 @@ class MainViewModel extends ChangeNotifier {
 
   final Set<String> _expandedIds = {};
 
-  String get userName => '张医生';
+  String get userName => loginUser.userName;
 
   // 方法
   void selectMenu(MenuItem menu, List<String> path) {

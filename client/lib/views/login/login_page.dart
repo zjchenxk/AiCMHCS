@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:client/utils/theme_color_mapper_util.dart';
 import 'package:client/view_models/login/login_view_model.dart';
+import 'package:client/view_models/main/main_view_model.dart';
 import 'package:client/views/main/main_page.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -48,9 +49,13 @@ class _LoginPageState extends State<LoginPage> {
                     children: [
                       SvgPicture.asset(
                         'assets/images/welcome.svg',
-                        height: MediaQuery.of(context).size.height * 0.85, //图片自适应屏幕高度的85%
+                        height:
+                            MediaQuery.of(context).size.height *
+                            0.85, //图片自适应屏幕高度的85%
                         fit: BoxFit.contain, //保持图片等比缩放
-                        colorMapper: ThemeColorMapper(primary: theme.colorScheme.primary),
+                        colorMapper: ThemeColorMapper(
+                          primary: theme.colorScheme.primary,
+                        ),
                       ),
                     ],
                   ),
@@ -64,7 +69,10 @@ class _LoginPageState extends State<LoginPage> {
                       //卡片圆角
                       borderRadius: BorderRadius.circular(24.0), //
                       child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15), //毛玻璃效果
+                        filter: ImageFilter.blur(
+                          sigmaX: 15,
+                          sigmaY: 15,
+                        ), //毛玻璃效果
                         child: Container(
                           width: 500,
                           padding: const EdgeInsets.symmetric(
@@ -72,7 +80,9 @@ class _LoginPageState extends State<LoginPage> {
                             vertical: 50,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.7), //半透明白色背景
+                            color: Colors.white.withValues(
+                              alpha: 0.7,
+                            ), //半透明白色背景
                             borderRadius: BorderRadius.circular(24.0),
                             border: Border.all(
                               color: Colors.white.withValues(alpha: 0.5),
@@ -90,8 +100,10 @@ class _LoginPageState extends State<LoginPage> {
                             key: loginViewModel.formKey,
                             child: Column(
                               mainAxisSize: MainAxisSize.min, //高度自适应内容
-                              mainAxisAlignment: MainAxisAlignment.center, //垂直居中
-                              crossAxisAlignment: CrossAxisAlignment.center, //水平居中
+                              mainAxisAlignment:
+                                  MainAxisAlignment.center, //垂直居中
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.center, //水平居中
                               children: [
                                 Text(
                                   'AiCMHCS',
@@ -115,29 +127,44 @@ class _LoginPageState extends State<LoginPage> {
                                 //用户名输入框
                                 TextFormField(
                                   controller: loginViewModel.userCodeController,
-                                  focusNode: loginViewModel.userCodeFocusNode, //失去焦点事件
+                                  focusNode:
+                                      loginViewModel.userCodeFocusNode, //失去焦点事件
                                   decoration: InputDecoration(
                                     labelText: '用户名',
-                                    prefixIcon: Icon(Icons.person_outline), //添加图标
+                                    prefixIcon: Icon(
+                                      Icons.person_outline,
+                                    ), //添加图标
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12), //增大圆角
-                                      borderSide: BorderSide(color: Colors.grey.shade300),
+                                      borderRadius: BorderRadius.circular(
+                                        12,
+                                      ), //增大圆角
+                                      borderSide: BorderSide(
+                                        color: Colors.grey.shade300,
+                                      ),
                                     ),
                                     enabledBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(color: Colors.grey.shade300),
+                                      borderSide: BorderSide(
+                                        color: Colors.grey.shade300,
+                                      ),
                                     ),
                                     focusedBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(color: theme.primaryColor, width: 1.5),
+                                      borderSide: BorderSide(
+                                        color: theme.primaryColor,
+                                        width: 1.5,
+                                      ),
                                     ),
                                     errorText: loginViewModel.userCodeError,
                                   ),
                                   style: theme.textTheme.bodyMedium,
-                                  textInputAction: TextInputAction.next, //设置回车为“下一步”
+                                  textInputAction:
+                                      TextInputAction.next, //设置回车为“下一步”
                                   onFieldSubmitted: (value) {
                                     //按下回车键后，焦点移到密码输入框
-                                    FocusScope.of(context).requestFocus(loginViewModel.passwordFocusNode);
+                                    FocusScope.of(context).requestFocus(
+                                      loginViewModel.passwordFocusNode,
+                                    );
                                   },
                                 ),
                                 SizedBox(height: 20),
@@ -153,15 +180,22 @@ class _LoginPageState extends State<LoginPage> {
                                     suffixIcon: _buildPasswordToggleIcon(),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(color: Colors.grey.shade300),
+                                      borderSide: BorderSide(
+                                        color: Colors.grey.shade300,
+                                      ),
                                     ),
                                     enabledBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(color: Colors.grey.shade300),
+                                      borderSide: BorderSide(
+                                        color: Colors.grey.shade300,
+                                      ),
                                     ),
                                     focusedBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(color: theme.primaryColor, width: 1.5),
+                                      borderSide: BorderSide(
+                                        color: theme.primaryColor,
+                                        width: 1.5,
+                                      ),
                                     ),
                                     errorText: loginViewModel.passwordError,
                                   ),
@@ -177,20 +211,31 @@ class _LoginPageState extends State<LoginPage> {
                                     labelText: '科室',
                                     prefixIcon: Icon(Icons.home_outlined),
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12), // 增大圆角
-                                      borderSide: BorderSide(color: Colors.grey.shade300),
+                                      borderRadius: BorderRadius.circular(
+                                        12,
+                                      ), // 增大圆角
+                                      borderSide: BorderSide(
+                                        color: Colors.grey.shade300,
+                                      ),
                                     ),
                                     enabledBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(color: Colors.grey.shade300),
+                                      borderSide: BorderSide(
+                                        color: Colors.grey.shade300,
+                                      ),
                                     ),
                                     focusedBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(color: theme.primaryColor, width: 1.5),
+                                      borderSide: BorderSide(
+                                        color: theme.primaryColor,
+                                        width: 1.5,
+                                      ),
                                     ),
                                     errorText: loginViewModel.deptError,
                                   ),
-                                  items: depts.map<DropdownMenuItem<String>>((String dept) {
+                                  items: depts.map<DropdownMenuItem<String>>((
+                                    String dept,
+                                  ) {
                                     return DropdownMenuItem<String>(
                                       value: dept,
                                       child: Text(dept),
@@ -212,28 +257,51 @@ class _LoginPageState extends State<LoginPage> {
                                             //跳转前统一收起键盘（注意只限用于移用端）
                                             //FocusScope.of(context).unfocus();
 
-                                            final success = await loginViewModel.login();
+                                            final success = await loginViewModel
+                                                .login();
 
                                             if (!context.mounted) return;
 
                                             if (success) {
+                                              //登录成功，将全局 loginUser 同步进主界面工作副本
+                                              context
+                                                  .read<MainViewModel>()
+                                                  .syncLoginUser();
+
                                               //登录成功，替换路由跳转到主页
                                               Navigator.pushReplacement(
                                                 context,
-                                                MaterialPageRoute(builder: (context) => const MainPage()),
+                                                MaterialPageRoute(
+                                                  builder: (context) =>
+                                                      const MainPage(),
+                                                ),
                                               );
                                             } else {
-                                              if (loginViewModel.errorMessage != null) {
+                                              if (loginViewModel.errorMessage !=
+                                                  null) {
                                                 //登录失败且存在错误信息，弹出 SnackBar
-                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                ScaffoldMessenger.of(
+                                                  context,
+                                                ).showSnackBar(
                                                   SnackBar(
-                                                    content: Text(loginViewModel.errorMessage!),
-                                                    backgroundColor: theme.colorScheme.error, //错误色背景
-                                                    behavior: SnackBarBehavior.floating, //浮动样式（有圆角），更扁平现代
-                                                    shape: RoundedRectangleBorder(
-                                                      borderRadius: BorderRadius.circular(12), //与整体圆角风格统一
+                                                    content: Text(
+                                                      loginViewModel
+                                                          .errorMessage!,
                                                     ),
-                                                    duration: const Duration(seconds: 4),
+                                                    backgroundColor: theme
+                                                        .colorScheme
+                                                        .error, //错误色背景
+                                                    behavior: SnackBarBehavior
+                                                        .floating, //浮动样式（有圆角），更扁平现代
+                                                    shape: RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            12,
+                                                          ), //与整体圆角风格统一
+                                                    ),
+                                                    duration: const Duration(
+                                                      seconds: 4,
+                                                    ),
                                                   ),
                                                 );
                                               }
@@ -241,7 +309,9 @@ class _LoginPageState extends State<LoginPage> {
                                           },
                                     style: FilledButton.styleFrom(
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(16), // 现代圆角风格
+                                        borderRadius: BorderRadius.circular(
+                                          16,
+                                        ), // 现代圆角风格
                                       ),
                                     ),
                                     child: loginViewModel.isLoading
@@ -255,10 +325,13 @@ class _LoginPageState extends State<LoginPage> {
                                           )
                                         : Text(
                                             '登  录',
-                                            style: theme.textTheme.bodyMedium?.copyWith(
-                                              color: theme.colorScheme.onPrimary,
-                                              fontWeight: FontWeight.bold,
-                                            ),
+                                            style: theme.textTheme.bodyMedium
+                                                ?.copyWith(
+                                                  color: theme
+                                                      .colorScheme
+                                                      .onPrimary,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
                                           ),
                                   ),
                                 ),
@@ -306,7 +379,9 @@ class _LoginPageState extends State<LoginPage> {
             _isPasswordVisible = false;
           });
         },
-        child: Icon(_isPasswordVisible ? Icons.visibility : Icons.visibility_off),
+        child: Icon(
+          _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+        ),
       ),
     );
   }

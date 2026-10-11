@@ -8,6 +8,7 @@ import 'package:client/view_models/main/main_view_model.dart';
 import 'package:client/view_models/login/login_view_model.dart';
 import 'package:client/view_models/system/hospital_management_view_model.dart';
 import 'package:client/views/login/login_page.dart';
+import 'package:common/model.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:get_it/get_it.dart';
 import 'package:provider/provider.dart';
@@ -16,13 +17,18 @@ import 'package:responsive_framework/responsive_framework.dart';
 ///当前登录用户token
 late String? token;
 
+///当前登录用户（登录成功后由 LoginViewModel 写入，注销时清空）
+late LoginUser? loginUser;
+
 ///注册服务
 final getIt = GetIt.instance;
 
 void setupServiceLocator() {
   getIt.registerLazySingleton<AuthService>(() => AuthService());
   getIt.registerLazySingleton<LogService>(() => LogService());
-  getIt.registerLazySingleton<AdminDivisionsService>(() => AdminDivisionsService());
+  getIt.registerLazySingleton<AdminDivisionsService>(
+    () => AdminDivisionsService(),
+  );
 }
 
 void main() async {
@@ -42,7 +48,9 @@ void main() async {
         ChangeNotifierProvider(create: (context) => LoginViewModel()),
         ChangeNotifierProvider(create: (context) => MainViewModel()),
         ChangeNotifierProvider(create: (context) => HomeViewModel()),
-        ChangeNotifierProvider(create: (context) => HospitalManagementViewModel()),
+        ChangeNotifierProvider(
+          create: (context) => HospitalManagementViewModel(),
+        ),
       ],
       child: const MyApp(),
     ),
@@ -63,22 +71,28 @@ class MyApp extends StatelessWidget {
     //动态调整字体大小
     final textTheme = baseTheme.textTheme.copyWith(
       displayLarge: baseTheme.textTheme.displayLarge?.copyWith(
-        fontSize: (baseTheme.textTheme.displayLarge?.fontSize ?? 57) * fontScale,
+        fontSize:
+            (baseTheme.textTheme.displayLarge?.fontSize ?? 57) * fontScale,
       ),
       displayMedium: baseTheme.textTheme.displayMedium?.copyWith(
-        fontSize: (baseTheme.textTheme.displayMedium?.fontSize ?? 45) * fontScale,
+        fontSize:
+            (baseTheme.textTheme.displayMedium?.fontSize ?? 45) * fontScale,
       ),
       displaySmall: baseTheme.textTheme.displaySmall?.copyWith(
-        fontSize: (baseTheme.textTheme.displaySmall?.fontSize ?? 36) * fontScale,
+        fontSize:
+            (baseTheme.textTheme.displaySmall?.fontSize ?? 36) * fontScale,
       ),
       headlineLarge: baseTheme.textTheme.headlineLarge?.copyWith(
-        fontSize: (baseTheme.textTheme.headlineLarge?.fontSize ?? 32) * fontScale,
+        fontSize:
+            (baseTheme.textTheme.headlineLarge?.fontSize ?? 32) * fontScale,
       ),
       headlineMedium: baseTheme.textTheme.headlineMedium?.copyWith(
-        fontSize: (baseTheme.textTheme.headlineMedium?.fontSize ?? 28) * fontScale,
+        fontSize:
+            (baseTheme.textTheme.headlineMedium?.fontSize ?? 28) * fontScale,
       ),
       headlineSmall: baseTheme.textTheme.headlineSmall?.copyWith(
-        fontSize: (baseTheme.textTheme.headlineSmall?.fontSize ?? 24) * fontScale,
+        fontSize:
+            (baseTheme.textTheme.headlineSmall?.fontSize ?? 24) * fontScale,
       ),
       titleLarge: baseTheme.textTheme.titleLarge?.copyWith(
         fontSize: (baseTheme.textTheme.titleLarge?.fontSize ?? 22) * fontScale,
@@ -128,7 +142,9 @@ class MyApp extends StatelessWidget {
               style: ButtonStyle(
                 textStyle: WidgetStatePropertyAll<TextStyle>(
                   TextStyle(
-                    fontSize: (baseTheme.textTheme.bodyLarge?.fontSize ?? 16) * fontScale,
+                    fontSize:
+                        (baseTheme.textTheme.bodyLarge?.fontSize ?? 16) *
+                        fontScale,
                   ),
                 ),
               ),
@@ -137,7 +153,9 @@ class MyApp extends StatelessWidget {
               style: ButtonStyle(
                 textStyle: WidgetStatePropertyAll<TextStyle>(
                   TextStyle(
-                    fontSize: (baseTheme.textTheme.bodyLarge?.fontSize ?? 16) * fontScale,
+                    fontSize:
+                        (baseTheme.textTheme.bodyLarge?.fontSize ?? 16) *
+                        fontScale,
                   ),
                 ),
               ),
@@ -146,7 +164,9 @@ class MyApp extends StatelessWidget {
               style: ButtonStyle(
                 textStyle: WidgetStatePropertyAll<TextStyle>(
                   TextStyle(
-                    fontSize: (baseTheme.textTheme.bodyLarge?.fontSize ?? 16) * fontScale,
+                    fontSize:
+                        (baseTheme.textTheme.bodyLarge?.fontSize ?? 16) *
+                        fontScale,
                   ),
                 ),
               ),
@@ -155,7 +175,9 @@ class MyApp extends StatelessWidget {
               style: ButtonStyle(
                 textStyle: WidgetStatePropertyAll<TextStyle>(
                   TextStyle(
-                    fontSize: (baseTheme.textTheme.bodyLarge?.fontSize ?? 16) * fontScale,
+                    fontSize:
+                        (baseTheme.textTheme.bodyLarge?.fontSize ?? 16) *
+                        fontScale,
                   ),
                 ),
               ),
@@ -167,7 +189,9 @@ class MyApp extends StatelessWidget {
               style: ButtonStyle(
                 textStyle: WidgetStatePropertyAll<TextStyle>(
                   TextStyle(
-                    fontSize: (baseTheme.textTheme.bodyLarge?.fontSize ?? 16) * fontScale,
+                    fontSize:
+                        (baseTheme.textTheme.bodyLarge?.fontSize ?? 16) *
+                        fontScale,
                   ),
                 ),
               ),
@@ -176,7 +200,9 @@ class MyApp extends StatelessWidget {
               style: ButtonStyle(
                 textStyle: WidgetStatePropertyAll<TextStyle>(
                   TextStyle(
-                    fontSize: (baseTheme.textTheme.bodyLarge?.fontSize ?? 16) * fontScale,
+                    fontSize:
+                        (baseTheme.textTheme.bodyLarge?.fontSize ?? 16) *
+                        fontScale,
                   ),
                 ),
               ),
@@ -185,7 +211,9 @@ class MyApp extends StatelessWidget {
               style: ButtonStyle(
                 textStyle: WidgetStatePropertyAll<TextStyle>(
                   TextStyle(
-                    fontSize: (baseTheme.textTheme.bodyLarge?.fontSize ?? 16) * fontScale,
+                    fontSize:
+                        (baseTheme.textTheme.bodyLarge?.fontSize ?? 16) *
+                        fontScale,
                   ),
                 ),
               ),
@@ -194,7 +222,9 @@ class MyApp extends StatelessWidget {
               style: ButtonStyle(
                 textStyle: WidgetStatePropertyAll<TextStyle>(
                   TextStyle(
-                    fontSize: (baseTheme.textTheme.bodyLarge?.fontSize ?? 16) * fontScale,
+                    fontSize:
+                        (baseTheme.textTheme.bodyLarge?.fontSize ?? 16) *
+                        fontScale,
                   ),
                 ),
               ),
