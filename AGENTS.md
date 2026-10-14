@@ -14,7 +14,7 @@ AiCMHCS（智慧儿童心理保健系统）：为满足国家信创要求，技�
 ```
 client/   Flutter 应用（MVVM，原 aicmhcs_flutter 更名并入）
 server/   Dart Frog 后端：routes / lib(dm, services) / tool / test
-common/   前后端共享模型包：lib/models（basic 行政区划 / system 医院、登录用户）
+common/   前后端共享包：lib/models（basic 行政区划 / system 医院、登录用户）+ lib/utils（SecurePayload 报文加解密）
 database/         DM8 SQL 脚本：01 表空间+账号(SYSDBA 执行) / 02 建表 / 03 演示数据
 tools/            init_db.sh / start_backend.sh / serve_frontend.sh（Git Bash 运行）
 ```
@@ -67,10 +67,10 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 分层：`routes/`（HTTP 适配，文件路径即 URL）→ `services/`（业务逻辑）→ `lib/dm/`（DM8 数据库网关）；共享业务模型在 `common/lib/models/`（统一经 `package:common/model.dart` barrel 导入），DB 行解析（`fromRow` 类函数）留在服务层。**没有任何代码生成环节**（无 serverpod generate、无 migration，协议就是手写 JSON + 手写模型）。
 
 - **入口注入**：`main.dart` 自定义 `run()` 在启动时创建 `DmGateway`、`AuthService`，经 `handler.use(provider<T>(...))` 注入管线；路由内 `context.read<T>()` 获取。新增单例服务照此在 `main.dart` 注册；
-- **统一响应（明文 JSON，不再 AES 加密）**：`{'code': 0|非0, 'message': '...', 'data': ...}`，`code == 0` 表示成功。业务码与 HTTP 状态对应：40001/40002→400、40101/40102/40103→401、40301→403、40500→405、50000→500（全局兜底）。参照 `routes/api/auth/login.dart` 的 `_error` helper；
+- **统一响应**：`{'code': 0|非0, 'message': '...', 'data': ...}`，`code == 0` 表示成功。业务码与 HTTP 状态对应：40001/40002→400、40101/40102/40103→401、40301→403、40500→405、50000→500（全局兜底）。参照 `routes/api/auth/login.dart` 的 `_error` helper。响应报文会被 `/api` 加密中间件整体封入信封（见「安全层现状」）；
 - **业务异常模式**：service 层抛带 `httpStatus/code/message` 的异常（现有 `AuthException`，新模块可仿建），路由 `catch` 后转错误响应；用户不存在与口令错误统一提示，避免账号枚举；
-- **全局中间件** `routes/_middleware.dart`：CORS（`*`，供 Flutter Web 跨域）+ 未捕获异常兜底 500；
-- **鉴权**：`Authorization: Bearer <token>`。令牌为内存会话（64 位十六进制，2 小时滑动续期，重启失效——生产环境应落库或接缓存）。
+- **中间件**：全局 `routes/_middleware.dart`（CORS `*` 供 Flutter Web 跨域 + 未捕获异常兜底 500）；`routes/api/_middleware.dart` 负责 `/api/**` 的报文加解密与会话校验（详见「安全层现状」）；
+- **鉴权**：`Authorization: Bearer <token>`。令牌为内存会话（64 位十六进制，2 小时滑动续期，重启失效——生产环境应落库或接缓存）；登录同时下发会话密钥 `sessionKey`（`LoginSession` 持有，与 token 同生命周期），非白名单 `/api` 请求由加密中间件统一 `verifySession` 校验。
 
 ### DM8 访问约定（信创核心约束，务必遵守）
 
@@ -88,16 +88,22 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 ### 前端（client）— MVVM
 
 - **导入约定**：统一 `import 'package:material_ui/material_ui.dart';`（全仓库 0 处 `flutter/material.dart`），新页面遵循；
-- **全局对象**在 `lib/main.dart`：`token`（登录令牌）、`loginUser`（当前登录用户，登录成功由 LoginViewModel 写入、注销清空）、`getIt`（服务定位器）——Serverpod 的 `client` 已随迁移移除；
-- **Service 模式**（参照已接通的 `services/auth_service.dart`）：`loadConfig()` 启动时读 `assets/config.json` 的 `apiUrl` → 调后端 → 逐项校验 `code/message/data` 键 → 失败抛带 message 的异常、成功返回 data（上层 VM 再 `X.fromJson` 还原模型，如 `LoginViewModel` 解析 `LoginUser`）。新 Service 要在 `main.dart` 的 `setupServiceLocator()` 中注册。注意：`AdminDivisionsService` / `LogService` 仍是骨架（后端调用全部被注释，拿到空串后抛「响应消息为空」），接线时补 HTTP 调用即可；
+- **全局对象**在 `lib/main.dart`：`token`（登录令牌）、`sessionKey`（会话 API 加密密钥，随登录下发、与 token 同生命周期）、`loginUser`（当前登录用户）——三者均由 `LoginViewModel` 登录成功写入、注销时清空；另有 `getIt`（服务定位器）——Serverpod 的 `client` 已随迁移移除；
+- **Service 模式**：登录后的接口调用统一走 `services/base/base_service.dart` 的 `BaseService`（`get`/`post`：自动携带 Bearer token、请求体封信封、响应解信封并逐项校验 `code/message/data`，失败抛带 message 的异常、成功返回 data，上层 VM 再 `X.fromJson` 还原模型）。登录等明文接口留在 `AuthService`（自持 `http.Client` 明文调用后自行校验）——**不要**把 `login` 改走 `BaseService.post`：登录前拿不到 `token`/`sessionKey`，且服务端登录接口在明文白名单内、不收信封。新 Service 经 `getIt<BaseService>()` 调用，并在 `main.dart` 的 `setupServiceLocator()` 中注册。注意：`AdminDivisionsService` / `LogService` 仍是骨架（后端调用全部被注释），接线时经 `BaseService` 重写；
 - **ViewModel 模式**（参照 `hospital_management_view_model.dart`）：私有字段 + getter、`_loading`/`_errorMsg` 状态、状态变更后 `notifyListeners()`、异步方法返回 `Future<bool>` 表示成败。新 ViewModel 必须注册到 `main.dart` 的 `MultiProvider`；
 - **新页面接入路由**：菜单项在 `main_view_model.dart` 的 `menus` 列表中定义（带 `route`），页面构造器注册到 `lib/routes/menu_routes.dart`（key 与 `MenuItem.route` 一致）；
-- 后端地址配置在 `assets/config.json` 的 `apiUrl`，由 `AuthService.loadConfig()` 在 `main()` 中读取；`http` 包已在 client 依赖中。
+- 后端地址配置在 `assets/config.json` 的 `apiUrl`，`main()` 中分别调用 `AuthService.loadConfig()` 与 `BaseService.loadConfig()` 读取；`http` 包已在 client 依赖中。
 
-### 安全层现状
+### 安全层现状（报文加密）
 
-- 新后端响应为**明文 JSON**（无 AES 加密、无 MD5 签名）；
-- 客户端 `utils/security_util.dart` 为旧架构遗留（AES-128-CBC + MD5，密钥/IV 硬编码），目前仅被**未接线**的 `AdminDivisionsService` / `LogService` 骨架引用——保留但**不要在新代码中使用**；将来接线这两个服务时按明文 JSON 协议重写调用，删除 AES/MD5 相关代码；若要恢复报文加密，需前后端同步设计。
+前后端 API 通信已启用**信封加密**（等保通信保密性/完整性要求），而非此前的明文 JSON：
+
+- 算法与信封格式：AES-256-GCM，`{'payload': '<base64(nonce[12] + 密文 + 认证标签[16])>'}`，解开后是原始 JSON 对象（nonce 每次报文随机）；
+- 加解密实现前后端共享：`common/lib/utils/security_util.dart` 的 `SecurePayload`（`seal`/`open`/`generateSessionKey`，依赖 `cryptography` 包），失败抛 `SecurePayloadException`；
+- 会话密钥由登录接口随 token 一起下发（base64 的 32 字节随机数），与 token 同生命周期；客户端存全局 `sessionKey`，注销清空；
+- 服务端 `routes/api/_middleware.dart` 统一处理 `/api/**`：白名单 `/api/auth/login`、`/api`（API 索引自描述）走明文；其余请求先凭 token `verifySession`，非 GET 请求解开请求体信封、明文经 `provider<ApiBody>` 注入管线（**业务路由取参必须用 `context.read<ApiBody>().json`，勿直接 `request.json()`——那是密文**；模型在 `server/lib/models/api_body.dart`），路由响应的 `{code,message,data}` 整体封入信封返回；无有效会话或解密失败时返回**明文错误**（此时客户端没有可用密钥，无法解密错误响应）；
+- 客户端 `BaseService` 做对称封装（自动带 token、封/解信封、校验统一响应格式后返回 data）；登录前无密钥的接口（目前仅 login）留在 `AuthService` 明文调用；
+- 旧架构的 AES-128-CBC + MD5（`client/utils/security_util.dart`）**已随本次改造删除**；`AdminDivisionsService` / `LogService` 骨架中被注释的旧调用仍引用旧 `SecurityUtil`，接线时按 `BaseService` 协议重写，勿照抄注释代码。
 
 ## UI 风格设定（client）
 
@@ -153,9 +159,9 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 1. 在 `database/` 新增/修改建表脚本（沿用编号与 DDL 约定），必要时同步 `tools/init_db.sh`；执行 `./tools/init_db.sh` 应用；
 2. 在 `common/lib/models/<模块>/` 写共享模型（`fromJson`/`toJson`，并在 `common/lib/model.dart` 追加 export）；DB 行解析放 `server` 服务层（如 `AuthService._loginUserFromRow`）；
 3. 在 `server/lib/services/` 写业务服务（构造注入 `DmGateway`）；需在路由中直接读取的，在 `main.dart` 用 `provider<T>` 注入；
-4. 在 `server/routes/api/<模块>/` 写路由（统一响应格式 + `_error` helper + 业务异常转换）；
+4. 在 `server/routes/api/<模块>/` 写路由（统一响应格式 + `_error` helper + 业务异常转换）；非 GET 请求取参用 `context.read<ApiBody>().json`（加密中间件已解出明文）；
 5. `cd server && dart analyze && dart test`；
-6. 在 `client/lib/services/` 写 HTTP 服务（校验 `code/message/data` 后 `fromJson`），注册到 `setupServiceLocator()`；
+6. 在 `client/lib/services/` 写 HTTP 服务：经 `getIt<BaseService>()` 的 `get`/`post` 调后端（自动加解密，拿到校验过的 data 后 `fromJson`），注册到 `setupServiceLocator()`；
 7. 写 ViewModel 并注册到 `MultiProvider`；写页面（遵循「UI 风格设定」章节），注册菜单与路由；
 8. `cd client && flutter analyze && flutter test`。
 
@@ -168,14 +174,14 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 
 ## 测试
 
-- 后端测试位于 `server/test/`，为纯单元测试（口令散列、令牌逻辑），**不需要**数据库或 Docker，直接 `dart test`；
+- 后端测试位于 `server/test/`，为纯单元测试（口令散列、令牌逻辑、`SecurePayload` 信封加解密），**不需要**数据库或 Docker，直接 `dart test`；
 - 前端测试位于 `client/test/`，用 `flutter test`；现有登录链路 widget 测试（`FakeAuthService` 注入 `LoginViewModel`）：登录失败 SnackBar 提示、登录成功写入全局 `loginUser` 并同步 `MainViewModel` 工作副本——新增涉及登录/主界面的改动时仿照扩展；
 - 原 GitHub Actions CI 已随信创迁移移除（仓库无 `.github/` 目录）。
 
 ## 当前已知 Mock / 待接线（勿误判为已接通）
 
 - **后端已实现真实接口**：`POST /api/auth/login`、`GET /api/auth/me`、`GET /health`（数据库探活）——登录链路后端侧已通；
-- **客户端登录已接通**：`LoginViewModel.login()` 调用真实后端，成功后写入全局 `token` 与 `loginUser`（`LoginUser.fromJson` 解析），登录页跳转主界面前经 `MainViewModel.syncLoginUser()` 刷新工作副本，注销时两者清空。注意 `MainViewModel` 的医院/院区/科室仍为本地默认示例（`_defaultWorkUser`，后端暂无对应接口），登录页科室下拉选值（纯名称、无 ID）暂未映射进 `loginUser.deptId`；
+- **客户端登录已接通**：`LoginViewModel.login()` 调用真实后端，成功后写入全局 `token`、`sessionKey` 与 `loginUser`（`LoginUser.fromJson` 解析），登录页跳转主界面前经 `MainViewModel.syncLoginUser()` 刷新工作副本，注销时三者清空。注意 `MainViewModel` 的医院/院区/科室仍为本地默认示例（`_defaultWorkUser`，后端暂无对应接口），登录页科室下拉选值（纯名称、无 ID）暂未映射进 `loginUser.deptId`；
 - **SYS_USER 列名不一致（待同步，当前会导致登录失败）**：代码侧已改用 `USER_CODE`/`USER_NAME`（`auth_service.dart` 的查询与 `_loginUserFromRow`、`SYS_LOGIN_LOG` 写入），但 `database/02_create_tables.sql`（含 `SYS_LOGIN_LOG` 列与 `UK_SYS_USER_USERNAME` 约束）和 `server/tool/generate_demo_data.dart` 仍是 `USERNAME`/`REAL_NAME`——按当前脚本初始化的库，登录查询会报列不存在。修复需三步同步：改 DDL 与生成脚本 → 重新生成 `03_demo_data.sql` → 执行 `./tools/init_db.sh` 重建；
 - 客户端 `AdminDivisionsService` / `LogService` 的后端调用全部被注释，行政区划联动当前**未接通**；医院管理加载与保存为 mock（`HospitalManagementViewModel` 中标注 `TODO`）。
 
