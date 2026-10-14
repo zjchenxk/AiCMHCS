@@ -21,6 +21,7 @@ class FakeAuthService extends AuthService {
   Future<Map<String, dynamic>> login(String username, String password) async {
     return {
       'token': 'test-token',
+      'sessionKey': 'MDEyMzQ1Njc4OWFiY2RlZmdoaWprbG1ub3BxcnN0dXY=',
       'tokenType': 'Bearer',
       'expiresIn': 7200,
       'user': {
@@ -48,6 +49,7 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     token = null;
+    sessionKey = null;
     loginUser = null;
   });
 
@@ -105,6 +107,7 @@ void main() {
 
     // 全局 loginUser 为后端下发的真实身份
     expect(token, 'test-token');
+    expect(sessionKey, 'MDEyMzQ1Njc4OWFiY2RlZmdoaWprbG1ub3BxcnN0dXY=');
     expect(loginUser, isNotNull);
     expect(loginUser!.id, 2);
     expect(loginUser!.userCode, 'doctor01');

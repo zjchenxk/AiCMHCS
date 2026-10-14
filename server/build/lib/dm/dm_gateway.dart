@@ -205,7 +205,11 @@ void _workerMain(_Boot boot) {
   });
 }
 
-Future<Object?> _executeOp(Map msg, _ConnRef ref, _Boot boot) async {
+Future<Object?> _executeOp(
+  Map<Object?, Object?> msg,
+  _ConnRef ref,
+  _Boot boot,
+) async {
   DmConnection reconnect() {
     try {
       ref.con.close();

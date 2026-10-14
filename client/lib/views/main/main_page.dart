@@ -199,8 +199,7 @@ class _MainPageState extends State<MainPage> {
                         Text(
                           '$label:',
                           style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onPrimaryContainer
-                                .withValues(alpha: 0.7),
+                            color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
                           ),
                         ),
                         const SizedBox(width: 4),
@@ -409,8 +408,7 @@ class _MainPageState extends State<MainPage> {
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                 ),
                 // 设置并缓存字体比例（FontProvider 内部持久化 + 通知全局刷新）
-                onPressed: () =>
-                    context.read<FontProvider>().setFontScale(option),
+                onPressed: () => context.read<FontProvider>().setFontScale(option),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -430,9 +428,7 @@ class _MainPageState extends State<MainPage> {
                       '${(option * 100).round()}%',
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.onSurface,
-                        fontWeight: option == fontScale
-                            ? FontWeight.bold
-                            : FontWeight.w400,
+                        fontWeight: option == fontScale ? FontWeight.bold : FontWeight.w400,
                       ),
                     ),
                   ],
@@ -467,8 +463,7 @@ class _MainPageState extends State<MainPage> {
                 ),
                 // 切换主题：ThemeProvider 内部持久化 + notifyListeners，
                 // MyApp 的 watch 触发 MaterialApp 重建 → 全 UI 换主题
-                onPressed: () =>
-                    context.read<ThemeProvider>().switchTheme(name),
+                onPressed: () => context.read<ThemeProvider>().switchTheme(name),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -488,9 +483,7 @@ class _MainPageState extends State<MainPage> {
                       name,
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.onSurface,
-                        fontWeight: name == currentThemeName
-                            ? FontWeight.bold
-                            : FontWeight.w400,
+                        fontWeight: name == currentThemeName ? FontWeight.bold : FontWeight.w400,
                       ),
                     ),
                     // 预览色块：直接展示该主题的主色，更直观
@@ -530,8 +523,7 @@ class _MainPageState extends State<MainPage> {
           highlightColor: theme.colorScheme.onPrimaryContainer.withValues(
             alpha: 0.28,
           ),
-          onTap: () =>
-              controller.isOpen ? controller.close() : controller.open(),
+          onTap: () => controller.isOpen ? controller.close() : controller.open(),
           child: child,
         ),
       ),
@@ -619,8 +611,7 @@ class _MainPageState extends State<MainPage> {
           highlightColor: theme.colorScheme.onPrimaryContainer.withValues(
             alpha: 0.28,
           ),
-          onTap: () =>
-              controller.isOpen ? controller.close() : controller.open(),
+          onTap: () => controller.isOpen ? controller.close() : controller.open(),
           child: child,
         ),
       ),
@@ -668,8 +659,7 @@ class _MainPageState extends State<MainPage> {
                       ? OverflowBox(
                           alignment: AlignmentDirectional.centerStart,
                           minWidth: 0,
-                          maxWidth:
-                              207, // 240 − margin16 − border1 − listPadding16
+                          maxWidth: 207, // 240 − margin16 − border1 − listPadding16
                           child: SizedBox(
                             width: 207,
                             child: ListView.builder(
@@ -751,9 +741,7 @@ class _MainPageState extends State<MainPage> {
               width: 32,
               height: 32,
               child: Icon(
-                mainViewModel.collapsed
-                    ? Icons.keyboard_double_arrow_right
-                    : Icons.keyboard_double_arrow_left,
+                mainViewModel.collapsed ? Icons.keyboard_double_arrow_right : Icons.keyboard_double_arrow_left,
                 color: theme.colorScheme.onPrimaryContainer,
                 size: 18,
               ),
@@ -828,9 +816,7 @@ class _MainPageState extends State<MainPage> {
             alpha: 0.20,
           ),
           onTap: () {
-            hasChildren
-                ? mainViewModel.toggleExpand(menu.id)
-                : mainViewModel.selectMenu(menu, path);
+            hasChildren ? mainViewModel.toggleExpand(menu.id) : mainViewModel.selectMenu(menu, path);
           },
           child: Container(
             height: 44,
@@ -871,9 +857,7 @@ class _MainPageState extends State<MainPage> {
             alpha: 0.20,
           ),
           onTap: () {
-            hasChildren
-                ? mainViewModel.toggleExpand(menu.id)
-                : mainViewModel.selectMenu(menu, path);
+            hasChildren ? mainViewModel.toggleExpand(menu.id) : mainViewModel.selectMenu(menu, path);
           },
           child: Container(
             margin: const EdgeInsets.symmetric(vertical: 2),
@@ -898,9 +882,7 @@ class _MainPageState extends State<MainPage> {
                   child: Text(
                     menu.title,
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      color: selected
-                          ? theme.colorScheme.onPrimary
-                          : theme.colorScheme.onPrimaryContainer,
+                      color: selected ? theme.colorScheme.onPrimary : theme.colorScheme.onPrimaryContainer,
                       fontWeight: selected ? FontWeight.bold : FontWeight.w400,
                     ),
                     overflow: TextOverflow.ellipsis,
@@ -926,16 +908,13 @@ class _MainPageState extends State<MainPage> {
         // 二级子菜单
         AnimatedCrossFade(
           duration: const Duration(milliseconds: 200),
-          crossFadeState: expanded || mainViewModel.searchKeyword.isNotEmpty
-              ? CrossFadeState.showFirst
-              : CrossFadeState.showSecond,
+          crossFadeState: expanded || mainViewModel.searchKeyword.isNotEmpty ? CrossFadeState.showFirst : CrossFadeState.showSecond,
           firstChild: Padding(
             padding: const EdgeInsets.only(left: 20),
             child: Column(
               children: menu.children
                   .map(
-                    (c) =>
-                        _buildMenuItem(theme, mainViewModel, c, path, isWide),
+                    (c) => _buildMenuItem(theme, mainViewModel, c, path, isWide),
                   )
                   .toList(),
             ),
@@ -1026,9 +1005,7 @@ class _MainPageState extends State<MainPage> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  selectedMenuId == null
-                      ? '请从左侧选择功能菜单'
-                      : '当前功能：${mainViewModel.selectedMenuTitle ?? ''}',
+                  selectedMenuId == null ? '请从左侧选择功能菜单' : '当前功能：${mainViewModel.selectedMenuTitle ?? ''}',
                   style: theme.textTheme.bodyLarge?.copyWith(
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                   ),
@@ -1086,8 +1063,7 @@ class _MainPageState extends State<MainPage> {
     final selected = await showDialog<(String, String)>(
       context: context,
       builder: (dialogContext) {
-        String currentDeptId =
-            mainViewModel.loginUser.deptId ?? ''; // 弹窗内的局部选中态
+        String currentDeptId = mainViewModel.loginUser.deptId ?? ''; // 弹窗内的局部选中态
 
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) => Dialog(
@@ -1138,8 +1114,7 @@ class _MainPageState extends State<MainPage> {
                           child: ListView(
                             shrinkWrap: true,
                             children: [
-                              for (final (deptId, deptName)
-                                  in mainViewModel.availableDepts)
+                              for (final (deptId, deptName) in mainViewModel.availableDepts)
                                 RadioListTile<String>(
                                   value: deptId,
                                   dense: true,
@@ -1147,8 +1122,7 @@ class _MainPageState extends State<MainPage> {
                                   title: Text(
                                     deptName,
                                     style: theme.textTheme.bodyMedium?.copyWith(
-                                      color:
-                                          theme.colorScheme.onPrimaryContainer,
+                                      color: theme.colorScheme.onPrimaryContainer,
                                     ),
                                   ),
                                 ),
@@ -1174,11 +1148,10 @@ class _MainPageState extends State<MainPage> {
                           const SizedBox(width: 12),
                           FilledButton(
                             onPressed: () {
-                              final dept = mainViewModel.availableDepts
-                                  .firstWhere(
-                                    (d) => d.$1 == currentDeptId,
-                                    orElse: () => ('', ''),
-                                  );
+                              final dept = mainViewModel.availableDepts.firstWhere(
+                                (d) => d.$1 == currentDeptId,
+                                orElse: () => ('', ''),
+                              );
                               if (dept.$1.isNotEmpty) {
                                 Navigator.of(dialogContext).pop(dept);
                               }
@@ -1211,6 +1184,7 @@ class _MainPageState extends State<MainPage> {
   void _logout(BuildContext context) {
     // 清空登录凭据与用户信息
     token = null;
+    sessionKey = null;
     loginUser = null;
 
     // 清空登录页的输入状态（用户名/密码/科室/错误提示）

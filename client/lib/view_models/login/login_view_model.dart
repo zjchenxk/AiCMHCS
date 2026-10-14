@@ -111,9 +111,7 @@ class LoginViewModel extends ChangeNotifier {
         _validatePassword();
         _validateDept();
 
-        if (_userCodeError == null &&
-            _passwordError == null &&
-            _deptError == null) {
+        if (_userCodeError == null && _passwordError == null && _deptError == null) {
           final userCode = _userCodeController.text;
           final password = _passwordController.text;
           //final dept = _selectedDept;
@@ -123,6 +121,7 @@ class LoginViewModel extends ChangeNotifier {
           final data = await service.login(userCode, password);
 
           token = data['token'] as String;
+          sessionKey = data['sessionKey'] as String;
 
           //解析后端下发的用户信息写入全局（供主界面经 MainViewModel 同步展示）
           loginUser = LoginUser.fromJson(data['user'] as Map<String, dynamic>);

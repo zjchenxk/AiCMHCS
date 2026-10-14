@@ -13,6 +13,7 @@ import '../routes/api/auth/me.dart' as api_auth_me;
 import '../routes/api/auth/login.dart' as api_auth_login;
 
 import '../routes/_middleware.dart' as middleware;
+import '../routes/api/_middleware.dart' as api_middleware;
 
 void main() async {
   final address = InternetAddress.anyIPv6;
@@ -44,14 +45,14 @@ Handler buildHandler() {
 }
 
 Handler buildApiHandler() {
-  final pipeline = const Pipeline();
+  final pipeline = const Pipeline().addMiddleware(api_middleware.middleware);
   final router = Router()
     ..all('/', (context) => api_index.onRequest(context,));
   return pipeline.addHandler(router);
 }
 
 Handler buildApiAuthHandler() {
-  final pipeline = const Pipeline();
+  final pipeline = const Pipeline().addMiddleware(api_middleware.middleware);
   final router = Router()
     ..all('/login', (context) => api_auth_login.onRequest(context,))..all('/me', (context) => api_auth_me.onRequest(context,));
   return pipeline.addHandler(router);

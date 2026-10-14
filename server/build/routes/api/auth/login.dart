@@ -48,6 +48,7 @@ Future<Response> onRequest(RequestContext context) async {
         'message': '登录成功',
         'data': {
           'token': session.token,
+          'sessionKey': session.sessionKey,
           'tokenType': 'Bearer',
           'expiresIn': auth.sessionTtl.inSeconds,
           'user': session.user.toJson(),

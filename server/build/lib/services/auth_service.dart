@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:common/model.dart';
+import 'package:common/utils/security_util.dart';
 import 'package:crypto/crypto.dart';
 
 import 'package:server/dm/dm_gateway.dart';
@@ -20,9 +21,10 @@ final class AuthException implements Exception {
 
 /// 登录会话（内存版；重启后失效，生产环境应落库或改用 Redis）。
 final class LoginSession {
-  LoginSession(this.token, this.user, this.expiresAt);
+  LoginSession(this.token, this.sessionKey, this.user, this.expiresAt);
 
   final String token;
+  final String sessionKey; //会话加密密钥（base64 的 32 字节随机数，随登录下发，与 token 同生命周期）
   final LoginUser user;
   DateTime expiresAt;
 }
@@ -114,21 +116,30 @@ class AuthService {
 
     _pruneExpired();
     final token = _randomHex(32);
-    final session = LoginSession(token, user, DateTime.now().add(sessionTtl));
+    final session = LoginSession(
+      token,
+      SecurePayload.generateSessionKey(),
+      user,
+      DateTime.now().add(sessionTtl),
+    );
     _sessions[token] = session;
     return session;
   }
 
-  /// 校验令牌并滑动续期。
-  Future<LoginUser> verify(String token) async {
+  /// 校验令牌并滑动续期，返回完整会话（含会话加密密钥）。
+  Future<LoginSession> verifySession(String token) async {
     _pruneExpired();
     final session = _sessions[token];
     if (session == null) {
       throw const AuthException(401, 40102, '登录已过期，请重新登录');
     }
     session.expiresAt = DateTime.now().add(sessionTtl);
-    return session.user;
+    return session;
   }
+
+  /// 校验令牌并滑动续期。
+  Future<LoginUser> verify(String token) async =>
+      (await verifySession(token)).user;
 
   void logout(String token) => _sessions.remove(token);
 
