@@ -5,7 +5,7 @@ import 'package:common/model.dart';
 import 'package:common/utils/security_util.dart';
 import 'package:crypto/crypto.dart';
 
-import 'package:server/dm/dm_gateway.dart';
+import 'package:server/db/database_gateway.dart';
 
 /// 认证类业务异常：httpStatus / code / message 直接映射到 HTTP 响应。
 final class AuthException implements Exception {
@@ -29,7 +29,7 @@ final class LoginSession {
   DateTime expiresAt;
 }
 
-/// 从数据库行解析登录用户（DmResult 各列均以字符串返回，数值按需转换）。
+/// 从数据库行解析登录用户（DbResult 各列均以字符串返回，数值按需转换）。
 LoginUser _loginUserFromRow(Map<String, String?> row) => LoginUser(
   id: int.parse(row['ID'] ?? '0'),
   userCode: row['USER_CODE'] ?? '',
@@ -40,10 +40,12 @@ LoginUser _loginUserFromRow(Map<String, String?> row) => LoginUser(
 );
 
 /// 登录认证服务：口令校验（盐 + SHA-256）、令牌签发与校验、登录审计。
+/// 经 DatabaseGateway 访问数据库，达梦与 SQLite 通用（含中文的参数由
+/// 达梦网关自动内联，业务层直接写参数化 SQL）。
 class AuthService {
   AuthService(this._db, {this.sessionTtl = const Duration(hours: 2)});
 
-  final DmGateway _db;
+  final DatabaseGateway _db;
   final Duration sessionTtl;
 
   final _sessions = <String, LoginSession>{};
@@ -109,8 +111,8 @@ class AuthService {
     }
 
     await _db.execute(
-      'UPDATE SYS_USER SET LAST_LOGIN_AT = CURRENT_TIMESTAMP WHERE ID = ?',
-      [user.id.toString()],
+      'UPDATE SYS_USER SET LAST_LOGIN_AT = ? WHERE ID = ?',
+      [formatTimestamp(DateTime.now()), user.id],
     );
     await _logLogin(user.id, uCode, ip, 'SUCCESS', null);
 
@@ -143,8 +145,8 @@ class AuthService {
 
   void logout(String token) => _sessions.remove(token);
 
-  /// 写登录审计。中文原因不能走 bind_param（无宽字符版本，按本地码页
-  /// 解释会乱码），改为转义后经 W 路径内联执行。
+  /// 写登录审计（含中文的失败原因经参数传入，由达梦网关自动内联；
+  /// 登录时间由 Dart 侧生成后绑定，见 formatTimestamp）。
   Future<void> _logLogin(
     int? userId,
     String userCode,
@@ -153,21 +155,23 @@ class AuthService {
     String? failReason,
   ) async {
     try {
-      final uid = userId?.toString() ?? 'NULL';
-      await _db.executeDirect(
+      await _db.execute(
         'INSERT INTO SYS_LOGIN_LOG '
-        '(USER_ID, USER_CODE, LOGIN_IP, LOGIN_RESULT, FAIL_REASON) '
-        'VALUES ($uid, ${_lit(userCode)}, ${_lit(ip)}, '
-        '${_lit(result)}, ${_lit(failReason)})',
+        '(USER_ID, USER_CODE, LOGIN_IP, LOGIN_TIME, LOGIN_RESULT, '
+        'FAIL_REASON) VALUES (?, ?, ?, ?, ?, ?)',
+        [
+          userId,
+          userCode,
+          ip,
+          formatTimestamp(DateTime.now()),
+          result,
+          failReason,
+        ],
       );
     } catch (_) {
       // 审计写入失败不阻断登录流程。
     }
   }
-
-  /// SQL 字符串字面量（单引号翻倍转义）。
-  static String _lit(String? s) =>
-      s == null ? 'NULL' : "'${s.replaceAll("'", "''")}'";
 
   void _pruneExpired() {
     final now = DateTime.now();

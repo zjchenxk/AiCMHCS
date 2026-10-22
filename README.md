@@ -43,27 +43,34 @@ AiCMHCS/
 │   │   └── theme/app_theme.dart
 │   └── web/index.html
 ├── server/                  # Dart Frog 后端
-│   ├── main.dart             # 自定义入口：启动时初始化 DB 网关并注入
+│   ├── main.dart             # 自定义入口：打开数据库网关 + 结构迁移并注入
 │   ├── routes/
 │   │   ├── _middleware.dart  # CORS + 全局异常兜底
 │   │   ├── index.dart / health.dart
 │   │   └── api/auth/         # login.dart / me.dart
 │   ├── lib/
 │   │   ├── app_config.dart   # 环境变量配置
+│   │   ├── db/
+│   │   │   ├── database_gateway.dart  # 数据库网关抽象（DbResult/方言）
+│   │   │   ├── worker_gateway.dart     # isolate 工作区基类
+│   │   │   ├── sqlite_gateway.dart     # SQLite 实现（单机版）
+│   │   │   ├── migrations.dart         # 结构迁移注册表（双方言）
+│   │   │   ├── schema_migrator.dart    # 迁移执行器（SYS_SCHEMA_VERSION）
+│   │   │   └── db_factory.dart         # 按 AICMHCS_DB_DRIVER 开网关
 │   │   ├── dm/
 │   │   │   ├── dpi.dart      # DPI FFI 绑定 + DLL 加载器
 │   │   │   ├── dm_database.dart  # 连接/查询/执行（W 路径）
-│   │   │   └── dm_gateway.dart   # 独立隔离区 + 自动重连
+│   │   │   ├── dm_gateway.dart   # 达梦网关（重连重试 + 非 ASCII 参数内联）
+│   │   │   └── dm_param_rewrite.dart  # 非 ASCII 参数改写为字面量
 │   │   ├── models/user_info.dart
 │   │   └── services/auth_service.dart
-│   ├── tool/generate_demo_data.dart  # 生成演示数据 SQL（盐化哈希）
+│   ├── tool/seed_demo_data.dart   # 结构迁移 + 演示账号（复用 AuthService 散列）
 │   └── test/
 ├── database/
-│   ├── 01_init_schema.sql    # 表空间 AICMHCS + 应用账号（SYSDBA 执行）
-│   ├── 02_create_tables.sql  # SYS_USER / SYS_LOGIN_LOG
-│   └── 03_demo_data.sql      # 4 个演示账号（生成物，勿手改）
+│   └── 01_init_schema.sql    # 表空间 AICMHCS + 应用账号（SYSDBA 执行；
+│                             #   建表/结构变更在 server/lib/db/migrations.dart）
 ├── tools/
-│   ├── init_db.sh            # 数据库初始化（UTF-8→GBK 转码后调 DIsql）
+│   ├── init_db.sh            # 达梦初始化（01 脚本 + 迁移 + 演示账号）
 │   ├── start_backend.sh      # 构建并启动后端（8080 端口）
 │   └── serve_frontend.sh     # 构建并静态托管前端（5173 端口）
 └── README.md
@@ -73,19 +80,26 @@ AiCMHCS/
 
 - Flutter ≥ 3.24（含 Dart ≥ 3.5）
 - dart_frog CLI：`dart pub global activate dart_frog_cli`
-- 本机安装 DM8（默认 `C:\dmdbms`；不同路径请设 `DM_HOME` 环境变量）
-- DM8 实例运行中（本机 5236 端口）
+- 网络版（默认，达梦 DM8）：本机安装 DM8（默认 `C:\dmdbms`；不同路径请设 `DM_HOME` 环境变量），实例运行中（本机 5236 端口）
+- 单机版（SQLite）：无需 DM8，设 `AICMHCS_DB_DRIVER=sqlite` 即可（Windows 下原生库自动回退系统 winsqlite3.dll）
 
 ## 快速开始
 
-### 1. 初始化数据库（建表空间/账号/表/演示数据，可重复执行）
+### 1. 初始化达梦数据库（表空间/账号 → 结构迁移 → 演示账号，可重复执行）
 
 ```bash
 ./tools/init_db.sh
 ```
 
-脚本以 SYSDBA 执行 `01`（重建应用账号 AICMHCS，默认表空间 AICMHCS），
-再以 AICMHCS 执行 `02`、`03`。仓库 SQL 为 UTF-8，脚本自动转 GBK 后调 DIsql。
+脚本以 SYSDBA 执行 `database/01_init_schema.sql`（重建应用账号 AICMHCS，
+默认表空间 AICMHCS；仓库 SQL 为 UTF-8，脚本自动转 GBK 后调 DIsql），再以
+AICMHCS 连接运行 `server/tool/seed_demo_data.dart`：应用代码内结构迁移
+（`server/lib/db/migrations.dart`）并写入演示账号。`SKIP_SEED=1` 可跳过
+迁移与演示数据。
+
+单机版无需初始化：后端首次启动（`AICMHCS_DB_DRIVER=sqlite`）自动建库，
+需要演示账号时执行
+`cd server && AICMHCS_DB_DRIVER=sqlite dart run tool/seed_demo_data.dart`。
 
 ### 2. 启动后端（http://localhost:8080）
 
@@ -146,29 +160,39 @@ cd client && flutter run -d chrome # 或 -d web-server --web-port 5173
 
 数据库探活（经 FFI 走 `SELECT 1`），返回状态与耗时。
 
-## 数据库对象（模式 AICMHCS）
+## 数据库对象
 
-- **SYS_USER** 系统用户表：ID/USERNAME/PASSWORD(`salt:sha256`)/REAL_NAME/
+- **SYS_USER** 系统用户表：ID/USER_CODE/PASSWORD(`salt:sha256`)/USER_NAME/
   ROLE_CODE(ADMIN|DOCTOR|TEACHER|PARENT)/PHONE/STATUS/LAST_LOGIN_AT/时间戳
-- **SYS_LOGIN_LOG** 登录审计：USER_ID/USERNAME/LOGIN_IP/LOGIN_TIME/
+- **SYS_LOGIN_LOG** 登录审计：USER_ID/USER_CODE/LOGIN_IP/LOGIN_TIME/
   LOGIN_RESULT(SUCCESS|FAIL)/FAIL_REASON
+- **SYS_SCHEMA_VERSION** 结构迁移版本历史：VERSION/DESCRIPTION/APPLIED_AT
+
+建表与结构变更（加列等）全部在代码中维护：`server/lib/db/migrations.dart`
+按版本号注册双方言（达梦 / SQLite）DDL，后端启动或 seed 工具运行时由
+`SchemaMigrator` 自动补齐到最新版本。已发布的迁移不可修改、只能追加，
+类似 Android `onCreate`/`onUpgrade` 的升级模型。
 
 口令算法：`sha256(salt + password)` 十六进制，存储 `salt:hash`；
-后端 `AuthService` 与 `server/tool/generate_demo_data.dart` 保持一致。
-修改演示数据后重新生成：
+演示数据 `tool/seed_demo_data.dart` 直接复用 `AuthService.makeStoredPassword`，
+算法天然一致。重灌演示账号：
 
 ```bash
-cd server && dart run tool/generate_demo_data.dart > ../database/03_demo_data.sql
+cd server && dart run tool/seed_demo_data.dart                              # 达梦
+cd server && AICMHCS_DB_DRIVER=sqlite dart run tool/seed_demo_data.dart     # 单机版
 ```
 
 ## 配置（环境变量）
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
-| AICMHCS_DB_HOST | LOCALHOST | 数据库主机 |
-| AICMHCS_DB_PORT | 5236 | 数据库端口 |
+| AICMHCS_DB_DRIVER | dm | 数据库驱动：dm（达梦）/ sqlite（单机版） |
+| AICMHCS_DB_HOST | LOCALHOST | 达梦数据库主机 |
+| AICMHCS_DB_PORT | 5236 | 达梦数据库端口 |
 | AICMHCS_DB_USER | AICMHCS | 应用账号（最小权限，不用 SYSDBA） |
 | AICMHCS_DB_PASSWORD | Aicmhcs@2026 | 应用账号口令 |
+| AICMHCS_DB_FILE | data/aicmhcs.db | SQLite 数据文件（单机版） |
+| AICMHCS_SQLITE3_DLL | （自动解析） | sqlite3.dll 路径（exe 同目录 → winsqlite3.dll） |
 | DM_HOME | C:\dmdbms | 达梦安装目录（定位 dmdpi.dll） |
 | DM_SYSDBA_PWD | （见 tools/init_db.sh） | 仅初始化脚本用，生产环境务必覆盖 |
 

@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:ffi';
 
 import 'package:ffi/ffi.dart';
+import 'package:server/db/database_gateway.dart' show DbResult;
+
 import 'package:server/dm/dm_gateway.dart' show DmGateway;
 
 import 'package:server/dm/dpi.dart';
@@ -15,25 +17,6 @@ final class DmException implements Exception {
 
   @override
   String toString() => 'DmException $code: $message';
-}
-
-/// 查询结果。所有列均以字符串形式取回，数值/时间由调用方按需转换；
-/// NULL 用 null 表示。
-final class DmResult {
-  DmResult(this.columns, this.rows);
-
-  final List<String> columns;
-  final List<List<String?>> rows;
-
-  /// 按列名取行的便捷视图。
-  List<Map<String, String?>> get rowsAsMaps => rows
-      .map(
-        (row) => {
-          for (var i = 0; i < columns.length && i < row.length; i++)
-            columns[i]: row[i],
-        },
-      )
-      .toList(growable: false);
 }
 
 /// 单个 DM8 连接。
@@ -110,7 +93,7 @@ final class DmConnection {
   }
 
   /// 执行 SELECT（? 占位符，参数为字符串或 null），取回全部行。
-  DmResult query(String sql, [List<Object?> params = const []]) {
+  DbResult query(String sql, [List<Object?> params = const []]) {
     final stmt = _newStatement();
     try {
       _prepareAndExecute(stmt, sql, params);
@@ -267,7 +250,7 @@ final class DmConnection {
     }
   }
 
-  DmResult _fetchAll(Pointer<Void> stmt) {
+  DbResult _fetchAll(Pointer<Void> stmt) {
     int nCols;
     final colCount = calloc<Int16>();
     try {
@@ -281,7 +264,7 @@ final class DmConnection {
       calloc.free(colCount);
     }
     if (nCols <= 0) {
-      return DmResult(const [], const []);
+      return DbResult(const [], const []);
     }
 
     // 列名（UTF-16）。
@@ -362,7 +345,7 @@ final class DmConnection {
       calloc.free(ind);
       calloc.free(rowNum);
     }
-    return DmResult(columns, rows);
+    return DbResult(columns, rows);
   }
 
   void _check(int rc, Pointer<Void>? stmt, String what) {

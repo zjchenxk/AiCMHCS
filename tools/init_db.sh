@@ -2,9 +2,12 @@
 # =====================================================================
 # AiCMHCS 数据库初始化脚本（Git Bash / bash 运行）
 #
-# 依次执行 database/ 下的 01/02/03 脚本：
-#   01 表空间 + 应用账号 AICMHCS（以 SYSDBA 执行）
-#   02 建表、03 演示数据（以 AICMHCS 执行）
+# 达梦网络版一键初始化，分两步：
+#   1. 执行 database/01_init_schema.sql：表空间 + 应用账号 AICMHCS
+#      （以 SYSDBA 执行；建表等结构变更已移入代码，见
+#      server/lib/db/migrations.dart 的迁移注册表）；
+#   2. 调用 server/tool/seed_demo_data.dart：应用结构迁移并写入演示
+#      账号（以 AICMHCS 连接执行）。
 #
 # 本库为 GB18030 字符集（SF_GET_UNICODE_FLAG()=0），而仓库内 SQL 为
 # UTF-8，因此执行前经 iconv 转 GBK 再交给 DIsql。
@@ -15,6 +18,7 @@
 #   DM_PORT        数据库端口（默认 5236）
 #   DM_SYSDBA_PWD  SYSDBA 口令（默认为开发机口令，生产环境务必覆盖）
 #   APP_DB_PWD     应用账号 AICMHCS 口令（默认 Aicmhcs@2026）
+#   SKIP_SEED=1    只建表空间与账号，跳过结构迁移与演示数据
 # =====================================================================
 set -euo pipefail
 
@@ -29,7 +33,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-echo "== AiCMHCS 数据库初始化（$DM_HOST:$DM_PORT）=="
+echo "== AiCMHCS 达梦数据库初始化（$DM_HOST:$DM_PORT）=="
 
 # UTF-8 -> GBK，并注入 CONN 连接串
 convert() { # $1=源文件 $2=目标文件 $3=连接串
@@ -46,15 +50,27 @@ run_disql() { # $1=脚本文件
 }
 
 conn_sysdba="CONN SYSDBA/\"$DM_SYSDBA_PWD\"@$DM_HOST:$DM_PORT;"
-conn_app="CONN AICMHCS/\"$APP_DB_PWD\"@$DM_HOST:$DM_PORT;"
 
 convert "$ROOT/database/01_init_schema.sql" "$WORK/01.sql" "$conn_sysdba"
-convert "$ROOT/database/02_create_tables.sql" "$WORK/02.sql" "$conn_app"
-convert "$ROOT/database/03_demo_data.sql" "$WORK/03.sql" "$conn_app"
 
-for f in 01 02 03; do
-  echo "---- 执行 $f ----"
-  run_disql "$(cygpath -w "$WORK/$f.sql")"
-done
+echo "---- 执行 01：表空间 + 应用账号 ----"
+run_disql "$(cygpath -w "$WORK/01.sql")"
+
+if [[ "${SKIP_SEED:-0}" == "1" ]]; then
+  echo "== 已按 SKIP_SEED=1 跳过结构迁移与演示数据 =="
+  exit 0
+fi
+
+echo "---- 结构迁移 + 演示账号（seed_demo_data.dart）----"
+(
+  cd "$ROOT/server"
+  export AICMHCS_DB_DRIVER=dm
+  export AICMHCS_DB_HOST="$DM_HOST"
+  export AICMHCS_DB_PORT="$DM_PORT"
+  export AICMHCS_DB_USER=AICMHCS
+  export AICMHCS_DB_PASSWORD="$APP_DB_PWD"
+  export DM_HOME="$(cygpath -w "$DM_HOME")"
+  dart run tool/seed_demo_data.dart
+)
 
 echo "== 初始化完成。演示账号：admin/Admin@123、doctor01/Doctor@123、teacher01/Teacher@123、parent01/Parent@123 =="

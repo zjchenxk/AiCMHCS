@@ -1,8 +1,8 @@
 import 'package:dart_frog/dart_frog.dart';
-import 'package:server/dm/dm_gateway.dart';
+import 'package:server/db/database_gateway.dart';
 
 Future<Response> onRequest(RequestContext context) async {
-  final db = context.read<DmGateway>();
+  final db = context.read<DatabaseGateway>();
   final stopwatch = Stopwatch()..start();
   try {
     await db.ping();
@@ -23,7 +23,10 @@ Future<Response> onRequest(RequestContext context) async {
       'message': 'ok',
       'data': {
         'status': 'up',
-        'database': 'DM8',
+        'database': switch (db.dialect) {
+          DbDialect.dm => 'DM8',
+          DbDialect.sqlite => 'SQLite',
+        },
         'latencyMs': stopwatch.elapsedMilliseconds,
       },
     },

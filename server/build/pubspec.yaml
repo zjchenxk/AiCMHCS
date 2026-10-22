@@ -13,6 +13,10 @@ dependencies:
   crypto: ^3.0.0
   dart_frog: ^1.1.0
   ffi: ^2.1.0
+  # 精确固定 2.4.0（勿加 ^）：3.x 删除了 open.dart 的动态库覆盖机制，
+  # 改为构建期 hook 下载预编译库，与 dart_frog 打包、离线信创环境、
+  # 随包分发 sqlite3.dll 均冲突。
+  sqlite3: 2.4.0
 
 dev_dependencies:
   dart_frog_lint: ^0.1.0
