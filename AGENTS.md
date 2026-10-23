@@ -79,7 +79,7 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 - **字符集**：达梦全程走 DPI 的 W 系列（UTF-16）接口，GB18030 实例由 DPI 自动转码，Dart 侧始终处理 Unicode。`dpi_bind_param` 无宽字符版本——**绑定参数只支持 ASCII**；该限制已下沉到 `DmGateway`（`lib/dm/dm_param_rewrite.dart` 自动把非 ASCII 参数转义内联、ASCII 照常绑定），**业务层直接写参数化 SQL，中文参数照常传，不要手拼 SQL 字面量**；
 - SQL 占位符 `?` 两库通用；`DbResult` 所有列以字符串返回（NULL 为 null），数值/时间由模型层按需转换（参照 `AuthService._loginUserFromRow`）；
 - **时间列**：统一在 Dart 侧用 `formatTimestamp(DateTime.now())` 生成后作为参数绑定写入（达梦隐式转 TIMESTAMP(0)；SQLite 的 `CURRENT_TIMESTAMP` 是 UTC，且 Windows 系统 winsqlite3.dll 的 `'localtime'` 修饰符返回 NULL，SQL 端时间函数不可依赖）；
-- SQLite 网关（`lib/db/sqlite_gateway.dart`）：Windows 原生库解析顺序 `AICMHCS_SQLITE3_DLL` → exe 同目录 `sqlite3.dll` → 系统 `winsqlite3.dll`（单机版打包时随包分发官方 sqlite3.dll 即可）；`:memory:` 供测试，按路径缓存防 dart_frog 热重载泄漏 isolate。依赖精确锁定 `sqlite3: 2.4.0`（pubspec 注释有说明，勿加 `^`）——3.x 删除了 `open.dart` 的动态库覆盖机制、改为构建期 hook 下载预编译库，与 dart_frog 打包/离线信创环境/随包分发 dll 冲突。精确锁定可防普通 `pub upgrade` 浮动，但 `flutter pub upgrade --major-versions` 会连精确版本一起改写（实测 `2.4.0 -> ^3.7.1`），执行后须手工把 server/pubspec.yaml 改回 `2.4.0`。
+- SQLite 网关（`lib/db/sqlite_gateway.dart`）：Windows 原生库解析顺序 `AICMHCS_SQLITE3_DLL` → exe 同目录 `sqlite3.dll` → 系统 `winsqlite3.dll`（单机版打包时随包分发官方 sqlite3.dll 即可）；`:memory:` 供测试，按路径缓存防 dart_frog 热重载泄漏 isolate。依赖锁定 `sqlite3` **2.4.0 双保险**：`server/pubspec.yaml` 精确锁定（勿加 `^`）+ 根 `pubspec.yaml` 的 `dependency_overrides`——后者优先级高于一切约束，实测连 `pub upgrade --major-versions` 都会被挡下（pub 会警告 `dependency_overrides prevents upgrades for: sqlite3`，属预期，无需处理）。原因：3.x 删除了 `open.dart` 的动态库覆盖机制、改为构建期 hook 下载预编译库，与 dart_frog 打包/离线信创环境/随包分发 dll 冲突。将来若要升 3.x，必须先删根 pubspec 的 override。
 
 ### 口令与数据库对象
 

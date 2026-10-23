@@ -9,3 +9,11 @@ workspace:
   - server
   - common
 
+# sqlite3 强制钉在 2.4.0：3.x 删除了 open.dart 的动态库覆盖机制、改为
+# 构建期 hook 下载预编译库，与 dart_frog 打包 / 离线信创环境 / 随包分发
+# sqlite3.dll 冲突。server/pubspec.yaml 里已有精确锁定，本 override 是
+# 第二道防线——pub upgrade --major-versions 不改写 overrides 段，
+# 即使约束被改写为 ^3.x，解析结果仍被钉在 2.4.0。升级到 3.x 必须先删此处。
+dependency_overrides:
+  sqlite3: 2.4.0
+
