@@ -1,10 +1,17 @@
+import 'dart:convert';
+
 import 'package:server/db/migration.dart';
 import 'package:server/db/schema_migrator.dart';
 import 'package:server/db/sqlite_gateway.dart';
+import 'package:server/security/field_cipher.dart';
 import 'package:test/test.dart';
 
 void main() {
   late SqliteGateway db;
+  // v2 起迁移含 dataFix（存量明文加密），全量迁移需注入密钥。
+  final cipher = FieldCipher.fromMasterKeyBase64(
+    base64Encode(utf8.encode('0123456789abcdef0123456789abcdef')),
+  );
 
   setUp(() async {
     db = await SqliteGateway.start(':memory:');
@@ -18,8 +25,8 @@ void main() {
   )).rows.map((row) => row.first!).toSet();
 
   test('空库全量迁移：建表并记录版本', () async {
-    final applied = await SchemaMigrator(db).migrate();
-    expect(applied.map((m) => m.version), [1]);
+    final applied = await SchemaMigrator(db, fieldCipher: cipher).migrate();
+    expect(applied.map((m) => m.version), [1, 2]);
 
     final tables = await tableNames();
     expect(
@@ -32,12 +39,13 @@ void main() {
     );
     expect(versions.rows, [
       ['1', '基础表：SYS_USER、SYS_LOGIN_LOG'],
+      ['2', contains('PHONE_HMAC')],
     ]);
   });
 
   test('重复执行为空操作', () async {
-    await SchemaMigrator(db).migrate();
-    final again = await SchemaMigrator(db).migrate();
+    await SchemaMigrator(db, fieldCipher: cipher).migrate();
+    final again = await SchemaMigrator(db, fieldCipher: cipher).migrate();
     expect(again, isEmpty);
   });
 

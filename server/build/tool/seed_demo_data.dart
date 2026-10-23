@@ -1,13 +1,16 @@
-// 初始化数据库结构并写入演示账号（口令散列直接复用 AuthService 算法，
-// 保证与后端校验逻辑一致——原 generate_demo_data.dart 的两处维护已合并）。
+// 初始化数据库结构并写入演示账号（口令散列直接复用 AuthService 算法、
+// 联系电话直接复用 FieldCipher 加密，保证与后端读写逻辑一致——
+// 原 generate_demo_data.dart 的两处维护已合并）。
 //
 // 用法（在 server/ 目录执行）：
 //   dart run tool/seed_demo_data.dart                                # 达梦
 //   AICMHCS_DB_DRIVER=sqlite dart run tool/seed_demo_data.dart       # 单机版
-// 连接参数与后端一致（AICMHCS_DB_HOST/PORT/USER/PASSWORD、AICMHCS_DB_FILE）。
+// 连接参数与后端一致（AICMHCS_DB_HOST/PORT/USER/PASSWORD、AICMHCS_DB_FILE、
+// AICMHCS_FIELD_MASTER_KEY/KEY_FILE）。
 import 'package:server/app_config.dart';
 import 'package:server/db/db_factory.dart';
 import 'package:server/db/schema_migrator.dart';
+import 'package:server/security/field_cipher.dart';
 import 'package:server/services/auth_service.dart';
 
 const demoUsers = [
@@ -20,8 +23,9 @@ const demoUsers = [
 Future<void> main() async {
   final config = AppConfig.fromEnv();
   final db = await openDatabaseGateway(config);
+  final cipher = await FieldCipher.fromConfig(config);
   try {
-    final applied = await SchemaMigrator(db).migrate();
+    final applied = await SchemaMigrator(db, fieldCipher: cipher).migrate();
     final migrated = applied.isEmpty
         ? '已是最新'
         : '已应用 ${applied.map((m) => 'v${m.version}').join('、')}';
@@ -37,14 +41,15 @@ Future<void> main() async {
       }
       await db.execute(
         'INSERT INTO SYS_USER '
-        '(USER_CODE, PASSWORD, USER_NAME, ROLE_CODE, PHONE, STATUS) '
-        'VALUES (?, ?, ?, ?, ?, 1)',
+        '(USER_CODE, PASSWORD, USER_NAME, ROLE_CODE, PHONE, PHONE_HMAC, '
+        'STATUS) VALUES (?, ?, ?, ?, ?, ?, 1)',
         [
           userCode,
           AuthService.makeStoredPassword(password),
           userName,
           role,
-          phone,
+          await cipher.seal(FieldCipher.phonePurpose, phone),
+          await cipher.mac(FieldCipher.phonePurpose, phone),
         ],
       );
       print('  $userCode / $password 已写入');
