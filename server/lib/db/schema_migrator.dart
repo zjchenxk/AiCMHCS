@@ -1,6 +1,7 @@
 import 'package:server/db/database_gateway.dart';
 import 'package:server/db/migration.dart';
 import 'package:server/db/migrations.dart';
+import 'package:server/security/field_cipher.dart';
 
 /// 结构迁移执行器：确保库结构与迁移注册表（默认 [dbMigrations]）的
 /// 最新版本一致。
@@ -9,8 +10,12 @@ import 'package:server/db/migrations.dart';
 /// 单条迁移内的语句逐条自动提交（达梦 DDL 隐式提交，无法整体回滚），
 /// 失败时直接抛错中止启动，修复后重新执行会继续完成剩余版本。
 class SchemaMigrator {
-  SchemaMigrator(this._db, {List<DbMigration> migrations = dbMigrations})
-    : _migrations = migrations {
+  SchemaMigrator(
+    this._db, {
+    List<DbMigration> migrations = dbMigrations,
+    FieldCipher? fieldCipher,
+  }) : _migrations = migrations,
+       _fieldCipher = fieldCipher {
     _validateVersions();
   }
 
@@ -19,6 +24,10 @@ class SchemaMigrator {
 
   final DatabaseGateway _db;
   final List<DbMigration> _migrations;
+
+  /// 数据订正回调（dataFix）使用的字段加密器；待应用迁移包含 dataFix
+  /// 而未注入时，migrate() 在执行任何语句前即抛错。
+  final FieldCipher? _fieldCipher;
 
   /// 应用所有未执行的迁移，返回本次实际应用的迁移（已是最新时为空）。
   Future<List<DbMigration>> migrate() async {
@@ -30,9 +39,21 @@ class SchemaMigrator {
     final pending = _migrations
         .where((m) => !applied.contains(m.version))
         .toList(growable: false);
+    // 订正需要密钥且不可中断重来（DDL 已自动提交），执行任何语句前先
+    // 校验注入，避免出现「结构已变更、数据未订正」的半途状态。
+    if (pending.any((m) => m.dataFix != null) && _fieldCipher == null) {
+      throw StateError(
+        '待应用迁移包含数据订正（dataFix），需要字段加密密钥（FieldCipher），'
+        '请经 SchemaMigrator 构造函数注入',
+      );
+    }
     for (final migration in pending) {
       for (final sql in migration.statementsFor(_db.dialect)) {
         await _db.executeDirect(sql);
+      }
+      final dataFix = migration.dataFix;
+      if (dataFix != null) {
+        await dataFix(_db, _fieldCipher!);
       }
       // 时间列由 Dart 侧生成后参数绑定（两库通用，见 formatTimestamp）。
       await _db.execute(

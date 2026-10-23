@@ -1,18 +1,25 @@
-// 登录链路端到端集成测试（SQLite 内存库）：验证 v1 迁移结构与
+// 登录链路端到端集成测试（SQLite 内存库）：验证迁移结构与
 // AuthService 的 SQL 完全兼容——口令校验、审计写入、最近登录时间、
 // 会话生命周期全部走真实网关。
+import 'dart:convert';
+
 import 'package:server/db/schema_migrator.dart';
 import 'package:server/db/sqlite_gateway.dart';
+import 'package:server/security/field_cipher.dart';
 import 'package:server/services/auth_service.dart';
 import 'package:test/test.dart';
 
 void main() {
   late SqliteGateway db;
   late AuthService auth;
+  // v2 起迁移含 dataFix（存量明文加密回填），需注入密钥。
+  final cipher = FieldCipher.fromMasterKeyBase64(
+    base64Encode(utf8.encode('0123456789abcdef0123456789abcdef')),
+  );
 
   setUpAll(() async {
     db = await SqliteGateway.start(':memory:');
-    await SchemaMigrator(db).migrate();
+    await SchemaMigrator(db, fieldCipher: cipher).migrate();
     await db.execute(
       'INSERT INTO SYS_USER '
       '(USER_CODE, PASSWORD, USER_NAME, ROLE_CODE, PHONE, STATUS) '
