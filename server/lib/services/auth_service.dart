@@ -6,6 +6,7 @@ import 'package:common/utils/security_util.dart';
 import 'package:crypto/crypto.dart';
 
 import 'package:server/db/database_gateway.dart';
+import 'package:server/security/field_cipher.dart';
 
 /// 认证类业务异常：httpStatus / code / message 直接映射到 HTTP 响应。
 final class AuthException implements Exception {
@@ -29,26 +30,37 @@ final class LoginSession {
   DateTime expiresAt;
 }
 
-/// 从数据库行解析登录用户（DbResult 各列均以字符串返回，数值按需转换）。
-LoginUser _loginUserFromRow(Map<String, String?> row) => LoginUser(
-  id: int.parse(row['ID'] ?? '0'),
-  userCode: row['USER_CODE'] ?? '',
-  userName: row['USER_NAME'] ?? '',
-  roleCode: row['ROLE_CODE'] ?? '',
-  phone: row['PHONE'],
-  lastLoginAt: row['LAST_LOGIN_AT'],
-);
-
 /// 登录认证服务：口令校验（盐 + SHA-256）、令牌签发与校验、登录审计。
 /// 经 DatabaseGateway 访问数据库，达梦与 SQLite 通用（含中文的参数由
 /// 达梦网关自动内联，业务层直接写参数化 SQL）。
 class AuthService {
-  AuthService(this._db, {this.sessionTtl = const Duration(hours: 2)});
+  AuthService(
+    this._db,
+    this._cipher, {
+    this.sessionTtl = const Duration(hours: 2),
+  });
 
   final DatabaseGateway _db;
+
+  /// 字段加解密器：读用户时解密联系电话等敏感字段（日志与异常信息
+  /// 中不得输出解密后的明文）。
+  final FieldCipher _cipher;
+
   final Duration sessionTtl;
 
   final _sessions = <String, LoginSession>{};
+
+  /// 从数据库行解析登录用户（各列均以字符串返回，数值按需转换；
+  /// PHONE 为密文，经 FieldCipher 解密，不带版本前缀的存量明文原样返回）。
+  Future<LoginUser> _loginUserFromRow(Map<String, String?> row) async =>
+      LoginUser(
+        id: int.parse(row['ID'] ?? '0'),
+        userCode: row['USER_CODE'] ?? '',
+        userName: row['USER_NAME'] ?? '',
+        roleCode: row['ROLE_CODE'] ?? '',
+        phone: await _cipher.open(FieldCipher.phonePurpose, row['PHONE']),
+        lastLoginAt: row['LAST_LOGIN_AT'],
+      );
 
   /// 口令散列算法：sha256(salt + password) 的十六进制。
   /// 库中存储格式：`salt:hash`（salt 为 16 字节随机数的十六进制）。
@@ -96,7 +108,7 @@ class AuthService {
       stored = row['PASSWORD'] ?? '';
       status = row['STATUS'];
       if (verifyStoredPassword(stored, password)) {
-        user = _loginUserFromRow(row);
+        user = await _loginUserFromRow(row);
       }
     }
 

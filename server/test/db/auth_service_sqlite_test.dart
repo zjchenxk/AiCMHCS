@@ -20,30 +20,41 @@ void main() {
   setUpAll(() async {
     db = await SqliteGateway.start(':memory:');
     await SchemaMigrator(db, fieldCipher: cipher).migrate();
+    // 联系电话经 FieldCipher 加密写入（与 seed/后端写入口径一致）。
     await db.execute(
       'INSERT INTO SYS_USER '
-      '(USER_CODE, PASSWORD, USER_NAME, ROLE_CODE, PHONE, STATUS) '
-      'VALUES (?, ?, ?, ?, ?, 1)',
+      '(USER_CODE, PASSWORD, USER_NAME, ROLE_CODE, PHONE, PHONE_HMAC, STATUS) '
+      'VALUES (?, ?, ?, ?, ?, ?, 1)',
       [
         'admin',
         AuthService.makeStoredPassword('Admin@123'),
         '系统管理员',
         'ADMIN',
-        '13800000001',
+        await cipher.seal(FieldCipher.phonePurpose, '13800000001'),
+        await cipher.mac(FieldCipher.phonePurpose, '13800000001'),
       ],
     );
-    auth = AuthService(db);
+    auth = AuthService(db, cipher);
   });
 
   tearDownAll(() => db.close());
 
-  test('登录成功：返回会话、写审计、更新最近登录时间', () async {
+  test('登录成功：返回会话（手机号已解密）、写审计、更新最近登录时间', () async {
     final session = await auth.login('admin', 'Admin@123', ip: '127.0.0.1');
     expect(session.user.id, greaterThan(0));
     expect(session.user.userCode, 'admin');
     expect(session.user.userName, '系统管理员');
     expect(session.user.roleCode, 'ADMIN');
+    expect(session.user.phone, '13800000001');
     expect(session.sessionKey, isNotEmpty);
+
+    // 库内 PHONE 为密文，不残留明文（等保存储加密）。
+    final stored = await db.query(
+      'SELECT PHONE FROM SYS_USER WHERE USER_CODE = ?',
+      ['admin'],
+    );
+    expect(stored.rows.single.first, startsWith('v1:'));
+    expect(stored.rows.single.first, isNot(contains('13800000001')));
 
     final logs = await db.query(
       'SELECT USER_CODE, LOGIN_IP, LOGIN_RESULT, FAIL_REASON FROM SYS_LOGIN_LOG',
@@ -55,6 +66,17 @@ void main() {
       ['admin'],
     );
     expect(user.rows.single.first, isNotNull);
+  });
+
+  test('存量明文行登录：手机号原样返回（读兼容兜底）', () async {
+    await db.execute(
+      'INSERT INTO SYS_USER '
+      '(USER_CODE, PASSWORD, USER_NAME, ROLE_CODE, PHONE, STATUS) '
+      "VALUES ('legacy', ?, '存量用户', 'DOCTOR', '13900000000', 1)",
+      [AuthService.makeStoredPassword('Legacy@123')],
+    );
+    final session = await auth.login('legacy', 'Legacy@123');
+    expect(session.user.phone, '13900000000');
   });
 
   test('口令错误：统一提示 40101 并写失败审计', () async {
