@@ -193,12 +193,14 @@ cd server && AICMHCS_DB_DRIVER=sqlite dart run tool/seed_demo_data.dart     # �
 | AICMHCS_DB_PASSWORD | Aicmhcs@2026 | 应用账号口令 |
 | AICMHCS_DB_FILE | data/aicmhcs.db | SQLite 数据文件（单机版） |
 | AICMHCS_SQLITE3_DLL | （自动解析） | sqlite3.dll 路径（exe 同目录 → winsqlite3.dll） |
+| AICMHCS_FIELD_MASTER_KEY | （未设则读密钥文件） | 字段加密主密钥（base64 的 32 字节；等保环境必须注入，密钥与数据分离） |
+| AICMHCS_FIELD_KEY_FILE | data/aicmhcs.field.key | 字段加密密钥文件（未设环境变量且文件不存在时首启自动生成；**须单独备份，丢失即无法解密存量数据**） |
 | DM_HOME | C:\dmdbms | 达梦安装目录（定位 dmdpi.dll） |
 | DM_SYSDBA_PWD | （见 tools/init_db.sh） | 仅初始化脚本用，生产环境务必覆盖 |
 
 ## 测试与验证
 
-- `cd server && dart test` —— 口令散列/令牌单元测试
+- `cd server && dart test` —— 口令散列/令牌/字段加密（FieldCipher）/迁移回填/登录链路单元与集成测试
 - `cd server && dart analyze` / `cd client && flutter analyze`
 - 浏览器实测记录见 `gui-test-screenshots/`：T1 登录页布局与中文渲染、
   T2 错误口令提示、T3 登录成功页（王心怡/儿童心理医生）均通过
