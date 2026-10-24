@@ -6,3 +6,6 @@
 
 # 单机版 SQLite 数据文件（本地生成，勿提交）
 server/data/
+
+# dart_frog build 产物内的运行数据目录（字段加密密钥、SQLite 数据文件，勿提交）
+server/build/data/
