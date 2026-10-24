@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:server/database/engine/sqlite/sqlite_gateway.dart';
-import 'package:server/database/migrator/migration.dart';
+import 'package:server/database/migrator/migrations/base/migration.dart';
 import 'package:server/database/migrator/schema_migrator.dart';
 import 'package:server/utils/field_cipher.dart';
 import 'package:test/test.dart';

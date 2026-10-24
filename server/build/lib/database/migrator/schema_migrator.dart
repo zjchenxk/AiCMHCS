@@ -1,6 +1,6 @@
 import 'package:server/database/engine/database_gateway.dart';
-import 'package:server/database/migrator/migration.dart';
-import 'package:server/database/migrator/migrations.dart';
+import 'package:server/database/migrator/migrations/base/migration.dart';
+import 'package:server/database/migrator/migrations/migrations.dart';
 import 'package:server/utils/field_cipher.dart';
 
 /// 结构迁移执行器：确保库结构与迁移注册表（默认 [dbMigrations]）的

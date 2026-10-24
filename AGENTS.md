@@ -16,7 +16,7 @@ AiCMHCS（智慧儿童心理保健系统）：为满足国家信创要求，技�
 client/   Flutter 应用（MVVM，原 aicmhcs_flutter 更名并入）
 server/   Dart Frog 后端：routes / lib(database(engine, migrator), services, utils, models) / tool / test
 common/   前后端共享包：lib/models（basic 行政区划 / system 医院、登录用户）+ lib/utils（SecurePayload 报文加解密）
-database/         DM8 SQL 脚本：01 表空间+账号（SYSDBA 执行）；建表与结构变更在代码中（server/lib/database/migrator/migrations.dart，双方言迁移）
+database/         DM8 SQL 脚本：01 表空间+账号（SYSDBA 执行）；建表与结构变更在代码中（server/lib/database/migrator/migrations/，双方言迁移）
 tools/            init_db.sh / start_backend.sh / serve_frontend.sh（Git Bash 运行）
 ```
 
@@ -65,7 +65,7 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 
 ### 后端（server，Dart Frog）
 
-分层：`routes/`（HTTP 适配，文件路径即 URL）→ `services/`（业务逻辑）→ `lib/database/`（数据访问层，分两块：`engine/` 为网关抽象与达梦/SQLite 双实现，`migrator/` 为结构迁移注册表与执行器）；达梦 FFI 绑定在 `lib/database/engine/dm/`（DPI / DmGateway）、SQLite 实现在 `lib/database/engine/sqlite/`，字段加密工具 `FieldCipher` 在 `lib/utils/`、API 请求体模型在 `lib/models/`；共享业务模型在 `common/lib/models/`（统一经 `package:common/model.dart` barrel 导入），DB 行解析（`fromRow` 类函数）留在服务层。**没有 ORM/代码生成环节**（协议就是手写 JSON + 手写模型；数据库结构走**手写版本化迁移**，见「口令与数据库对象」）。
+分层：`routes/`（HTTP 适配，文件路径即 URL）→ `services/`（业务逻辑）→ `lib/database/`（数据访问层，分两块：`engine/` 为网关抽象与达梦/SQLite 双实现，`migrator/` 为结构迁移——`schema_migrator.dart` 执行器 + `migrations/` 逐版本迁移文件与注册表）；达梦 FFI 绑定在 `lib/database/engine/dm/`（DPI / DmGateway）、SQLite 实现在 `lib/database/engine/sqlite/`，字段加密工具 `FieldCipher` 在 `lib/utils/`、API 请求体模型在 `lib/models/`；共享业务模型在 `common/lib/models/`（统一经 `package:common/model.dart` barrel 导入），DB 行解析（`fromRow` 类函数）留在服务层。**没有 ORM/代码生成环节**（协议就是手写 JSON + 手写模型；数据库结构走**手写版本化迁移**，见「口令与数据库对象」）。
 
 - **入口注入**：`main.dart` 自定义 `run()` 在启动时按 `AICMHCS_DB_DRIVER` 经 `openDatabaseGateway()`（`lib/database/engine/db_factory.dart`）打开网关（dm → `DmGateway` / sqlite → `SqliteGateway`）、经 `FieldCipher.fromConfig()` 解析字段加密密钥、带密钥跑 `SchemaMigrator.migrate()` 对齐结构、创建 `AuthService`，经 `handler.use(provider<T>(...))` 注入管线（现有 `DatabaseGateway` / `FieldCipher` / `AuthService`）；路由内 `context.read<T>()` 获取。新增单例服务照此在 `main.dart` 注册；
 - **统一响应**：`{'code': 0|非0, 'message': '...', 'data': ...}`，`code == 0` 表示成功。业务码与 HTTP 状态对应：40001/40002→400、40101/40102/40103→401、40301→403、40500→405、50000→500（全局兜底）。参照 `routes/api/auth/login.dart` 的 `_error` helper。响应报文会被 `/api` 加密中间件整体封入信封（见「安全层现状」）；
@@ -86,7 +86,7 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 
 - 口令散列：`sha256(salt + password)` 十六进制，存储格式 `salt:hash`（salt 为 16 字节随机数的十六进制）。演示数据 `tool/seed_demo_data.dart` 直接复用 `AuthService.makeStoredPassword`，算法天然一致，不存在两处维护；
 - 数据库：达梦为 `AICMHCS` 模式，SQLite 为单个数据文件（默认 `data/aicmhcs.db`）。现有表：`SYS_USER`（系统用户，PHONE 存密文、PHONE_HMAC 为盲索引列，见「数据库访问约定」）、`SYS_LOGIN_LOG`（登录审计）、`SYS_SCHEMA_VERSION`（迁移版本历史），系统表前缀 `SYS_`；
-- **结构变更走代码迁移**（`server/lib/database/migrator/migrations.dart` 注册表 + `SchemaMigrator`，启动/seed 时自动补齐到最新版本）：已发布的迁移**不可修改，只能向后追加**（版本号严格递增，启动时校验）；迁移里**不要写 `DROP TABLE IF EXISTS`**（对升级用户是数据丢失）；演示数据不进迁移（生产不得自动长出演示账号）。DDL 约定：表/列名全大写、主键达梦 `BIGINT IDENTITY(1,1)` / SQLite `INTEGER PRIMARY KEY AUTOINCREMENT`、约束命名 `PK_<表>` / `UK_<表>_<字段>`、时间列达梦 `TIMESTAMP(0)` / SQLite `TEXT`；中文注释达梦用 `COMMENT ON`、SQLite 用语句内 `--`。改结构 = 在 `migrations.dart` 追加一个 `DbMigration`（两库通用的语句放 `common`，方言差异放 `dm`/`sqlite`）；语句表达不了的数据订正（如 v2 存量明文加密）附 `dataFix` 回调——必须幂等（中断重跑不重复处理），`FieldCipher` 密钥经 `SchemaMigrator` 构造函数注入，含 dataFix 的迁移未注入密钥时启动即报错（DDL 不落半途状态）；
+- **结构变更走代码迁移**（`server/lib/database/migrator/`：`schema_migrator.dart` 执行器 + `migrations/` 迁移目录——`base/migration.dart` 的 `DbMigration` 定义、`migration_<创建时间戳>.dart` 每个迁移一个文件、`migrations.dart` 注册表 `dbMigrations`；启动/seed 时自动补齐到最新版本）：已发布的迁移**不可修改，只能向后追加**（版本号严格递增，启动时校验）；迁移里**不要写 `DROP TABLE IF EXISTS`**（对升级用户是数据丢失）；演示数据不进迁移（生产不得自动长出演示账号）。DDL 约定：表/列名全大写、主键达梦 `BIGINT IDENTITY(1,1)` / SQLite `INTEGER PRIMARY KEY AUTOINCREMENT`、约束命名 `PK_<表>` / `UK_<表>_<字段>`、时间列达梦 `TIMESTAMP(0)` / SQLite `TEXT`；中文注释达梦用 `COMMENT ON`、SQLite 用语句内 `--`。改结构 = 在 `migrations/` 新建 `migration_<时间戳>.dart`（文件名取迁移创建时刻 `YYYYMMDDHHmm`，文件内为顶层 const `dbMigration_<时间戳>`，两库通用语句放 `common`，方言差异放 `dm`/`sqlite`），再在 `migrations.dart` 的 `dbMigrations` 列表按版本顺序追加；语句表达不了的数据订正（如 v2 存量明文加密）附 `dataFix` 回调（写在同一迁移文件内）——必须幂等（中断重跑不重复处理），`FieldCipher` 密钥经 `SchemaMigrator` 构造函数注入，含 dataFix 的迁移未注入密钥时启动即报错（DDL 不落半途状态）；
 - `database/` 仅保留 `01_init_schema.sql`（表空间 + 应用账号——DBA 级对象创建进不了应用代码）；开发期推倒重来：达梦 `./tools/init_db.sh`（DROP USER 重建 + 迁移 + 演示账号），单机版删数据文件。
 
 ### 前端（client）— MVVM
@@ -170,7 +170,7 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 
 ## 新增一个全栈功能的标准流程
 
-1. 在 `server/lib/database/migrator/migrations.dart` 追加结构迁移（`DbMigration`，双方言语句，沿用 DDL 约定），启动后端或 `dart run tool/seed_demo_data.dart` 即自动应用；
+1. 在 `server/lib/database/migrator/migrations/` 新建 `migration_<时间戳>.dart` 结构迁移（`DbMigration`，双方言语句，沿用 DDL 约定）并在 `migrations.dart` 的 `dbMigrations` 注册，启动后端或 `dart run tool/seed_demo_data.dart` 即自动应用；
 2. 在 `common/lib/models/<模块>/` 写共享模型（`fromJson`/`toJson`，并在 `common/lib/model.dart` 追加 export）；DB 行解析放 `server` 服务层（如 `AuthService._loginUserFromRow`）；
 3. 在 `server/lib/services/` 写业务服务（构造注入 `DatabaseGateway`）；需在路由中直接读取的，在 `main.dart` 用 `provider<T>` 注入；
 4. 在 `server/routes/api/<模块>/` 写路由（统一响应格式 + `_error` helper + 业务异常转换）；非 GET 请求取参用 `context.read<ApiBody>().json`（加密中间件已解出明文）；

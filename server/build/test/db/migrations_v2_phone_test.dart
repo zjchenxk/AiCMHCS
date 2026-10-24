@@ -4,7 +4,8 @@
 import 'dart:convert';
 
 import 'package:server/database/engine/sqlite/sqlite_gateway.dart';
-import 'package:server/database/migrator/migrations.dart';
+import 'package:server/database/migrator/migrations/migration_202610231703.dart';
+import 'package:server/database/migrator/migrations/migrations.dart';
 import 'package:server/database/migrator/schema_migrator.dart';
 import 'package:server/utils/field_cipher.dart';
 import 'package:test/test.dart';

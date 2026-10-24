@@ -4,7 +4,7 @@ import 'package:dart_frog/dart_frog.dart';
 import 'package:server/app_config.dart';
 import 'package:server/database/engine/database_gateway.dart';
 import 'package:server/database/engine/db_factory.dart';
-import 'package:server/database/migrator/migration.dart';
+import 'package:server/database/migrator/migrations/base/migration.dart';
 import 'package:server/database/migrator/schema_migrator.dart';
 import 'package:server/services/auth_service.dart';
 import 'package:server/utils/field_cipher.dart';
