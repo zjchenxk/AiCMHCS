@@ -9,10 +9,7 @@ import 'package:server/database/engine/database_gateway.dart';
 /// 通信访问。子类提供工作区入口函数、异常还原方式与参数改写钩子。
 abstract class WorkerGateway implements DatabaseGateway {
   /// 构造函数：注入工作区命令端口、回报端口、错误端口。
-  WorkerGateway(SendPort worker, ReceivePort replies, ReceivePort errors)
-    : _worker = worker,
-      _replies = replies,
-      _errors = errors {
+  WorkerGateway(SendPort worker, ReceivePort replies, ReceivePort errors) : _worker = worker, _replies = replies, _errors = errors {
     _errors.listen(_onWorkerError);
     _replies.listen(_onMessage);
   }
@@ -34,8 +31,7 @@ abstract class WorkerGateway implements DatabaseGateway {
   ///
   /// 达梦实现用它把含非 ASCII 的参数内联为 SQL 字面量（DPI 绑定参数
   /// 仅支持 ASCII），其余实现无需覆盖。
-  (String, List<Object?>) rewrite(String sql, List<Object?> params) =>
-      (sql, params);
+  (String, List<Object?>) rewrite(String sql, List<Object?> params) => (sql, params);
 
   /// 网关完全关闭后的回调（子类用于清理静态缓存）。
   void onClosed() {}
@@ -59,8 +55,7 @@ abstract class WorkerGateway implements DatabaseGateway {
   }
 
   @override
-  Future<void> executeDirect(String sql) async =>
-      invoke('executeDirect', sql: sql);
+  Future<void> executeDirect(String sql) async => invoke('executeDirect', sql: sql);
 
   @override
   Future<void> ping() async => invoke('ping');

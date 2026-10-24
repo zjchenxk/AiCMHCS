@@ -189,9 +189,7 @@ class MainViewModel extends ChangeNotifier {
   }
 
   void toggleExpand(String menuId) {
-    _expandedIds.contains(menuId)
-        ? _expandedIds.remove(menuId)
-        : _expandedIds.add(menuId);
+    _expandedIds.contains(menuId) ? _expandedIds.remove(menuId) : _expandedIds.add(menuId);
     notifyListeners();
   }
 
@@ -204,9 +202,7 @@ class MainViewModel extends ChangeNotifier {
     }
     // 关键词变了 → 重新计算并更新缓存
     _filterCacheKey = _searchKeyword;
-    _cachedFilteredMenus = _searchKeyword.isEmpty
-        ? menus
-        : _filterMenus(menus, _searchKeyword);
+    _cachedFilteredMenus = _searchKeyword.isEmpty ? menus : _filterMenus(menus, _searchKeyword);
     return _cachedFilteredMenus!;
   }
 

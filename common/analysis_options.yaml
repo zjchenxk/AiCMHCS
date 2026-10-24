@@ -1,0 +1,4 @@
+# common 共享包：跟随仓库统一的 240 列排版宽度（与 client / server 一致，
+# 编辑器（dart.lineLength / analysis_options）与命令行 dart format 均读取此配置）
+formatter:
+  page_width: 240

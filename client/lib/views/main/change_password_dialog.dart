@@ -96,8 +96,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                     label: '原密码',
                     obscure: _obscureOld,
                     onToggle: () => setState(() => _obscureOld = !_obscureOld),
-                    validator: (v) =>
-                        (v == null || v.isEmpty) ? '请输入原密码' : null,
+                    validator: (v) => (v == null || v.isEmpty) ? '请输入原密码' : null,
                   ),
                   const SizedBox(height: 12),
 
@@ -134,8 +133,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                     controller: _confirmPwdController,
                     label: '确认新密码',
                     obscure: _obscureConfirm,
-                    onToggle: () =>
-                        setState(() => _obscureConfirm = !_obscureConfirm),
+                    onToggle: () => setState(() => _obscureConfirm = !_obscureConfirm),
                     validator: (v) {
                       if (v == null || v.isEmpty) return '请再次输入新密码';
                       if (v != _newPwdController.text) return '两次输入的密码不一致';
@@ -149,9 +147,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       TextButton(
-                        onPressed: _submitting
-                            ? null
-                            : () => Navigator.of(context).pop(),
+                        onPressed: _submitting ? null : () => Navigator.of(context).pop(),
                         child: Text(
                           '取消',
                           style: theme.textTheme.bodyMedium?.copyWith(
@@ -300,8 +296,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
     if (password.length < 8) return '密码长度不能少于 8 位';
     if (password.length > 64) return '密码长度不能超过 64 位';
     if (password == oldPassword) return '新密码不能与原密码相同';
-    if (username.isNotEmpty &&
-        password.toLowerCase().contains(username.toLowerCase())) {
+    if (username.isNotEmpty && password.toLowerCase().contains(username.toLowerCase())) {
       return '密码不能包含用户名';
     }
 

@@ -12,6 +12,7 @@ final class DmException implements Exception {
 
   /// 达梦错误码。
   final int code;
+
   /// 服务器诊断消息。
   final String message;
 
@@ -77,8 +78,9 @@ final class DmConnection {
       if (envAllocated) dpi.freeEnv(henv.value);
       rethrow;
     } finally {
-      calloc..free(henv)
-      ..free(hcon);
+      calloc
+        ..free(henv)
+        ..free(hcon);
     }
   }
 
@@ -302,12 +304,13 @@ final class DmConnection {
         );
       }
     } finally {
-      calloc..free(nameBuf)
-      ..free(nameLen)
-      ..free(sqlType)
-      ..free(colSize)
-      ..free(decDigits)
-      ..free(nullable);
+      calloc
+        ..free(nameBuf)
+        ..free(nameLen)
+        ..free(sqlType)
+        ..free(colSize)
+        ..free(decDigits)
+        ..free(nullable);
     }
 
     // 逐行取数：W 路径没有 bind_col 的宽字符版本，用 getDataW 逐列读取。
@@ -343,9 +346,10 @@ final class DmConnection {
         rows.add(row);
       }
     } finally {
-      calloc..free(wbuf)
-      ..free(ind)
-      ..free(rowNum);
+      calloc
+        ..free(wbuf)
+        ..free(ind)
+        ..free(rowNum);
     }
     return DbResult(columns, rows);
   }
@@ -353,9 +357,7 @@ final class DmConnection {
   void _check(int rc, Pointer<Void>? stmt, String what) {
     if (rc == Dpi.dsqlSuccess || rc == Dpi.dsqlSuccessWithInfo) return;
     // 优先语句级诊断；stmt 为空表示连接级操作（提交/回滚）。
-    final diag = stmt != null
-        ? _dpi.diagW(Dpi.dsqlHandleStmt, stmt)
-        : _dpi.diagW(Dpi.dsqlHandleDbc, _hcon);
+    final diag = stmt != null ? _dpi.diagW(Dpi.dsqlHandleStmt, stmt) : _dpi.diagW(Dpi.dsqlHandleDbc, _hcon);
     throw DmException(rc, '$what: $diag');
   }
 }

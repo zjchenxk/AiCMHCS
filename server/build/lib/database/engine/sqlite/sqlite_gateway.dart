@@ -64,9 +64,9 @@ void _sqliteWorkerMain(Map<Object?, Object?> boot) {
   final Database db;
   try {
     db = sqlite3.open(boot['path']! as String)
-    ..select('PRAGMA busy_timeout = 5000')
-    ..select('PRAGMA journal_mode = WAL')
-    ..select('PRAGMA foreign_keys = ON');
+      ..select('PRAGMA busy_timeout = 5000')
+      ..select('PRAGMA journal_mode = WAL')
+      ..select('PRAGMA foreign_keys = ON');
   } catch (e) {
     readyPort.send({'ok': false, 'error': e.toString()});
     commands.close();

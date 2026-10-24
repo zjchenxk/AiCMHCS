@@ -29,6 +29,7 @@ linter:
 
 formatter:
   trailing_commas: preserve
+  page_width: 240
 analyzer:
   exclude:
     - build/**

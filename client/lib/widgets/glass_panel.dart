@@ -34,10 +34,8 @@ class GlassPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final radius = BorderRadius.circular(borderRadius);
-    final effectiveColor =
-        color ?? theme.colorScheme.surface.withValues(alpha: 0.9);
-    final effectiveBorder =
-        borderColor ?? theme.colorScheme.outlineVariant.withValues(alpha: 0.3);
+    final effectiveColor = color ?? theme.colorScheme.surface.withValues(alpha: 0.9);
+    final effectiveBorder = borderColor ?? theme.colorScheme.outlineVariant.withValues(alpha: 0.3);
 
     return ClipRRect(
       borderRadius: radius,

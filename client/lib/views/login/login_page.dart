@@ -49,9 +49,7 @@ class _LoginPageState extends State<LoginPage> {
                     children: [
                       SvgPicture.asset(
                         'assets/images/welcome.svg',
-                        height:
-                            MediaQuery.of(context).size.height *
-                            0.85, //图片自适应屏幕高度的85%
+                        height: MediaQuery.of(context).size.height * 0.85, //图片自适应屏幕高度的85%
                         fit: BoxFit.contain, //保持图片等比缩放
                         colorMapper: ThemeColorMapper(
                           primary: theme.colorScheme.primary,
@@ -100,10 +98,8 @@ class _LoginPageState extends State<LoginPage> {
                             key: loginViewModel.formKey,
                             child: Column(
                               mainAxisSize: MainAxisSize.min, //高度自适应内容
-                              mainAxisAlignment:
-                                  MainAxisAlignment.center, //垂直居中
-                              crossAxisAlignment:
-                                  CrossAxisAlignment.center, //水平居中
+                              mainAxisAlignment: MainAxisAlignment.center, //垂直居中
+                              crossAxisAlignment: CrossAxisAlignment.center, //水平居中
                               children: [
                                 Text(
                                   'AiCMHCS',
@@ -127,8 +123,7 @@ class _LoginPageState extends State<LoginPage> {
                                 //用户名输入框
                                 TextFormField(
                                   controller: loginViewModel.userCodeController,
-                                  focusNode:
-                                      loginViewModel.userCodeFocusNode, //失去焦点事件
+                                  focusNode: loginViewModel.userCodeFocusNode, //失去焦点事件
                                   decoration: InputDecoration(
                                     labelText: '用户名',
                                     prefixIcon: Icon(
@@ -158,8 +153,7 @@ class _LoginPageState extends State<LoginPage> {
                                     errorText: loginViewModel.userCodeError,
                                   ),
                                   style: theme.textTheme.bodyMedium,
-                                  textInputAction:
-                                      TextInputAction.next, //设置回车为“下一步”
+                                  textInputAction: TextInputAction.next, //设置回车为“下一步”
                                   onFieldSubmitted: (value) {
                                     //按下回车键后，焦点移到密码输入框
                                     FocusScope.of(context).requestFocus(
@@ -257,47 +251,37 @@ class _LoginPageState extends State<LoginPage> {
                                             //跳转前统一收起键盘（注意只限用于移用端）
                                             //FocusScope.of(context).unfocus();
 
-                                            final success = await loginViewModel
-                                                .login();
+                                            final success = await loginViewModel.login();
 
                                             if (!context.mounted) return;
 
                                             if (success) {
                                               //登录成功，将全局 loginUser 同步进主界面工作副本
-                                              context
-                                                  .read<MainViewModel>()
-                                                  .syncLoginUser();
+                                              context.read<MainViewModel>().syncLoginUser();
 
                                               //登录成功，替换路由跳转到主页
                                               Navigator.pushReplacement(
                                                 context,
                                                 MaterialPageRoute(
-                                                  builder: (context) =>
-                                                      const MainPage(),
+                                                  builder: (context) => const MainPage(),
                                                 ),
                                               );
                                             } else {
-                                              if (loginViewModel.errorMessage !=
-                                                  null) {
+                                              if (loginViewModel.errorMessage != null) {
                                                 //登录失败且存在错误信息，弹出 SnackBar
                                                 ScaffoldMessenger.of(
                                                   context,
                                                 ).showSnackBar(
                                                   SnackBar(
                                                     content: Text(
-                                                      loginViewModel
-                                                          .errorMessage!,
+                                                      loginViewModel.errorMessage!,
                                                     ),
-                                                    backgroundColor: theme
-                                                        .colorScheme
-                                                        .error, //错误色背景
-                                                    behavior: SnackBarBehavior
-                                                        .floating, //浮动样式（有圆角），更扁平现代
+                                                    backgroundColor: theme.colorScheme.error, //错误色背景
+                                                    behavior: SnackBarBehavior.floating, //浮动样式（有圆角），更扁平现代
                                                     shape: RoundedRectangleBorder(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            12,
-                                                          ), //与整体圆角风格统一
+                                                      borderRadius: BorderRadius.circular(
+                                                        12,
+                                                      ), //与整体圆角风格统一
                                                     ),
                                                     duration: const Duration(
                                                       seconds: 4,
@@ -325,13 +309,10 @@ class _LoginPageState extends State<LoginPage> {
                                           )
                                         : Text(
                                             '登  录',
-                                            style: theme.textTheme.bodyMedium
-                                                ?.copyWith(
-                                                  color: theme
-                                                      .colorScheme
-                                                      .onPrimary,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
+                                            style: theme.textTheme.bodyMedium?.copyWith(
+                                              color: theme.colorScheme.onPrimary,
+                                              fontWeight: FontWeight.bold,
+                                            ),
                                           ),
                                   ),
                                 ),

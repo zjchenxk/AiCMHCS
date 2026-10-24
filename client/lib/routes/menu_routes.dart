@@ -20,9 +20,7 @@ Map<String, MenuPageBuilder> menuRoutes = {
 
 /// 简化注册的辅助函数（普通 function，不用 tear-off 时也可直接写 lambda）
 MenuPageBuilder _buildPage(
-  Widget Function({required LoginUser loginUser, required ChildInfo child})
-  ctor,
+  Widget Function({required LoginUser loginUser, required ChildInfo child}) ctor,
 ) {
-  return (context, loginUser, child) =>
-      ctor(loginUser: loginUser, child: child);
+  return (context, loginUser, child) => ctor(loginUser: loginUser, child: child);
 }

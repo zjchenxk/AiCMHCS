@@ -5,8 +5,7 @@ import 'package:server/utils/field_cipher.dart';
 ///
 /// 用于语句表达不了的数据订正（如存量明文字段加密——必须在应用侧
 /// 持密钥完成），须幂等：中断后重跑对已处理行不再改动。
-typedef MigrationDataFix =
-    Future<void> Function(DatabaseGateway db, FieldCipher cipher);
+typedef MigrationDataFix = Future<void> Function(DatabaseGateway db, FieldCipher cipher);
 
 /// 单个结构迁移：一个版本号对应一次结构变更。
 ///

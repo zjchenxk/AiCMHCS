@@ -17,8 +17,7 @@ Future<void> main() async {
   // dart_frog 还会在 server/ 根目录生成同名坏文件（resolution: null 会把
   // server 踢出 workspace 解析，直接删除；workspace 内依赖无需 overrides）。
   final stray = File('pubspec_overrides.yaml');
-  if (stray.existsSync() &&
-      stray.readAsStringSync().contains(RegExp(r'[A-Za-z]:[\\/]'))) {
+  if (stray.existsSync() && stray.readAsStringSync().contains(RegExp(r'[A-Za-z]:[\\/]'))) {
     stray.deleteSync();
     stdout.writeln('已删除 dart_frog 误生成的 pubspec_overrides.yaml');
   }

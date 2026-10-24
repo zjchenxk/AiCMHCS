@@ -10,10 +10,13 @@ import 'package:server/utils/field_cipher.dart';
 final class AuthException implements Exception {
   /// 构造函数：注入 HTTP 状态码、业务错误码、错误信息。
   const AuthException(this.httpStatus, this.code, this.message);
+
   /// HTTP 状态码（401 / 403 / 400 等）。
   final int httpStatus;
+
   /// 业务错误码（40101 / 40301 / 40001 等）。
   final int code;
+
   /// 错误信息（可直接返回给前端）。
   final String message;
 
@@ -28,10 +31,13 @@ final class LoginSession {
 
   /// 令牌（base64 的 32 字节随机数，随登录下发，与会话加密密钥同生命周期）。
   final String token;
+
   /// 会话加密密钥（base64 的 32 字节随机数，随登录下发，与 token 同生命周期）。
-  final String sessionKey; 
+  final String sessionKey;
+
   /// 登录用户（含解密后的手机号）。
   final LoginUser user;
+
   /// 会话过期时间（滑动续期）。
   DateTime expiresAt;
 }

@@ -49,8 +49,7 @@ class HospitalManagementViewModel extends ChangeNotifier {
   bool get addressLoading => _addressLoading;
 
   /// 当前所选医院的信息
-  HospitalInfo? get selectedOrganInfo =>
-      _selectedNode == null ? null : _organInfoMap[_selectedNode!.id];
+  HospitalInfo? get selectedOrganInfo => _selectedNode == null ? null : _organInfoMap[_selectedNode!.id];
 
   /// 加载医院树（实际项目替换为接口请求）
   Future<void> loadOrganTree() async {

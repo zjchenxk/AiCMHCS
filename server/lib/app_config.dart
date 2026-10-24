@@ -52,8 +52,6 @@ final class AppConfig {
     dbFile: Platform.environment['AICMHCS_DB_FILE'] ?? 'data/aicmhcs.db',
     dmHome: Platform.environment['DM_HOME'],
     fieldMasterKey: Platform.environment['AICMHCS_FIELD_MASTER_KEY'],
-    fieldKeyFile:
-        Platform.environment['AICMHCS_FIELD_KEY_FILE'] ??
-        'data/aicmhcs.field.key',
+    fieldKeyFile: Platform.environment['AICMHCS_FIELD_KEY_FILE'] ?? 'data/aicmhcs.field.key',
   );
 }

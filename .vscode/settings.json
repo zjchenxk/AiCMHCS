@@ -6,6 +6,7 @@
     "editor.rulers": [240],
     "editor.fontSize": 14,
     "[dart]": {
+        "editor.formatOnSave": true,
         "editor.rulers": [240],
         "editor.wordWrap": "wordWrapColumn",
         "editor.wordWrapColumn": 240,

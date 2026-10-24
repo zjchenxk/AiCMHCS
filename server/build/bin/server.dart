@@ -24,7 +24,9 @@ void main() async {
 Future<HttpServer> createServer(InternetAddress address, int port) async {
   final handler = Cascade().add(buildRootHandler()).handler;
   final server = await entrypoint.run(handler, address, port);
-  print('\x1B[92m✓\x1B[0m Running on http://${server.address.host}:${server.port}');
+  print(
+    '\x1B[92m✓\x1B[0m Running on http://${server.address.host}:${server.port}',
+  );
   return server;
 }
 
@@ -40,21 +42,47 @@ Handler buildRootHandler() {
 Handler buildHandler() {
   final pipeline = const Pipeline();
   final router = Router()
-    ..all('/health', (context) => health.onRequest(context,))..all('/', (context) => index.onRequest(context,));
+    ..all(
+      '/health',
+      (context) => health.onRequest(
+        context,
+      ),
+    )
+    ..all(
+      '/',
+      (context) => index.onRequest(
+        context,
+      ),
+    );
   return pipeline.addHandler(router);
 }
 
 Handler buildApiHandler() {
   final pipeline = const Pipeline().addMiddleware(api_middleware.middleware);
   final router = Router()
-    ..all('/', (context) => api_index.onRequest(context,));
+    ..all(
+      '/',
+      (context) => api_index.onRequest(
+        context,
+      ),
+    );
   return pipeline.addHandler(router);
 }
 
 Handler buildApiAuthHandler() {
   final pipeline = const Pipeline().addMiddleware(api_middleware.middleware);
   final router = Router()
-    ..all('/login', (context) => api_auth_login.onRequest(context,))..all('/me', (context) => api_auth_me.onRequest(context,));
+    ..all(
+      '/login',
+      (context) => api_auth_login.onRequest(
+        context,
+      ),
+    )
+    ..all(
+      '/me',
+      (context) => api_auth_me.onRequest(
+        context,
+      ),
+    );
   return pipeline.addHandler(router);
 }
-

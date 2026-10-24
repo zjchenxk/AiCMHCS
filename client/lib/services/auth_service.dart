@@ -10,9 +10,7 @@ class AuthService {
 
   /// 启动时从 assets/config.json 读取后端地址。
   Future<void> loadConfig() async {
-    final config =
-        jsonDecode(await rootBundle.loadString('assets/config.json'))
-            as Map<String, dynamic>;
+    final config = jsonDecode(await rootBundle.loadString('assets/config.json')) as Map<String, dynamic>;
     apiUrl = config['apiUrl'] as String;
   }
 

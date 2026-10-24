@@ -76,9 +76,7 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
     // 使用 watch 监听变化，VM notifyListeners 后自动刷新
     final viewModel = context.watch<HospitalManagementViewModel>();
 
-    return viewModel.loading
-        ? const Center(child: CircularProgressIndicator())
-        : _buildBody(theme, viewModel);
+    return viewModel.loading ? const Center(child: CircularProgressIndicator()) : _buildBody(theme, viewModel);
   }
 
   Widget _buildBody(ThemeData theme, HospitalManagementViewModel viewModel) {
@@ -125,8 +123,7 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
                           size: 20,
                           color: theme.colorScheme.primary,
                         ),
-                        onPressed: () =>
-                            _showAddRootDialog(theme, Icons.home_work_outlined),
+                        onPressed: () => _showAddRootDialog(theme, Icons.home_work_outlined),
                       ),
                     ],
                   ),
@@ -206,9 +203,7 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
                   InkWell(
                     onTap: () => viewModel.toggleExpand(node),
                     child: Icon(
-                      node.expanded
-                          ? Icons.keyboard_arrow_down
-                          : Icons.keyboard_arrow_right,
+                      node.expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
                       size: 20,
                     ),
                   ),
@@ -359,13 +354,11 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
                       decoration: InputDecoration(
                         labelText: '医院名称',
                         labelStyle: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onPrimaryContainer
-                              .withValues(alpha: 0.6),
+                          color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.6),
                         ),
                         // 毛玻璃底色：半透明 surface
                         filled: true,
-                        fillColor: theme.colorScheme.surfaceContainerHighest
-                            .withValues(alpha: 0.6),
+                        fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 14,
                           vertical: 14,
@@ -385,10 +378,8 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
                           ),
                         ),
                       ),
-                      onFieldSubmitted: (_) =>
-                          _confirmName(ctx, formKey, controller, onOk),
-                      validator: (v) =>
-                          (v == null || v.trim().isEmpty) ? '请输入医院名称' : null,
+                      onFieldSubmitted: (_) => _confirmName(ctx, formKey, controller, onOk),
+                      validator: (v) => (v == null || v.trim().isEmpty) ? '请输入医院名称' : null,
                     ),
                     const SizedBox(height: 20),
 
@@ -506,9 +497,7 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
                         ),
                         onPressed: () async {
                           Navigator.pop(ctx);
-                          await context
-                              .read<HospitalManagementViewModel>()
-                              .removeOrgan(node);
+                          await context.read<HospitalManagementViewModel>().removeOrgan(node);
                         },
                         child: Text(
                           '删除',

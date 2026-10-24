@@ -1,1 +1,9 @@
 include: package:dart_frog_lint/recommended.yaml
+
+formatter:
+  page_width: 240
+
+linter:
+  rules:
+    # 排版宽度已统一为 240（见上方 formatter.page_width），关闭 80 列行宽 lint 保持口径一致
+    lines_longer_than_80_chars: false

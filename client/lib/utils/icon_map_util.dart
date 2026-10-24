@@ -1742,10 +1742,8 @@ const Map<String, IconData> iconMap = {
   'signal_cellular_alt': Icons.signal_cellular_alt,
   'signal_cellular_alt_1_bar': Icons.signal_cellular_alt_1_bar,
   'signal_cellular_alt_2_bar': Icons.signal_cellular_alt_2_bar,
-  'signal_cellular_connected_no_internet_0_bar':
-      Icons.signal_cellular_connected_no_internet_0_bar,
-  'signal_cellular_connected_no_internet_4_bar':
-      Icons.signal_cellular_connected_no_internet_4_bar,
+  'signal_cellular_connected_no_internet_0_bar': Icons.signal_cellular_connected_no_internet_0_bar,
+  'signal_cellular_connected_no_internet_4_bar': Icons.signal_cellular_connected_no_internet_4_bar,
   'signal_cellular_no_sim': Icons.signal_cellular_no_sim,
   'signal_cellular_nodata': Icons.signal_cellular_nodata,
   'signal_cellular_null': Icons.signal_cellular_null,
@@ -1754,12 +1752,10 @@ const Map<String, IconData> iconMap = {
   'signal_wifi_4_bar': Icons.signal_wifi_4_bar,
   'signal_wifi_4_bar_lock': Icons.signal_wifi_4_bar_lock,
   'signal_wifi_bad': Icons.signal_wifi_bad,
-  'signal_wifi_connected_no_internet_4':
-      Icons.signal_wifi_connected_no_internet_4,
+  'signal_wifi_connected_no_internet_4': Icons.signal_wifi_connected_no_internet_4,
   'signal_wifi_off': Icons.signal_wifi_off,
   'signal_wifi_statusbar_4_bar': Icons.signal_wifi_statusbar_4_bar,
-  'signal_wifi_statusbar_connected_no_internet_4':
-      Icons.signal_wifi_statusbar_connected_no_internet_4,
+  'signal_wifi_statusbar_connected_no_internet_4': Icons.signal_wifi_statusbar_connected_no_internet_4,
   'signal_wifi_statusbar_null': Icons.signal_wifi_statusbar_null,
   'signpost': Icons.signpost,
   'sim_card': Icons.sim_card,

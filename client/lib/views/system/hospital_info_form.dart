@@ -71,9 +71,7 @@ class _HospitalInfoFormState extends State<HospitalInfoForm> {
   }
 
   Future<void> _pickImage({required bool isLogo}) async {
-    final maxSize = isLogo
-        ? OrganImageLimit.logoMaxSize
-        : OrganImageLimit.sealMaxSize;
+    final maxSize = isLogo ? OrganImageLimit.logoMaxSize : OrganImageLimit.sealMaxSize;
     final base64Str = await ImageUtil.pickAndConvert(
       maxSize: maxSize,
       onError: _showError,
@@ -227,14 +225,10 @@ class _HospitalInfoFormState extends State<HospitalInfoForm> {
                             TextFormField(
                               controller: _orgCodeCtrl,
                               style: theme.textTheme.bodyMedium,
-                              textInputAction:
-                                  TextInputAction.next, // 回车键显示"下一项"
-                              onFieldSubmitted: (_) =>
-                                  FocusScope.of(context).nextFocus(), // 回车跳下一个
+                              textInputAction: TextInputAction.next, // 回车键显示"下一项"
+                              onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(), // 回车跳下一个
                               decoration: glassDecoration(theme, '组织机构代码'),
-                              validator: (v) => (v == null || v.trim().isEmpty)
-                                  ? '请输入组织机构代码'
-                                  : null,
+                              validator: (v) => (v == null || v.trim().isEmpty) ? '请输入组织机构代码' : null,
                             ),
                             const SizedBox(height: 12),
 
@@ -242,16 +236,13 @@ class _HospitalInfoFormState extends State<HospitalInfoForm> {
                               controller: _nameCtrl,
                               style: theme.textTheme.bodyMedium,
                               textInputAction: TextInputAction.next,
-                              onFieldSubmitted: (_) =>
-                                  FocusScope.of(context).nextFocus(),
+                              onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(),
                               decoration: glassDecoration(
                                 theme,
                                 '医院名称',
                                 required: true,
                               ),
-                              validator: (v) => (v == null || v.trim().isEmpty)
-                                  ? '请输入医院中文名称'
-                                  : null,
+                              validator: (v) => (v == null || v.trim().isEmpty) ? '请输入医院中文名称' : null,
                             ),
                             const SizedBox(height: 12),
 
@@ -259,8 +250,7 @@ class _HospitalInfoFormState extends State<HospitalInfoForm> {
                               controller: _nameEnCtrl,
                               style: theme.textTheme.bodyMedium,
                               textInputAction: TextInputAction.next,
-                              onFieldSubmitted: (_) =>
-                                  FocusScope.of(context).nextFocus(),
+                              onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(),
                               decoration: glassDecoration(theme, '医院英文名称'),
                             ),
                           ],
@@ -284,9 +274,7 @@ class _HospitalInfoFormState extends State<HospitalInfoForm> {
                               required: true,
                               items: viewModel.provinces ?? const [],
                               value: viewModel.selectedProvince,
-                              loading:
-                                  viewModel.addressLoading &&
-                                  viewModel.cities == null,
+                              loading: viewModel.addressLoading && viewModel.cities == null,
                               validator: (v) => v == null ? '请选择省份' : null,
                               onChanged: _onProvinceChanged,
                             ),
@@ -329,8 +317,7 @@ class _HospitalInfoFormState extends State<HospitalInfoForm> {
                               controller: _addressCtrl,
                               style: theme.textTheme.bodyMedium,
                               textInputAction: TextInputAction.next,
-                              onFieldSubmitted: (_) =>
-                                  FocusScope.of(context).nextFocus(),
+                              onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(),
                               decoration: glassDecoration(theme, '详细地址'),
                             ),
                           ],
@@ -366,8 +353,7 @@ class _HospitalInfoFormState extends State<HospitalInfoForm> {
                       _imageField(
                         theme,
                         label: '医院Logo',
-                        subtitle:
-                            '不超过 ${OrganImageLimit.logoMaxSize}x${OrganImageLimit.logoMaxSize}',
+                        subtitle: '不超过 ${OrganImageLimit.logoMaxSize}x${OrganImageLimit.logoMaxSize}',
                         base64: _logoBase64,
                         onPick: () => _pickImage(isLogo: true),
                         onRemove: () => setState(() => _logoBase64 = null),
@@ -378,8 +364,7 @@ class _HospitalInfoFormState extends State<HospitalInfoForm> {
                       _imageField(
                         theme,
                         label: '医院印章',
-                        subtitle:
-                            '不超过 ${OrganImageLimit.sealMaxSize}x${OrganImageLimit.sealMaxSize}',
+                        subtitle: '不超过 ${OrganImageLimit.sealMaxSize}x${OrganImageLimit.sealMaxSize}',
                         base64: _sealBase64,
                         onPick: () => _pickImage(isLogo: false),
                         onRemove: () => setState(() => _sealBase64 = null),

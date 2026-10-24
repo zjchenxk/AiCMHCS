@@ -4,8 +4,7 @@ import 'package:dart_frog/dart_frog.dart';
 const _corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers':
-      'Content-Type, Authorization, X-Requested-With',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
   'Access-Control-Max-Age': '86400',
 };
 
