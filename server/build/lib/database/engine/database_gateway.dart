@@ -43,8 +43,7 @@ final class DbResult {
   List<Map<String, String?>> get rowsAsMaps => rows
       .map(
         (row) => {
-          for (var i = 0; i < columns.length && i < row.length; i++)
-            columns[i]: row[i],
+          for (var i = 0; i < columns.length && i < row.length; i++) columns[i]: row[i],
         },
       )
       .toList(growable: false);

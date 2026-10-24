@@ -8,15 +8,20 @@ import 'package:server/services/auth_service.dart';
 import 'package:server/utils/field_cipher.dart';
 import 'package:test/test.dart';
 
+import '../support/test_divisions.dart';
+
 void main() {
   late SqliteGateway db;
   late AuthService auth;
+  late String divisionsDir;
   // v2 起迁移含 dataFix（存量明文加密回填），需注入密钥。
   final cipher = FieldCipher.fromMasterKeyBase64(
     base64Encode(utf8.encode('0123456789abcdef0123456789abcdef')),
   );
 
   setUpAll(() async {
+    // 全量 migrate 含 v3 seed，读注入的小份数据文件。
+    divisionsDir = setUpTestDivisionsCsv();
     db = await SqliteGateway.start(':memory:');
     await SchemaMigrator(db, fieldCipher: cipher).migrate();
     // 联系电话经 FieldCipher 加密写入（与 seed/后端写入口径一致）。
@@ -36,7 +41,10 @@ void main() {
     auth = AuthService(db, cipher);
   });
 
-  tearDownAll(() => db.close());
+  tearDownAll(() {
+    db.close();
+    clearTestDivisionsCsv(divisionsDir);
+  });
 
   test('登录成功：返回会话（手机号已解密）、写审计、更新最近登录时间', () async {
     final session = await auth.login('admin', 'Admin@123', ip: '127.0.0.1');

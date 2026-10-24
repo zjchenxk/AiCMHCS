@@ -16,9 +16,7 @@ Future<Response> onRequest(RequestContext context) async {
   }
 
   final authorization = context.request.headers['authorization'];
-  final token = authorization?.startsWith('Bearer ') ?? false
-      ? authorization!.substring('Bearer '.length).trim()
-      : null;
+  final token = authorization?.startsWith('Bearer ') ?? false ? authorization!.substring('Bearer '.length).trim() : null;
   if (token == null || token.isEmpty) {
     return _error(401, 40103, '缺少访问令牌（Authorization: Bearer <token>）');
   }

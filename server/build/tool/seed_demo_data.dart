@@ -26,9 +26,7 @@ Future<void> main() async {
   final cipher = await FieldCipher.fromConfig(config);
   try {
     final applied = await SchemaMigrator(db, fieldCipher: cipher).migrate();
-    final migrated = applied.isEmpty
-        ? '已是最新'
-        : '已应用 ${applied.map((m) => 'v${m.version}').join('、')}';
+    final migrated = applied.isEmpty ? '已是最新' : '已应用 ${applied.map((m) => 'v${m.version}').join('、')}';
     print('结构迁移：$migrated');
     for (final (userCode, password, userName, role, phone) in demoUsers) {
       final exists = await db.query(

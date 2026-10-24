@@ -117,20 +117,12 @@ final class Dpi {
 
   // ---- 函数绑定（native 签名严格对应 DPI.h 声明）----
 
-  late final int Function(Pointer<Pointer<Void>>) _allocEnv = lib
-      .lookupFunction<
-        Int16 Function(Pointer<Pointer<Void>>),
-        int Function(Pointer<Pointer<Void>>)
-      >('dpi_alloc_env');
+  late final int Function(Pointer<Pointer<Void>>) _allocEnv = lib.lookupFunction<Int16 Function(Pointer<Pointer<Void>>), int Function(Pointer<Pointer<Void>>)>('dpi_alloc_env');
 
-  late final int Function(Pointer<Void>, Pointer<Pointer<Void>>) _allocCon = lib
-      .lookupFunction<
-        Int16 Function(Pointer<Void>, Pointer<Pointer<Void>>),
-        int Function(Pointer<Void>, Pointer<Pointer<Void>>)
-      >('dpi_alloc_con');
+  late final int Function(Pointer<Void>, Pointer<Pointer<Void>>) _allocCon = lib.lookupFunction<Int16 Function(Pointer<Void>, Pointer<Pointer<Void>>), int Function(Pointer<Void>, Pointer<Pointer<Void>>)>('dpi_alloc_con');
 
-  late final int Function(Pointer<Void>, Pointer<Pointer<Void>>) _allocStmt =
-      lib.lookupFunction<
+  late final int Function(Pointer<Void>, Pointer<Pointer<Void>>) _allocStmt = lib
+      .lookupFunction<
         Int16 Function(Pointer<Void>, Pointer<Pointer<Void>>),
         int Function(
           Pointer<Void>,
@@ -138,29 +130,13 @@ final class Dpi {
         )
       >('dpi_alloc_stmt');
 
-  late final int Function(Pointer<Void>) _freeEnv = lib
-      .lookupFunction<
-        Int16 Function(Pointer<Void>),
-        int Function(Pointer<Void>)
-      >('dpi_free_env');
+  late final int Function(Pointer<Void>) _freeEnv = lib.lookupFunction<Int16 Function(Pointer<Void>), int Function(Pointer<Void>)>('dpi_free_env');
 
-  late final int Function(Pointer<Void>) _freeCon = lib
-      .lookupFunction<
-        Int16 Function(Pointer<Void>),
-        int Function(Pointer<Void>)
-      >('dpi_free_con');
+  late final int Function(Pointer<Void>) _freeCon = lib.lookupFunction<Int16 Function(Pointer<Void>), int Function(Pointer<Void>)>('dpi_free_con');
 
-  late final int Function(Pointer<Void>) _freeStmt = lib
-      .lookupFunction<
-        Int16 Function(Pointer<Void>),
-        int Function(Pointer<Void>)
-      >('dpi_free_stmt');
+  late final int Function(Pointer<Void>) _freeStmt = lib.lookupFunction<Int16 Function(Pointer<Void>), int Function(Pointer<Void>)>('dpi_free_stmt');
 
-  late final int Function(Pointer<Void>) _closeCursor = lib
-      .lookupFunction<
-        Int16 Function(Pointer<Void>),
-        int Function(Pointer<Void>)
-      >('dpi_close_cursor');
+  late final int Function(Pointer<Void>) _closeCursor = lib.lookupFunction<Int16 Function(Pointer<Void>), int Function(Pointer<Void>)>('dpi_close_cursor');
 
   late final int Function(
     Pointer<Void>,
@@ -184,41 +160,17 @@ final class Dpi {
         )
       >('dpi_login');
 
-  late final int Function(Pointer<Void>) _logout = lib
-      .lookupFunction<
-        Int16 Function(Pointer<Void>),
-        int Function(Pointer<Void>)
-      >('dpi_logout');
+  late final int Function(Pointer<Void>) _logout = lib.lookupFunction<Int16 Function(Pointer<Void>), int Function(Pointer<Void>)>('dpi_logout');
 
-  late final int Function(Pointer<Void>) _commit = lib
-      .lookupFunction<
-        Int16 Function(Pointer<Void>),
-        int Function(Pointer<Void>)
-      >('dpi_commit');
+  late final int Function(Pointer<Void>) _commit = lib.lookupFunction<Int16 Function(Pointer<Void>), int Function(Pointer<Void>)>('dpi_commit');
 
-  late final int Function(Pointer<Void>) _rollback = lib
-      .lookupFunction<
-        Int16 Function(Pointer<Void>),
-        int Function(Pointer<Void>)
-      >('dpi_rollback');
+  late final int Function(Pointer<Void>) _rollback = lib.lookupFunction<Int16 Function(Pointer<Void>), int Function(Pointer<Void>)>('dpi_rollback');
 
-  late final int Function(Pointer<Void>, Pointer<Uint8>) _execDirect = lib
-      .lookupFunction<
-        Int16 Function(Pointer<Void>, Pointer<Uint8>),
-        int Function(Pointer<Void>, Pointer<Uint8>)
-      >('dpi_exec_direct');
+  late final int Function(Pointer<Void>, Pointer<Uint8>) _execDirect = lib.lookupFunction<Int16 Function(Pointer<Void>, Pointer<Uint8>), int Function(Pointer<Void>, Pointer<Uint8>)>('dpi_exec_direct');
 
-  late final int Function(Pointer<Void>, Pointer<Uint8>, int) _execDirectW = lib
-      .lookupFunction<
-        Int16 Function(Pointer<Void>, Pointer<Uint8>, Int32),
-        int Function(Pointer<Void>, Pointer<Uint8>, int)
-      >('dpi_exec_directW');
+  late final int Function(Pointer<Void>, Pointer<Uint8>, int) _execDirectW = lib.lookupFunction<Int16 Function(Pointer<Void>, Pointer<Uint8>, Int32), int Function(Pointer<Void>, Pointer<Uint8>, int)>('dpi_exec_directW');
 
-  late final int Function(Pointer<Void>, Pointer<Uint8>, int) _prepareW = lib
-      .lookupFunction<
-        Int16 Function(Pointer<Void>, Pointer<Uint8>, Int32),
-        int Function(Pointer<Void>, Pointer<Uint8>, int)
-      >('dpi_prepareW');
+  late final int Function(Pointer<Void>, Pointer<Uint8>, int) _prepareW = lib.lookupFunction<Int16 Function(Pointer<Void>, Pointer<Uint8>, Int32), int Function(Pointer<Void>, Pointer<Uint8>, int)>('dpi_prepareW');
 
   late final int Function(
     Pointer<Void>,
@@ -260,23 +212,11 @@ final class Dpi {
         )
       >('dpi_bind_param');
 
-  late final int Function(Pointer<Void>) _exec = lib
-      .lookupFunction<
-        Int16 Function(Pointer<Void>),
-        int Function(Pointer<Void>)
-      >('dpi_exec');
+  late final int Function(Pointer<Void>) _exec = lib.lookupFunction<Int16 Function(Pointer<Void>), int Function(Pointer<Void>)>('dpi_exec');
 
-  late final int Function(Pointer<Void>, Pointer<Int16>) _numberColumns = lib
-      .lookupFunction<
-        Int16 Function(Pointer<Void>, Pointer<Int16>),
-        int Function(Pointer<Void>, Pointer<Int16>)
-      >('dpi_number_columns');
+  late final int Function(Pointer<Void>, Pointer<Int16>) _numberColumns = lib.lookupFunction<Int16 Function(Pointer<Void>, Pointer<Int16>), int Function(Pointer<Void>, Pointer<Int16>)>('dpi_number_columns');
 
-  late final int Function(Pointer<Void>, Pointer<Int64>) _rowCount = lib
-      .lookupFunction<
-        Int16 Function(Pointer<Void>, Pointer<Int64>),
-        int Function(Pointer<Void>, Pointer<Int64>)
-      >('dpi_row_count');
+  late final int Function(Pointer<Void>, Pointer<Int64>) _rowCount = lib.lookupFunction<Int16 Function(Pointer<Void>, Pointer<Int64>), int Function(Pointer<Void>, Pointer<Int64>)>('dpi_row_count');
 
   late final int Function(
     Pointer<Void>,
@@ -315,11 +255,7 @@ final class Dpi {
         )
       >('dpi_desc_columnW');
 
-  late final int Function(Pointer<Void>, Pointer<Uint64>) _fetch = lib
-      .lookupFunction<
-        Int16 Function(Pointer<Void>, Pointer<Uint64>),
-        int Function(Pointer<Void>, Pointer<Uint64>)
-      >('dpi_fetch');
+  late final int Function(Pointer<Void>, Pointer<Uint64>) _fetch = lib.lookupFunction<Int16 Function(Pointer<Void>, Pointer<Uint64>), int Function(Pointer<Void>, Pointer<Uint64>)>('dpi_fetch');
 
   late final int Function(
     Pointer<Void>,
@@ -385,10 +321,8 @@ final class Dpi {
   // ---- 便捷封装 ----
 
   int allocEnv(Pointer<Pointer<Void>> henv) => _allocEnv(henv);
-  int allocCon(Pointer<Void> henv, Pointer<Pointer<Void>> hcon) =>
-      _allocCon(henv, hcon);
-  int allocStmt(Pointer<Void> hcon, Pointer<Pointer<Void>> hstmt) =>
-      _allocStmt(hcon, hstmt);
+  int allocCon(Pointer<Void> henv, Pointer<Pointer<Void>> hcon) => _allocCon(henv, hcon);
+  int allocStmt(Pointer<Void> hcon, Pointer<Pointer<Void>> hstmt) => _allocStmt(hcon, hstmt);
   int freeEnv(Pointer<Void> henv) => _freeEnv(henv);
   int freeCon(Pointer<Void> hcon) => _freeCon(hcon);
   int freeStmt(Pointer<Void> hstmt) => _freeStmt(hstmt);
@@ -462,10 +396,8 @@ final class Dpi {
   );
 
   int exec(Pointer<Void> hstmt) => _exec(hstmt);
-  int numberColumns(Pointer<Void> hstmt, Pointer<Int16> colCount) =>
-      _numberColumns(hstmt, colCount);
-  int rowCount(Pointer<Void> hstmt, Pointer<Int64> rowCount) =>
-      _rowCount(hstmt, rowCount);
+  int numberColumns(Pointer<Void> hstmt, Pointer<Int16> colCount) => _numberColumns(hstmt, colCount);
+  int rowCount(Pointer<Void> hstmt, Pointer<Int64> rowCount) => _rowCount(hstmt, rowCount);
 
   int descColumnW(
     Pointer<Void> hstmt,
@@ -489,8 +421,7 @@ final class Dpi {
     nullable,
   );
 
-  int fetch(Pointer<Void> hstmt, Pointer<Uint64> rowNum) =>
-      _fetch(hstmt, rowNum);
+  int fetch(Pointer<Void> hstmt, Pointer<Uint64> rowNum) => _fetch(hstmt, rowNum);
 
   int getDataW(
     Pointer<Void> hstmt,

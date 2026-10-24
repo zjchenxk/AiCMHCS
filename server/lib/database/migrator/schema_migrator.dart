@@ -54,6 +54,10 @@ class SchemaMigrator {
       if (dataFix != null) {
         await dataFix(_db, _fieldCipher!);
       }
+      final seed = migration.seed;
+      if (seed != null) {
+        await seed(_db);
+      }
       // 时间列由 Dart 侧生成后参数绑定（两库通用，见 formatTimestamp）。
       await _db.execute(
         'INSERT INTO $versionTable (VERSION, DESCRIPTION, APPLIED_AT) '

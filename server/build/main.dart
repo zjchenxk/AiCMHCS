@@ -26,20 +26,14 @@ Future<HttpServer> run(Handler handler, InternetAddress ip, int port) async {
 
   final auth = AuthService(db, cipher);
 
-  final app = handler
-      .use(provider<DatabaseGateway>((_) => db))
-      .use(provider<FieldCipher>((_) => cipher))
-      .use(provider<AuthService>((_) => auth));
+  final app = handler.use(provider<DatabaseGateway>((_) => db)).use(provider<FieldCipher>((_) => cipher)).use(provider<AuthService>((_) => auth));
 
   final server = await serve(app, ip, port);
   final dbDesc = switch (db.dialect) {
-    DbDialect.dm =>
-      '达梦 DM8 ${config.dbHost}:${config.dbPort}（用户 ${config.dbUser}）',
+    DbDialect.dm => '达梦 DM8 ${config.dbHost}:${config.dbPort}（用户 ${config.dbUser}）',
     DbDialect.sqlite => 'SQLite（${config.dbFile}）',
   };
-  final migrated = applied.isEmpty
-      ? ''
-      : '，已应用结构迁移 ${applied.map((m) => 'v${m.version}').join('、')}';
+  final migrated = applied.isEmpty ? '' : '，已应用结构迁移 ${applied.map((m) => 'v${m.version}').join('、')}';
   final keyWarning = cipher.keyFileWasGenerated
       ? '；警告：字段加密密钥文件为本次自动生成（${config.fieldKeyFile}），'
             '请单独备份，丢失将无法解密存量数据'

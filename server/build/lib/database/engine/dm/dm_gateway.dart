@@ -42,12 +42,10 @@ class DmGateway extends WorkerGateway {
   DbDialect get dialect => DbDialect.dm;
 
   @override
-  (String, List<Object?>) rewrite(String sql, List<Object?> params) =>
-      rewriteDmParams(sql, params);
+  (String, List<Object?>) rewrite(String sql, List<Object?> params) => rewriteDmParams(sql, params);
 
   @override
-  Exception deserializeError(int? code, String message) =>
-      DmException(code ?? -1, message);
+  Exception deserializeError(int? code, String message) => DmException(code ?? -1, message);
 
   @override
   void onClosed() {

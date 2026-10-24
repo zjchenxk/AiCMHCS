@@ -10,11 +10,16 @@ import 'package:server/database/migrator/schema_migrator.dart';
 import 'package:server/utils/field_cipher.dart';
 import 'package:test/test.dart';
 
+import '../support/test_divisions.dart';
+
 void main() {
   late SqliteGateway db;
   late FieldCipher cipher;
+  late String divisionsDir;
 
   setUp(() async {
+    // 全量 migrate 会连带应用 v3（seed 读注入的小份数据文件）。
+    divisionsDir = setUpTestDivisionsCsv();
     db = await SqliteGateway.start(':memory:');
     cipher = FieldCipher.fromMasterKeyBase64(
       base64Encode(utf8.encode('0123456789abcdef0123456789abcdef')),
@@ -26,7 +31,10 @@ void main() {
     ).migrate();
   });
 
-  tearDown(() => db.close());
+  tearDown(() {
+    db.close();
+    clearTestDivisionsCsv(divisionsDir);
+  });
 
   Future<void> insertUser(String userCode, String? phone) => db.execute(
     'INSERT INTO SYS_USER '
@@ -39,7 +47,7 @@ void main() {
     await insertUser('legacy', '13800000001');
 
     final applied = await SchemaMigrator(db, fieldCipher: cipher).migrate();
-    expect(applied.map((m) => m.version), [2]);
+    expect(applied.map((m) => m.version), [2, 3]);
 
     final row = (await db.query(
       'SELECT PHONE, PHONE_HMAC FROM SYS_USER WHERE USER_CODE = ?',

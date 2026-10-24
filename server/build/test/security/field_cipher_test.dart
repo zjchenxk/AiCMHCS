@@ -13,8 +13,7 @@ const phone = '13800000001';
 /// 32 字节测试主密钥原文（base64 由测试内即时编码）。
 const rawKey = '0123456789abcdef0123456789abcdef';
 
-FieldCipher cipherOf(String raw) =>
-    FieldCipher.fromMasterKeyBase64(base64Encode(utf8.encode(raw)));
+FieldCipher cipherOf(String raw) => FieldCipher.fromMasterKeyBase64(base64Encode(utf8.encode(raw)));
 
 void main() {
   final cipher = cipherOf('0123456789abcdef0123456789abcdef');
@@ -191,8 +190,7 @@ void main() {
     test('fromConfig：均未配置时自动生成密钥文件（含子目录）', () async {
       final dir = await Directory.systemTemp.createTemp('aicmhcs_field');
       addTearDown(() => dir.delete(recursive: true));
-      final keyFile =
-          '${dir.path}${Platform.pathSeparator}sub${Platform.pathSeparator}field.key';
+      final keyFile = '${dir.path}${Platform.pathSeparator}sub${Platform.pathSeparator}field.key';
       final config = AppConfig(
         dbDriver: 'sqlite',
         dbHost: '',

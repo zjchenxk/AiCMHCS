@@ -70,13 +70,10 @@ class FieldCipher {
     }
     final keyBase64 = SecurePayload.generateSessionKey();
     final cipher = FieldCipher.fromMasterKeyBase64(keyBase64);
-    return File(config.fieldKeyFile).parent
-        .create(recursive: true)
-        .then((_) => file.writeAsString(keyBase64))
-        .then((_) {
-          cipher.keyFileWasGenerated = true;
-          return cipher;
-        });
+    return File(config.fieldKeyFile).parent.create(recursive: true).then((_) => file.writeAsString(keyBase64)).then((_) {
+      cipher.keyFileWasGenerated = true;
+      return cipher;
+    });
   }
 
   /// 字段用途：SYS_USER.PHONE（联系电话）。

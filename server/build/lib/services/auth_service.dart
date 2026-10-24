@@ -66,20 +66,18 @@ class AuthService {
 
   /// 从数据库行解析登录用户（各列均以字符串返回，数值按需转换；
   /// PHONE 为密文，经 FieldCipher 解密，不带版本前缀的存量明文原样返回）。
-  Future<LoginUser> _loginUserFromRow(Map<String, String?> row) async =>
-      LoginUser(
-        id: int.parse(row['ID'] ?? '0'),
-        userCode: row['USER_CODE'] ?? '',
-        userName: row['USER_NAME'] ?? '',
-        roleCode: row['ROLE_CODE'] ?? '',
-        phone: await _cipher.open(FieldCipher.phonePurpose, row['PHONE']),
-        lastLoginAt: row['LAST_LOGIN_AT'],
-      );
+  Future<LoginUser> _loginUserFromRow(Map<String, String?> row) async => LoginUser(
+    id: int.parse(row['ID'] ?? '0'),
+    userCode: row['USER_CODE'] ?? '',
+    userName: row['USER_NAME'] ?? '',
+    roleCode: row['ROLE_CODE'] ?? '',
+    phone: await _cipher.open(FieldCipher.phonePurpose, row['PHONE']),
+    lastLoginAt: row['LAST_LOGIN_AT'],
+  );
 
   /// 口令散列算法：sha256(salt + password) 的十六进制。
   /// 库中存储格式：`salt:hash`（salt 为 16 字节随机数的十六进制）。
-  static String hashPassword(String saltHex, String password) =>
-      sha256.convert(utf8.encode('$saltHex$password')).toString();
+  static String hashPassword(String saltHex, String password) => sha256.convert(utf8.encode('$saltHex$password')).toString();
 
   /// 生成随机盐（16 字节的十六进制）。
   static String makeSalt() => _randomHex(16);
@@ -169,8 +167,7 @@ class AuthService {
   }
 
   /// 校验令牌并滑动续期。
-  Future<LoginUser> verify(String token) async =>
-      (await verifySession(token)).user;
+  Future<LoginUser> verify(String token) async => (await verifySession(token)).user;
 
   /// 登出：删除会话。
   void logout(String token) => _sessions.remove(token);

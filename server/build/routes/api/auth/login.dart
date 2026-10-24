@@ -27,17 +27,11 @@ Future<Response> onRequest(RequestContext context) async {
 
   final userCode = body['usercode'];
   final password = body['password'];
-  if (userCode is! String ||
-      password is! String ||
-      userCode.trim().isEmpty ||
-      password.isEmpty) {
+  if (userCode is! String || password is! String || userCode.trim().isEmpty || password.isEmpty) {
     return _error(400, 40001, '用户名和密码不能为空');
   }
 
-  final ip = context.request.headers['x-forwarded-for']
-      ?.split(',')
-      .first
-      .trim();
+  final ip = context.request.headers['x-forwarded-for']?.split(',').first.trim();
 
   final auth = context.read<AuthService>();
   try {

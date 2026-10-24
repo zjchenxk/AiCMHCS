@@ -37,9 +37,7 @@ class SchemaMigrator {
       'SELECT VERSION FROM $versionTable',
     )).rows.map((row) => int.parse(row.first!)).toSet();
 
-    final pending = _migrations
-        .where((m) => !applied.contains(m.version))
-        .toList(growable: false);
+    final pending = _migrations.where((m) => !applied.contains(m.version)).toList(growable: false);
     // 订正需要密钥且不可中断重来（DDL 已自动提交），执行任何语句前先
     // 校验注入，避免出现「结构已变更、数据未订正」的半途状态。
     if (pending.any((m) => m.dataFix != null) && _fieldCipher == null) {
@@ -55,6 +53,10 @@ class SchemaMigrator {
       final dataFix = migration.dataFix;
       if (dataFix != null) {
         await dataFix(_db, _fieldCipher!);
+      }
+      final seed = migration.seed;
+      if (seed != null) {
+        await seed(_db);
       }
       // 时间列由 Dart 侧生成后参数绑定（两库通用，见 formatTimestamp）。
       await _db.execute(
@@ -107,10 +109,8 @@ CREATE TABLE $versionTable (
   /// 判断表是否存在（达梦查数据字典视图，SQLite 查 sqlite_master）。
   Future<bool> _tableExists(String name) async {
     final sql = switch (_db.dialect) {
-      DbDialect.dm =>
-        'SELECT COUNT(*) AS CNT FROM USER_TABLES WHERE TABLE_NAME = ?',
-      DbDialect.sqlite =>
-        "SELECT COUNT(*) AS CNT FROM sqlite_master WHERE type = 'table' AND name = ?",
+      DbDialect.dm => 'SELECT COUNT(*) AS CNT FROM USER_TABLES WHERE TABLE_NAME = ?',
+      DbDialect.sqlite => "SELECT COUNT(*) AS CNT FROM sqlite_master WHERE type = 'table' AND name = ?",
     };
     final result = await _db.query(sql, [name]);
     return int.parse(result.rowsAsMaps.first['CNT'] ?? '0') > 0;

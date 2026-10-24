@@ -40,15 +40,13 @@ class SqliteGateway extends WorkerGateway {
   }
 
   /// 返回缓存键；`:memory:` 不缓存返回 null。
-  static String? _cachedByPath(String path) =>
-      path.toLowerCase() == ':memory:' ? null : File(path).absolute.path;
+  static String? _cachedByPath(String path) => path.toLowerCase() == ':memory:' ? null : File(path).absolute.path;
 
   @override
   DbDialect get dialect => DbDialect.sqlite;
 
   @override
-  Exception deserializeError(int? code, String message) =>
-      DbException(code ?? -1, message);
+  Exception deserializeError(int? code, String message) => DbException(code ?? -1, message);
 
   @override
   void onClosed() {

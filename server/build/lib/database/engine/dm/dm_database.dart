@@ -357,9 +357,7 @@ final class DmConnection {
   void _check(int rc, Pointer<Void>? stmt, String what) {
     if (rc == Dpi.dsqlSuccess || rc == Dpi.dsqlSuccessWithInfo) return;
     // 优先语句级诊断；stmt 为空表示连接级操作（提交/回滚）。
-    final diag = stmt != null
-        ? _dpi.diagW(Dpi.dsqlHandleStmt, stmt)
-        : _dpi.diagW(Dpi.dsqlHandleDbc, _hcon);
+    final diag = stmt != null ? _dpi.diagW(Dpi.dsqlHandleStmt, stmt) : _dpi.diagW(Dpi.dsqlHandleDbc, _hcon);
     throw DmException(rc, '$what: $diag');
   }
 }
