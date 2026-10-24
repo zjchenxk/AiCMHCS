@@ -1,9 +1,8 @@
 import 'dart:isolate';
-
-import 'package:server/db/database_gateway.dart';
-import 'package:server/db/worker_gateway.dart';
-import 'package:server/dm/dm_database.dart';
-import 'package:server/dm/dm_param_rewrite.dart';
+import 'package:server/database/engine/database_gateway.dart';
+import 'package:server/database/engine/dm/dm_database.dart';
+import 'package:server/database/engine/dm/dm_param_rewrite.dart';
+import 'package:server/database/engine/worker_gateway.dart';
 
 /// 达梦数据库网关。
 ///
@@ -34,7 +33,7 @@ class DmGateway extends WorkerGateway {
         'password': password,
         if (dmHome != null) 'dmHome': dmHome,
       },
-      build: (worker, replies, errors) => DmGateway._(worker, replies, errors),
+      build: DmGateway._,
     );
     return _cached = gateway;
   }
@@ -110,7 +109,7 @@ Future<Object?> _dmExecuteOp(
 
   final sql = msg['sql'] as String?;
   final params = (msg['params'] as List?)?.cast<Object?>() ?? const [];
-  switch (msg['op'] as String) {
+  switch (msg['op']! as String) {
     case 'ping':
       try {
         ref.con.ping();

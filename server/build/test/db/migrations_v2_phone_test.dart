@@ -3,10 +3,10 @@
 // 密钥时执行任何语句前即报错。
 import 'dart:convert';
 
-import 'package:server/db/migrations.dart';
-import 'package:server/db/schema_migrator.dart';
-import 'package:server/db/sqlite_gateway.dart';
-import 'package:server/security/field_cipher.dart';
+import 'package:server/database/engine/sqlite/sqlite_gateway.dart';
+import 'package:server/database/migrator/migrations.dart';
+import 'package:server/database/migrator/schema_migrator.dart';
+import 'package:server/utils/field_cipher.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -106,7 +106,7 @@ void main() {
     );
     // 加列与索引均未执行（DDL 尚未发生，不会留下半途状态）。
     final idx = await db.query(
-      "SELECT COUNT(*) AS CNT FROM sqlite_master "
+      'SELECT COUNT(*) AS CNT FROM sqlite_master '
       "WHERE name = 'IDX_SYS_USER_PHONE_HMAC'",
     );
     expect(idx.rowsAsMaps.first['CNT'], '0');

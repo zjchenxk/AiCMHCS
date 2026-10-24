@@ -5,7 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:server/app_config.dart';
-import 'package:server/security/field_cipher.dart';
+import 'package:server/utils/field_cipher.dart';
 import 'package:test/test.dart';
 
 const phone = '13800000001';

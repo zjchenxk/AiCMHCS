@@ -1,19 +1,20 @@
 import 'dart:convert';
 import 'dart:math';
-
 import 'package:common/model.dart';
 import 'package:common/utils/security_util.dart';
 import 'package:crypto/crypto.dart';
-
-import 'package:server/db/database_gateway.dart';
-import 'package:server/security/field_cipher.dart';
+import 'package:server/database/engine/database_gateway.dart';
+import 'package:server/utils/field_cipher.dart';
 
 /// 认证类业务异常：httpStatus / code / message 直接映射到 HTTP 响应。
 final class AuthException implements Exception {
+  /// 构造函数：注入 HTTP 状态码、业务错误码、错误信息。
   const AuthException(this.httpStatus, this.code, this.message);
-
+  /// HTTP 状态码（401 / 403 / 400 等）。
   final int httpStatus;
+  /// 业务错误码（40101 / 40301 / 40001 等）。
   final int code;
+  /// 错误信息（可直接返回给前端）。
   final String message;
 
   @override
@@ -22,11 +23,16 @@ final class AuthException implements Exception {
 
 /// 登录会话（内存版；重启后失效，生产环境应落库或改用 Redis）。
 final class LoginSession {
+  /// 构造函数：注入令牌、会话加密密钥、登录用户、过期时间。
   LoginSession(this.token, this.sessionKey, this.user, this.expiresAt);
 
+  /// 令牌（base64 的 32 字节随机数，随登录下发，与会话加密密钥同生命周期）。
   final String token;
-  final String sessionKey; //会话加密密钥（base64 的 32 字节随机数，随登录下发，与 token 同生命周期）
+  /// 会话加密密钥（base64 的 32 字节随机数，随登录下发，与 token 同生命周期）。
+  final String sessionKey; 
+  /// 登录用户（含解密后的手机号）。
   final LoginUser user;
+  /// 会话过期时间（滑动续期）。
   DateTime expiresAt;
 }
 
@@ -34,6 +40,7 @@ final class LoginSession {
 /// 经 DatabaseGateway 访问数据库，达梦与 SQLite 通用（含中文的参数由
 /// 达梦网关自动内联，业务层直接写参数化 SQL）。
 class AuthService {
+  /// 构造函数：注入数据库网关、字段加密器、会话过期时长。
   AuthService(
     this._db,
     this._cipher, {
@@ -46,6 +53,7 @@ class AuthService {
   /// 中不得输出解密后的明文）。
   final FieldCipher _cipher;
 
+  /// 会话过期时长：登录后滑动续期，默认 2 小时。
   final Duration sessionTtl;
 
   final _sessions = <String, LoginSession>{};
@@ -67,13 +75,16 @@ class AuthService {
   static String hashPassword(String saltHex, String password) =>
       sha256.convert(utf8.encode('$saltHex$password')).toString();
 
+  /// 生成随机盐（16 字节的十六进制）。
   static String makeSalt() => _randomHex(16);
 
+  /// 生成存储口令：salt + hash，库中存储格式为 `salt:hash`。
   static String makeStoredPassword(String password) {
     final salt = makeSalt();
     return '$salt:${hashPassword(salt, password)}';
   }
 
+  /// 校验存储口令：salt + hash，库中存储格式为 `salt:hash`。
   static bool verifyStoredPassword(String stored, String password) {
     final parts = stored.split(':');
     if (parts.length != 2) return false;
@@ -155,6 +166,7 @@ class AuthService {
   Future<LoginUser> verify(String token) async =>
       (await verifySession(token)).user;
 
+  /// 登出：删除会话。
   void logout(String token) => _sessions.remove(token);
 
   /// 写登录审计（含中文的失败原因经参数传入，由达梦网关自动内联；

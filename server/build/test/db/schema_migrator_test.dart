@@ -1,9 +1,8 @@
 import 'dart:convert';
-
-import 'package:server/db/migration.dart';
-import 'package:server/db/schema_migrator.dart';
-import 'package:server/db/sqlite_gateway.dart';
-import 'package:server/security/field_cipher.dart';
+import 'package:server/database/engine/sqlite/sqlite_gateway.dart';
+import 'package:server/database/migrator/migration.dart';
+import 'package:server/database/migrator/schema_migrator.dart';
+import 'package:server/utils/field_cipher.dart';
 import 'package:test/test.dart';
 
 void main() {

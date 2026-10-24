@@ -1,7 +1,7 @@
-import 'package:server/db/database_gateway.dart';
-import 'package:server/db/migration.dart';
-import 'package:server/db/migrations.dart';
-import 'package:server/security/field_cipher.dart';
+import 'package:server/database/engine/database_gateway.dart';
+import 'package:server/database/migrator/migration.dart';
+import 'package:server/database/migrator/migrations.dart';
+import 'package:server/utils/field_cipher.dart';
 
 /// 结构迁移执行器：确保库结构与迁移注册表（默认 [dbMigrations]）的
 /// 最新版本一致。
@@ -10,6 +10,7 @@ import 'package:server/security/field_cipher.dart';
 /// 单条迁移内的语句逐条自动提交（达梦 DDL 隐式提交，无法整体回滚），
 /// 失败时直接抛错中止启动，修复后重新执行会继续完成剩余版本。
 class SchemaMigrator {
+  /// 构造函数：注入数据库网关、迁移注册表、可选字段加密器。
   SchemaMigrator(
     this._db, {
     List<DbMigration> migrations = dbMigrations,
@@ -78,7 +79,7 @@ class SchemaMigrator {
     if (await _tableExists('SYS_USER')) {
       throw StateError(
         '检测到未纳入迁移管理的存量结构（SYS_USER 已存在但没有 $versionTable '
-        '版本表）。达梦库请执行 ./tools/init_db.sh 重建应用模式；'
+        '版本表）。达梦库请执行./tools/init_db.sh重建应用模式；'
         '单机版请删除数据文件后重试。',
       );
     }

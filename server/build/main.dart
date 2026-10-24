@@ -2,12 +2,12 @@ import 'dart:io';
 
 import 'package:dart_frog/dart_frog.dart';
 import 'package:server/app_config.dart';
-import 'package:server/db/database_gateway.dart';
-import 'package:server/db/db_factory.dart';
-import 'package:server/db/migration.dart';
-import 'package:server/db/schema_migrator.dart';
-import 'package:server/security/field_cipher.dart';
+import 'package:server/database/engine/database_gateway.dart';
+import 'package:server/database/engine/db_factory.dart';
+import 'package:server/database/migrator/migration.dart';
+import 'package:server/database/migrator/schema_migrator.dart';
 import 'package:server/services/auth_service.dart';
+import 'package:server/utils/field_cipher.dart';
 
 /// dart_frog 自定义入口：按配置打开数据库网关（达梦 / SQLite）、
 /// 解析字段加密密钥、对齐结构迁移，再把网关与认证服务注入中间件管线。

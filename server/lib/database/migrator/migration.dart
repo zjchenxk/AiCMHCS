@@ -1,5 +1,5 @@
-import 'package:server/db/database_gateway.dart';
-import 'package:server/security/field_cipher.dart';
+import 'package:server/database/engine/database_gateway.dart';
+import 'package:server/utils/field_cipher.dart';
 
 /// 数据订正回调：迁移语句全部执行成功后、写版本记录前运行。
 ///
@@ -14,6 +14,7 @@ typedef MigrationDataFix =
 /// COLUMN），[dm] / [sqlite] 为方言专属语句（建表类型、COMMENT ON 等），
 /// 执行顺序为 common → 对应方言组。
 final class DbMigration {
+  /// 构造函数：版本号、描述、语句组、可选数据订正。
   const DbMigration({
     required this.version,
     required this.description,

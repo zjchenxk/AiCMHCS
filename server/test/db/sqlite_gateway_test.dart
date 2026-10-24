@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:server/db/database_gateway.dart';
-import 'package:server/db/sqlite_gateway.dart';
+import 'package:server/database/engine/database_gateway.dart';
+import 'package:server/database/engine/sqlite/sqlite_gateway.dart';
 import 'package:test/test.dart';
 
 void main() {

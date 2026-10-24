@@ -1,18 +1,18 @@
 import 'dart:convert';
 import 'dart:ffi';
-
 import 'package:ffi/ffi.dart';
-import 'package:server/db/database_gateway.dart' show DbResult;
-
-import 'package:server/dm/dm_gateway.dart' show DmGateway;
-
-import 'package:server/dm/dpi.dart';
+import 'package:server/database/engine/database_gateway.dart' show DbResult;
+import 'package:server/database/engine/dm/dm_gateway.dart' show DmGateway;
+import 'package:server/database/engine/dm/dpi.dart';
 
 /// 达梦数据库异常，code 为达梦错误码，message 为服务器诊断消息。
 final class DmException implements Exception {
+  /// 构造函数。
   DmException(this.code, this.message);
 
+  /// 达梦错误码。
   final int code;
+  /// 服务器诊断消息。
   final String message;
 
   @override
@@ -77,13 +77,15 @@ final class DmConnection {
       if (envAllocated) dpi.freeEnv(henv.value);
       rethrow;
     } finally {
-      calloc.free(henv);
-      calloc.free(hcon);
+      calloc..free(henv)
+      ..free(hcon);
     }
   }
 
+  /// 是否已关闭。
   bool get isClosed => _closed;
 
+  /// 关闭连接。
   void close() {
     if (_closed) return;
     _closed = true;
@@ -300,12 +302,12 @@ final class DmConnection {
         );
       }
     } finally {
-      calloc.free(nameBuf);
-      calloc.free(nameLen);
-      calloc.free(sqlType);
-      calloc.free(colSize);
-      calloc.free(decDigits);
-      calloc.free(nullable);
+      calloc..free(nameBuf)
+      ..free(nameLen)
+      ..free(sqlType)
+      ..free(colSize)
+      ..free(decDigits)
+      ..free(nullable);
     }
 
     // 逐行取数：W 路径没有 bind_col 的宽字符版本，用 getDataW 逐列读取。
@@ -341,9 +343,9 @@ final class DmConnection {
         rows.add(row);
       }
     } finally {
-      calloc.free(wbuf);
-      calloc.free(ind);
-      calloc.free(rowNum);
+      calloc..free(wbuf)
+      ..free(ind)
+      ..free(rowNum);
     }
     return DbResult(columns, rows);
   }

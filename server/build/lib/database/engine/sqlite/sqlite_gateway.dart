@@ -1,12 +1,10 @@
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:isolate';
-
+import 'package:server/database/engine/database_gateway.dart';
+import 'package:server/database/engine/worker_gateway.dart';
 import 'package:sqlite3/open.dart';
 import 'package:sqlite3/sqlite3.dart';
-
-import 'package:server/db/database_gateway.dart';
-import 'package:server/db/worker_gateway.dart';
 
 /// SQLite 网关（单机版）。
 ///
@@ -35,8 +33,7 @@ class SqliteGateway extends WorkerGateway {
     final gateway = await WorkerGateway.spawn(
       entry: _sqliteWorkerMain,
       boot: {'path': path},
-      build: (worker, replies, errors) =>
-          SqliteGateway._(worker, replies, errors),
+      build: SqliteGateway._,
     );
     if (cached != null) _cached[cached] = gateway;
     return gateway;
@@ -66,10 +63,10 @@ void _sqliteWorkerMain(Map<Object?, Object?> boot) {
   final readyPort = boot['readyPort']! as SendPort;
   final Database db;
   try {
-    db = sqlite3.open(boot['path']! as String);
-    db.select('PRAGMA busy_timeout = 5000');
-    db.select('PRAGMA journal_mode = WAL');
-    db.select('PRAGMA foreign_keys = ON');
+    db = sqlite3.open(boot['path']! as String)
+    ..select('PRAGMA busy_timeout = 5000')
+    ..select('PRAGMA journal_mode = WAL')
+    ..select('PRAGMA foreign_keys = ON');
   } catch (e) {
     readyPort.send({'ok': false, 'error': e.toString()});
     commands.close();
@@ -89,7 +86,7 @@ void _sqliteWorkerMain(Map<Object?, Object?> boot) {
 Object? _sqliteExecuteOp(Database db, Map<Object?, Object?> msg) {
   final sql = msg['sql'] as String?;
   final params = (msg['params'] as List?)?.cast<Object?>() ?? const [];
-  switch (msg['op'] as String) {
+  switch (msg['op']! as String) {
     case 'ping':
       db.select('SELECT 1');
       return null;

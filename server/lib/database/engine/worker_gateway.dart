@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:isolate';
-
-import 'package:server/db/database_gateway.dart';
+import 'package:server/database/engine/database_gateway.dart';
 
 /// 基于「独立工作隔离区 + 消息通信」的网关基类。
 ///
@@ -9,6 +8,7 @@ import 'package:server/db/database_gateway.dart';
 /// 其他请求，因此网关把连接放进独立隔离区串行执行，主隔离区通过消息
 /// 通信访问。子类提供工作区入口函数、异常还原方式与参数改写钩子。
 abstract class WorkerGateway implements DatabaseGateway {
+  /// 构造函数：注入工作区命令端口、回报端口、错误端口。
   WorkerGateway(SendPort worker, ReceivePort replies, ReceivePort errors)
     : _worker = worker,
       _replies = replies,

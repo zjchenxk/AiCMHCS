@@ -11,10 +11,11 @@
 // 5. SQLite 无 COMMENT ON，注释以 `--` 形式附在语句内；
 // 6. 语句表达不了的数据订正（如存量明文字段加密）用 dataFix 回调，
 //    密钥经 SchemaMigrator 注入，回调必须幂等（中断重跑不重复处理）。
-import 'package:server/db/database_gateway.dart';
-import 'package:server/db/migration.dart';
-import 'package:server/security/field_cipher.dart';
+import 'package:server/database/engine/database_gateway.dart';
+import 'package:server/database/migrator/migration.dart';
+import 'package:server/utils/field_cipher.dart';
 
+/// 结构迁移注册表：按版本号严格递增，已发布的迁移不可修改，只能追加新版本。
 const dbMigrations = <DbMigration>[
   DbMigration(
     version: 1,

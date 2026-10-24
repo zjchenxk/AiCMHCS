@@ -2,11 +2,10 @@
 // AuthService 的 SQL 完全兼容——口令校验、审计写入、最近登录时间、
 // 会话生命周期全部走真实网关。
 import 'dart:convert';
-
-import 'package:server/db/schema_migrator.dart';
-import 'package:server/db/sqlite_gateway.dart';
-import 'package:server/security/field_cipher.dart';
+import 'package:server/database/engine/sqlite/sqlite_gateway.dart';
+import 'package:server/database/migrator/schema_migrator.dart';
 import 'package:server/services/auth_service.dart';
+import 'package:server/utils/field_cipher.dart';
 import 'package:test/test.dart';
 
 void main() {

@@ -8,10 +8,10 @@
 // 连接参数与后端一致（AICMHCS_DB_HOST/PORT/USER/PASSWORD、AICMHCS_DB_FILE、
 // AICMHCS_FIELD_MASTER_KEY/KEY_FILE）。
 import 'package:server/app_config.dart';
-import 'package:server/db/db_factory.dart';
-import 'package:server/db/schema_migrator.dart';
-import 'package:server/security/field_cipher.dart';
+import 'package:server/database/engine/db_factory.dart';
+import 'package:server/database/migrator/schema_migrator.dart';
 import 'package:server/services/auth_service.dart';
+import 'package:server/utils/field_cipher.dart';
 
 const demoUsers = [
   ('admin', 'Admin@123', '系统管理员', 'ADMIN', '13800000001'),

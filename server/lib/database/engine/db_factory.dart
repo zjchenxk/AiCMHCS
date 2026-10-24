@@ -1,7 +1,7 @@
 import 'package:server/app_config.dart';
-import 'package:server/db/database_gateway.dart';
-import 'package:server/db/sqlite_gateway.dart';
-import 'package:server/dm/dm_gateway.dart';
+import 'package:server/database/engine/database_gateway.dart';
+import 'package:server/database/engine/dm/dm_gateway.dart';
+import 'package:server/database/engine/sqlite/sqlite_gateway.dart';
 
 /// 按配置打开数据库网关：driver=dm → 达梦（DPI），driver=sqlite →
 /// SQLite 数据文件。启动脚本（main.dart）与工具（tool/）统一经此入口，

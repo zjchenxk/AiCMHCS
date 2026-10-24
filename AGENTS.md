@@ -14,9 +14,9 @@ AiCMHCS（智慧儿童心理保健系统）：为满足国家信创要求，技�
 
 ```
 client/   Flutter 应用（MVVM，原 aicmhcs_flutter 更名并入）
-server/   Dart Frog 后端：routes / lib(db, dm, services) / tool / test
+server/   Dart Frog 后端：routes / lib(database(engine, migrator), services, utils, models) / tool / test
 common/   前后端共享包：lib/models（basic 行政区划 / system 医院、登录用户）+ lib/utils（SecurePayload 报文加解密）
-database/         DM8 SQL 脚本：01 表空间+账号（SYSDBA 执行）；建表与结构变更在代码中（server/lib/db/migrations.dart，双方言迁移）
+database/         DM8 SQL 脚本：01 表空间+账号（SYSDBA 执行）；建表与结构变更在代码中（server/lib/database/migrator/migrations.dart，双方言迁移）
 tools/            init_db.sh / start_backend.sh / serve_frontend.sh（Git Bash 运行）
 ```
 
@@ -55,7 +55,7 @@ cd server && dart analyze && dart format --set-exit-if-changed . && dart test
 cd client && flutter analyze && dart format --set-exit-if-changed . && flutter test
 ```
 
-端口约定：后端 API `8080`（环境变量 `AICMHCS_PORT` 可覆盖）、前端静态托管 `5173`、DM8 `5236`。
+端口约定：后端 API `8080`（端口由 dart_frog 标准环境变量 `PORT` 覆盖，`dev` 与 `build` 产物均生效）、前端静态托管 `5173`、DM8 `5236`。
 
 环境变量（后端 `lib/app_config.dart` 读取，默认值对准本机开发环境）：`AICMHCS_DB_DRIVER`（dm 默认 / sqlite 单机版）、`AICMHCS_DB_HOST`（LOCALHOST）、`AICMHCS_DB_PORT`（5236）、`AICMHCS_DB_USER`（AICMHCS，最小权限应用账号，不用 SYSDBA）、`AICMHCS_DB_PASSWORD`（Aicmhcs@2026）、`AICMHCS_DB_FILE`（SQLite 数据文件，默认 data/aicmhcs.db）、`AICMHCS_SQLITE3_DLL`（sqlite3.dll 路径，默认 exe 同目录 → 系统 winsqlite3.dll）、`AICMHCS_FIELD_MASTER_KEY`（字段加密主密钥，base64 的 32 字节；未设时走密钥文件，生产/等保环境必须以本变量注入实现密钥与数据分离）、`AICMHCS_FIELD_KEY_FILE`（字段加密密钥文件，默认 data/aicmhcs.field.key，首启自动生成——单机版交付依赖此机制，密钥文件须单独备份，丢失即无法解密存量数据）、`DM_HOME`（定位 `dmdpi.dll`）。初始化脚本另有 `DM_HOST`/`DM_PORT`/`DM_SYSDBA_PWD`/`APP_DB_PWD`，见 `tools/init_db.sh` 头部注释。
 
@@ -65,9 +65,9 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 
 ### 后端（server，Dart Frog）
 
-分层：`routes/`（HTTP 适配，文件路径即 URL）→ `services/`（业务逻辑）→ `lib/db/`（数据库网关抽象、SQLite 实现、结构迁移注册表与执行器）；达梦 FFI 绑定在 `lib/dm/`（DPI / DmGateway）；共享业务模型在 `common/lib/models/`（统一经 `package:common/model.dart` barrel 导入），DB 行解析（`fromRow` 类函数）留在服务层。**没有 ORM/代码生成环节**（协议就是手写 JSON + 手写模型；数据库结构走**手写版本化迁移**，见「口令与数据库对象」）。
+分层：`routes/`（HTTP 适配，文件路径即 URL）→ `services/`（业务逻辑）→ `lib/database/`（数据访问层，分两块：`engine/` 为网关抽象与达梦/SQLite 双实现，`migrator/` 为结构迁移注册表与执行器）；达梦 FFI 绑定在 `lib/database/engine/dm/`（DPI / DmGateway）、SQLite 实现在 `lib/database/engine/sqlite/`，字段加密工具 `FieldCipher` 在 `lib/utils/`、API 请求体模型在 `lib/models/`；共享业务模型在 `common/lib/models/`（统一经 `package:common/model.dart` barrel 导入），DB 行解析（`fromRow` 类函数）留在服务层。**没有 ORM/代码生成环节**（协议就是手写 JSON + 手写模型；数据库结构走**手写版本化迁移**，见「口令与数据库对象」）。
 
-- **入口注入**：`main.dart` 自定义 `run()` 在启动时按 `AICMHCS_DB_DRIVER` 经 `openDatabaseGateway()`（`lib/db/db_factory.dart`）打开网关（dm → `DmGateway` / sqlite → `SqliteGateway`）、经 `FieldCipher.fromConfig()` 解析字段加密密钥、带密钥跑 `SchemaMigrator.migrate()` 对齐结构、创建 `AuthService`，经 `handler.use(provider<T>(...))` 注入管线（现有 `DatabaseGateway` / `FieldCipher` / `AuthService`）；路由内 `context.read<T>()` 获取。新增单例服务照此在 `main.dart` 注册；
+- **入口注入**：`main.dart` 自定义 `run()` 在启动时按 `AICMHCS_DB_DRIVER` 经 `openDatabaseGateway()`（`lib/database/engine/db_factory.dart`）打开网关（dm → `DmGateway` / sqlite → `SqliteGateway`）、经 `FieldCipher.fromConfig()` 解析字段加密密钥、带密钥跑 `SchemaMigrator.migrate()` 对齐结构、创建 `AuthService`，经 `handler.use(provider<T>(...))` 注入管线（现有 `DatabaseGateway` / `FieldCipher` / `AuthService`）；路由内 `context.read<T>()` 获取。新增单例服务照此在 `main.dart` 注册；
 - **统一响应**：`{'code': 0|非0, 'message': '...', 'data': ...}`，`code == 0` 表示成功。业务码与 HTTP 状态对应：40001/40002→400、40101/40102/40103→401、40301→403、40500→405、50000→500（全局兜底）。参照 `routes/api/auth/login.dart` 的 `_error` helper。响应报文会被 `/api` 加密中间件整体封入信封（见「安全层现状」）；
 - **业务异常模式**：service 层抛带 `httpStatus/code/message` 的异常（现有 `AuthException`，新模块可仿建），路由 `catch` 后转错误响应；用户不存在与口令错误统一提示，避免账号枚举；
 - **中间件**：全局 `routes/_middleware.dart`（CORS `*` 供 Flutter Web 跨域 + 未捕获异常兜底 500）；`routes/api/_middleware.dart` 负责 `/api/**` 的报文加解密与会话校验（详见「安全层现状」）；
@@ -75,18 +75,18 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 
 ### 数据库访问约定（信创核心约束，务必遵守）
 
-- 业务代码统一经 `DatabaseGateway`（`lib/db/database_gateway.dart`）访问数据库，**不要直接使用 `Dpi` / `DmConnection` / sqlite3**（FFI 调用同步阻塞，会卡住 HTTP 事件循环）；两个实现（`DmGateway` / `SqliteGateway`）共用 `lib/db/worker_gateway.dart` 的 isolate 工作区基类：连接在独立 isolate 串行执行，默认 30 秒超时；达梦侧 `query`/`ping` 失败自动重连并重试一次，`execute`/`executeDirect` **不重试**（防重复写入）。`Dpi.open()` 已处理 DLL 依赖链多轮加载（`dmdpi → dmcomm → libcrypto`），勿重复造轮子；
-- **字符集**：达梦全程走 DPI 的 W 系列（UTF-16）接口，GB18030 实例由 DPI 自动转码，Dart 侧始终处理 Unicode。`dpi_bind_param` 无宽字符版本——**绑定参数只支持 ASCII**；该限制已下沉到 `DmGateway`（`lib/dm/dm_param_rewrite.dart` 自动把非 ASCII 参数转义内联、ASCII 照常绑定），**业务层直接写参数化 SQL，中文参数照常传，不要手拼 SQL 字面量**；
+- 业务代码统一经 `DatabaseGateway`（`lib/database/engine/database_gateway.dart`）访问数据库，**不要直接使用 `Dpi` / `DmConnection` / sqlite3**（FFI 调用同步阻塞，会卡住 HTTP 事件循环）；两个实现（`DmGateway` / `SqliteGateway`）共用 `lib/database/engine/worker_gateway.dart` 的 isolate 工作区基类：连接在独立 isolate 串行执行，默认 30 秒超时；达梦侧 `query`/`ping` 失败自动重连并重试一次，`execute`/`executeDirect` **不重试**（防重复写入）。`Dpi.open()` 已处理 DLL 依赖链多轮加载（`dmdpi → dmcomm → libcrypto`），勿重复造轮子；
+- **字符集**：达梦全程走 DPI 的 W 系列（UTF-16）接口，GB18030 实例由 DPI 自动转码，Dart 侧始终处理 Unicode。`dpi_bind_param` 无宽字符版本——**绑定参数只支持 ASCII**；该限制已下沉到 `DmGateway`（`lib/database/engine/dm/dm_param_rewrite.dart` 自动把非 ASCII 参数转义内联、ASCII 照常绑定），**业务层直接写参数化 SQL，中文参数照常传，不要手拼 SQL 字面量**；
 - SQL 占位符 `?` 两库通用；`DbResult` 所有列以字符串返回（NULL 为 null），数值/时间由模型层按需转换（参照 `AuthService._loginUserFromRow`）；
-- **敏感字段加密存储（等保）**：`SYS_USER.PHONE` 等敏感个人信息列存 `FieldCipher`（`lib/security/field_cipher.dart`）的 AES-256-GCM 密文（`v1:` 版本前缀 + base64，同明文每次密文不同），配套冗余哈希列 `PHONE_HMAC`（HMAC-SHA256 盲索引，应用侧密钥防穷举）供精确查询——查询一律在应用侧 `cipher.mac(purpose, 明文)` 后 `WHERE PHONE_HMAC = ?` 绑定，**不支持 LIKE 模糊查询/排序**；写入经 `seal`、读出经 `open`（不带版本前缀的存量明文原样返回兜底）；purpose 按字段区分（现有 `FieldCipher.phonePurpose`），新敏感字段选新 purpose 即可派生独立子钥；密文与 HMAC 均为 ASCII，天然满足达梦绑定参数限制；**日志与异常信息中不得输出解密后的明文**；
+- **敏感字段加密存储（等保）**：`SYS_USER.PHONE` 等敏感个人信息列存 `FieldCipher`（`lib/utils/field_cipher.dart`）的 AES-256-GCM 密文（`v1:` 版本前缀 + base64，同明文每次密文不同），配套冗余哈希列 `PHONE_HMAC`（HMAC-SHA256 盲索引，应用侧密钥防穷举）供精确查询——查询一律在应用侧 `cipher.mac(purpose, 明文)` 后 `WHERE PHONE_HMAC = ?` 绑定，**不支持 LIKE 模糊查询/排序**；写入经 `seal`、读出经 `open`（不带版本前缀的存量明文原样返回兜底）；purpose 按字段区分（现有 `FieldCipher.phonePurpose`），新敏感字段选新 purpose 即可派生独立子钥；密文与 HMAC 均为 ASCII，天然满足达梦绑定参数限制；**日志与异常信息中不得输出解密后的明文**；
 - **时间列**：统一在 Dart 侧用 `formatTimestamp(DateTime.now())` 生成后作为参数绑定写入（达梦隐式转 TIMESTAMP(0)；SQLite 的 `CURRENT_TIMESTAMP` 是 UTC，且 Windows 系统 winsqlite3.dll 的 `'localtime'` 修饰符返回 NULL，SQL 端时间函数不可依赖）；
-- SQLite 网关（`lib/db/sqlite_gateway.dart`）：Windows 原生库解析顺序 `AICMHCS_SQLITE3_DLL` → exe 同目录 `sqlite3.dll` → 系统 `winsqlite3.dll`（单机版打包时随包分发官方 sqlite3.dll 即可）；`:memory:` 供测试，按路径缓存防 dart_frog 热重载泄漏 isolate。依赖锁定 `sqlite3` **2.4.0 双保险**：`server/pubspec.yaml` 精确锁定（勿加 `^`）+ 根 `pubspec.yaml` 的 `dependency_overrides`——后者优先级高于一切约束，实测连 `pub upgrade --major-versions` 都会被挡下（pub 会警告 `dependency_overrides prevents upgrades for: sqlite3`，属预期，无需处理）。原因：3.x 删除了 `open.dart` 的动态库覆盖机制、改为构建期 hook 下载预编译库，与 dart_frog 打包/离线信创环境/随包分发 dll 冲突。将来若要升 3.x，必须先删根 pubspec 的 override。
+- SQLite 网关（`lib/database/engine/sqlite/sqlite_gateway.dart`）：Windows 原生库解析顺序 `AICMHCS_SQLITE3_DLL` → exe 同目录 `sqlite3.dll` → 系统 `winsqlite3.dll`（单机版打包时随包分发官方 sqlite3.dll 即可）；`:memory:` 供测试，按路径缓存防 dart_frog 热重载泄漏 isolate。依赖锁定 `sqlite3` **2.4.0 双保险**：`server/pubspec.yaml` 精确锁定（勿加 `^`）+ 根 `pubspec.yaml` 的 `dependency_overrides`——后者优先级高于一切约束，实测连 `pub upgrade --major-versions` 都会被挡下（pub 会警告 `dependency_overrides prevents upgrades for: sqlite3`，属预期，无需处理）。原因：3.x 删除了 `open.dart` 的动态库覆盖机制、改为构建期 hook 下载预编译库，与 dart_frog 打包/离线信创环境/随包分发 dll 冲突。将来若要升 3.x，必须先删根 pubspec 的 override。
 
 ### 口令与数据库对象
 
 - 口令散列：`sha256(salt + password)` 十六进制，存储格式 `salt:hash`（salt 为 16 字节随机数的十六进制）。演示数据 `tool/seed_demo_data.dart` 直接复用 `AuthService.makeStoredPassword`，算法天然一致，不存在两处维护；
 - 数据库：达梦为 `AICMHCS` 模式，SQLite 为单个数据文件（默认 `data/aicmhcs.db`）。现有表：`SYS_USER`（系统用户，PHONE 存密文、PHONE_HMAC 为盲索引列，见「数据库访问约定」）、`SYS_LOGIN_LOG`（登录审计）、`SYS_SCHEMA_VERSION`（迁移版本历史），系统表前缀 `SYS_`；
-- **结构变更走代码迁移**（`server/lib/db/migrations.dart` 注册表 + `SchemaMigrator`，启动/seed 时自动补齐到最新版本）：已发布的迁移**不可修改，只能向后追加**（版本号严格递增，启动时校验）；迁移里**不要写 `DROP TABLE IF EXISTS`**（对升级用户是数据丢失）；演示数据不进迁移（生产不得自动长出演示账号）。DDL 约定：表/列名全大写、主键达梦 `BIGINT IDENTITY(1,1)` / SQLite `INTEGER PRIMARY KEY AUTOINCREMENT`、约束命名 `PK_<表>` / `UK_<表>_<字段>`、时间列达梦 `TIMESTAMP(0)` / SQLite `TEXT`；中文注释达梦用 `COMMENT ON`、SQLite 用语句内 `--`。改结构 = 在 `migrations.dart` 追加一个 `DbMigration`（两库通用的语句放 `common`，方言差异放 `dm`/`sqlite`）；语句表达不了的数据订正（如 v2 存量明文加密）附 `dataFix` 回调——必须幂等（中断重跑不重复处理），`FieldCipher` 密钥经 `SchemaMigrator` 构造函数注入，含 dataFix 的迁移未注入密钥时启动即报错（DDL 不落半途状态）；
+- **结构变更走代码迁移**（`server/lib/database/migrator/migrations.dart` 注册表 + `SchemaMigrator`，启动/seed 时自动补齐到最新版本）：已发布的迁移**不可修改，只能向后追加**（版本号严格递增，启动时校验）；迁移里**不要写 `DROP TABLE IF EXISTS`**（对升级用户是数据丢失）；演示数据不进迁移（生产不得自动长出演示账号）。DDL 约定：表/列名全大写、主键达梦 `BIGINT IDENTITY(1,1)` / SQLite `INTEGER PRIMARY KEY AUTOINCREMENT`、约束命名 `PK_<表>` / `UK_<表>_<字段>`、时间列达梦 `TIMESTAMP(0)` / SQLite `TEXT`；中文注释达梦用 `COMMENT ON`、SQLite 用语句内 `--`。改结构 = 在 `migrations.dart` 追加一个 `DbMigration`（两库通用的语句放 `common`，方言差异放 `dm`/`sqlite`）；语句表达不了的数据订正（如 v2 存量明文加密）附 `dataFix` 回调——必须幂等（中断重跑不重复处理），`FieldCipher` 密钥经 `SchemaMigrator` 构造函数注入，含 dataFix 的迁移未注入密钥时启动即报错（DDL 不落半途状态）；
 - `database/` 仅保留 `01_init_schema.sql`（表空间 + 应用账号——DBA 级对象创建进不了应用代码）；开发期推倒重来：达梦 `./tools/init_db.sh`（DROP USER 重建 + 迁移 + 演示账号），单机版删数据文件。
 
 ### 前端（client）— MVVM
@@ -113,7 +113,7 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 
 敏感个人信息字段（首期 `SYS_USER.PHONE`）在数据库中加密存储，DBA 与拖库者均无法还原明文：
 
-- 实现：`server/lib/security/field_cipher.dart` 的 `FieldCipher`（依赖 `cryptography` 包），**仅服务端持有**——客户端收发的 JSON 中敏感字段仍是明文，由传输信封保护，客户端零改动；算法与传输信封同为 AES-256-GCM 但**密钥独立**；
+- 实现：`server/lib/utils/field_cipher.dart` 的 `FieldCipher`（依赖 `cryptography` 包），**仅服务端持有**——客户端收发的 JSON 中敏感字段仍是明文，由传输信封保护，客户端零改动；算法与传输信封同为 AES-256-GCM 但**密钥独立**；
 - 密文格式 `v1:<base64(nonce+密文+标签)>`（`v1` 为密钥版本号，为将来轮换预留，当前仅 v1）；盲索引列 `<字段>_HMAC` 为 HMAC-SHA256 十六进制，供等值查询（查询范式见「数据库访问约定」）；
 - 密钥管理：单一主密钥（base64 的 32 字节）经 HKDF-SHA256 按 `field-enc:<purpose>` / `field-mac:<purpose>` 派生加密与 MAC 子钥（每字段独立）。主密钥解析顺序：环境变量 `AICMHCS_FIELD_MASTER_KEY` → 密钥文件（默认 `data/aicmhcs.field.key`，首启自动生成并启动告警，单机版交付依赖此机制）——密钥文件须单独备份，**丢失即无法解密存量数据**；生产/等保环境必须用环境变量注入，密钥与数据库备份分开保存；
 - 存量数据经 v2 迁移的 `dataFix` 自动加密回填（幂等）；`tool/seed_demo_data.dart` 写入演示账号时同样走 `FieldCipher` seal/mac；
@@ -170,7 +170,7 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 
 ## 新增一个全栈功能的标准流程
 
-1. 在 `server/lib/db/migrations.dart` 追加结构迁移（`DbMigration`，双方言语句，沿用 DDL 约定），启动后端或 `dart run tool/seed_demo_data.dart` 即自动应用；
+1. 在 `server/lib/database/migrator/migrations.dart` 追加结构迁移（`DbMigration`，双方言语句，沿用 DDL 约定），启动后端或 `dart run tool/seed_demo_data.dart` 即自动应用；
 2. 在 `common/lib/models/<模块>/` 写共享模型（`fromJson`/`toJson`，并在 `common/lib/model.dart` 追加 export）；DB 行解析放 `server` 服务层（如 `AuthService._loginUserFromRow`）；
 3. 在 `server/lib/services/` 写业务服务（构造注入 `DatabaseGateway`）；需在路由中直接读取的，在 `main.dart` 用 `provider<T>` 注入；
 4. 在 `server/routes/api/<模块>/` 写路由（统一响应格式 + `_error` helper + 业务异常转换）；非 GET 请求取参用 `context.read<ApiBody>().json`（加密中间件已解出明文）；
@@ -204,6 +204,6 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 
 - **密钥与口令**：`tools/init_db.sh` 内置开发机 SYSDBA 口令默认值；应用账号口令 `Aicmhcs@2026` 同时硬编码在 `init_db.sh`、`database/01_init_schema.sql` 与后端 `app_config.dart` 默认值中——不要在示例或文档中扩散这些值，生产环境必须覆盖；修改应用账号口令需多处（脚本 + SQL + 环境变量）同步；
 - `./tools/init_db.sh` 会 `DROP USER AICMHCS CASCADE` 重建应用模式，执行前确认数据可丢弃；
-- 必须以仓库根目录（而非子文件夹）打开 VS Code，`.vscode/launch.json` 的 F5 全栈启动（server `dart_frog dev` + client Chrome）才生效；
+- 必须以仓库根目录（而非子文件夹）打开 VS Code，`.vscode/launch.json` 的 F5 全栈启动才生效：server 走生产模式（preLaunchTask 自动 `dart_frog build` + `tool/fix_build_overrides.dart` 修复产物后，调试 `build/bin/server.dart`）、client 走 Chrome。server 构建任务输出为 silent——若调试报找不到 `build/bin/server.dart`，多为构建任务中途失败留下半成品产物，查 VS Code 任务终端输出，重按 F5（会整链重建）或 `./tools/start_backend.sh` 即可恢复；
 - 提交信息：中文短句描述变更（如「接入达梦数据库登录接口」），无 conventional-commit 前缀；
 - `dmdpi.dll` 加载失败先确认 DM8 已安装且 `DM_HOME` 指向正确目录（`AICMHCS_DB_DRIVER=sqlite` 时不加载达梦库）；若自行扩展 SQL 拼接，注意绑定参数只支持 ASCII（见「数据库访问约定」）。

@@ -1,4 +1,4 @@
-import 'package:server/dm/dm_param_rewrite.dart';
+import 'package:server/database/engine/dm/dm_param_rewrite.dart';
 import 'package:test/test.dart';
 
 void main() {

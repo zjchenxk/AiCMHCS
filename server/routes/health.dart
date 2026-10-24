@@ -1,5 +1,5 @@
 import 'package:dart_frog/dart_frog.dart';
-import 'package:server/db/database_gateway.dart';
+import 'package:server/database/engine/database_gateway.dart';
 
 Future<Response> onRequest(RequestContext context) async {
   final db = context.read<DatabaseGateway>();
