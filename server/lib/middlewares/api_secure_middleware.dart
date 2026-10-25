@@ -10,7 +10,7 @@ import 'package:server/utils/log_sanitizer.dart';
 
 /// /api/** 报文加解密中间件（等保通信保密性/完整性要求）。
 ///
-/// **必须挂在叶子路由段**（如 routes/api/auth/、routes/api/admin-divisions/
+/// **必须挂在叶子路由段**（如 routes/api/auth/、routes/api/adminDivisions/
 /// 各自的 _middleware.dart），不能挂在会被路径穿越的段（如 routes/api/）：
 /// dart_frog Router 对 mount 的内层路由不命中时会回退继续尝试下一个
 /// mount，且重建 context 时丢弃原 shelf request context——body 流与

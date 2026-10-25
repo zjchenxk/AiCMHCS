@@ -2,7 +2,7 @@ import 'package:client/main.dart';
 import 'package:client/services/base/base_service.dart';
 import 'package:common/model.dart';
 
-/// 行政区划服务：基于 BaseService 走后端 /api/admin-divisions（自动
+/// 行政区划服务：基于 BaseService 走后端 /api/adminDivisions/*（自动
 /// 加解密信封、携带 token）。表为单表树形（约 70 万行），一律按
 /// parentCode 懒加载某一级子列表，不做整表拉取。
 class AdminDivisionsService {
@@ -19,10 +19,9 @@ class AdminDivisionsService {
   /// return 子级行政区划列表（含 hasChildren 标记），按代码排序
   Future<List<AdminDivision>> getChildren({String? parentCode}) async {
     final parent = parentCode?.trim();
-    final data = await _base.get(
-      '/api/admin-divisions',
-      queryParameters: parent == null || parent.isEmpty ? null : {'parentCode': parent},
-    );
+    final data = await _base.post('/api/adminDivisions/query', {
+      if (parent != null && parent.isNotEmpty) 'parentCode': parent,
+    });
     return _parseList(data);
   }
 
@@ -30,7 +29,7 @@ class AdminDivisionsService {
   /// param code：行政区划代码
   /// return 子树行数（含自身）
   Future<int> getSubtreeCount(String code) async {
-    final data = await _base.get('/api/admin-divisions/$code');
+    final data = await _base.post('/api/adminDivisions/query', {'code': code});
     return data['subtreeCount'] as int;
   }
 
@@ -41,7 +40,7 @@ class AdminDivisionsService {
   /// return 新增后的行政区划
   Future<AdminDivision> create({required String code, required String name, String? parentCode}) async {
     final parent = parentCode?.trim();
-    final data = await _base.post('/api/admin-divisions', {
+    final data = await _base.post('/api/adminDivisions/add', {
       'code': code,
       'name': name,
       'parentCode': parent == null || parent.isEmpty ? null : parent,
@@ -56,8 +55,9 @@ class AdminDivisionsService {
   /// param name：新名称（不传表示不改）
   /// return 修改后的行政区划
   Future<AdminDivision> update({required String code, String? newCode, String? name}) async {
-    final data = await _base.put('/api/admin-divisions/$code', {
-      if (newCode != null && newCode.trim().isNotEmpty) 'code': newCode.trim(),
+    final data = await _base.post('/api/adminDivisions/update', {
+      'code': code,
+      if (newCode != null && newCode.trim().isNotEmpty) 'newCode': newCode.trim(),
       if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
     });
     return AdminDivision.fromJson(data['division'] as Map<String, dynamic>);
@@ -67,7 +67,7 @@ class AdminDivisionsService {
   /// param code：行政区划代码
   /// return 删除的行数（含全部下级）
   Future<int> delete(String code) async {
-    final data = await _base.delete('/api/admin-divisions/$code');
+    final data = await _base.post('/api/adminDivisions/delete', {'code': code});
     return data['deleted'] as int;
   }
 

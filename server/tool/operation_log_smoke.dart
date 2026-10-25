@@ -63,9 +63,9 @@ Future<void> main(List<String> args) async {
     return (json['data'] as Map<String, dynamic>?) ?? const {};
   }
 
-  // 2. 业务请求（GET 无查询参数 + GET 带查询参数）：应各留痕一条「信息」
-  await sealed('GET', '/api/admin-divisions');
-  await sealed('GET', '/api/admin-divisions?parentCode=110000');
+  // 2. 业务请求（无参与带参数各一次，POST 入参留痕记脱敏后 JSON）：应各留痕一条「信息」
+  await sealed('POST', '/api/adminDivisions/query', {});
+  await sealed('POST', '/api/adminDivisions/query', {'parentCode': '110000'});
 
   // 3. 客户端通道上报一条「错误」日志（POST /api/logs 本身不应留痕请求日志）
   await sealed('POST', '/api/logs', {
@@ -96,10 +96,10 @@ Future<void> main(List<String> args) async {
     }
 
     final requestLogHit = rows.any(
-      (row) => row['LOG_NAME'] == '/api/admin-divisions' && row['LOG_TYPE'] == '信息' && row['USER_ID'] == adminId,
+      (row) => row['LOG_NAME'] == '/api/adminDivisions/query' && row['LOG_TYPE'] == '信息' && row['USER_ID'] == adminId,
     );
     final queryLogged = rows.any(
-      (row) => row['LOG_NAME'] == '/api/admin-divisions' && row['LOG_CONTENT'] == 'parentCode=110000',
+      (row) => row['LOG_NAME'] == '/api/adminDivisions/query' && row['LOG_CONTENT'] == '{"parentCode":"110000"}',
     );
     final uploadHit = rows.any(
       (row) => row['LOG_NAME'] == 'client:Smoke.test' && row['LOG_TYPE'] == '错误' && row['USER_ID'] == adminId,

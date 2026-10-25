@@ -62,15 +62,15 @@ class _AdminDivisionManagementPageState extends State<AdminDivisionManagementPag
           content: Text(
             _viewModel.errorMsg!,
             style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onErrorContainer,
+              color: theme.colorScheme.onError,
             ),
           ),
-          backgroundColor: theme.colorScheme.errorContainer,
+          backgroundColor: theme.colorScheme.error,
           behavior: SnackBarBehavior.floating, // 悬浮式，不遮挡底部布局
           duration: const Duration(seconds: 3),
           action: SnackBarAction(
             label: '关闭',
-            textColor: theme.colorScheme.primary,
+            textColor: theme.colorScheme.onPrimary,
             onPressed: _viewModel.clearError,
           ),
         ),
@@ -166,12 +166,7 @@ class _AdminDivisionManagementPageState extends State<AdminDivisionManagementPag
   }
 
   /// 面板抬头：primaryContainer 背景条（左右两栏同款）
-  Widget _buildPanelHeader(
-    ThemeData theme, {
-    required String title,
-    required IconData icon,
-    Widget? trailing,
-  }) {
+  Widget _buildPanelHeader(ThemeData theme, {required String title, required IconData icon, Widget? trailing}) {
     return Container(
       height: 60,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -197,12 +192,7 @@ class _AdminDivisionManagementPageState extends State<AdminDivisionManagementPag
   }
 
   /// 递归构建树节点
-  Widget _buildTreeTile(
-    BuildContext context,
-    AdminDivisionManagementViewModel viewModel,
-    AdminDivisionNode node,
-    int depth,
-  ) {
+  Widget _buildTreeTile(BuildContext context, AdminDivisionManagementViewModel viewModel, AdminDivisionNode node, int depth) {
     final theme = Theme.of(context);
     final selected = viewModel.selectedNode?.code == node.code;
     return Column(
@@ -399,10 +389,10 @@ class _AdminDivisionManagementPageState extends State<AdminDivisionManagementPag
         content: Text(
           message,
           style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onPrimaryContainer,
+            color: theme.colorScheme.onPrimary,
           ),
         ),
-        backgroundColor: theme.colorScheme.primaryContainer,
+        backgroundColor: theme.colorScheme.primary,
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 2),
       ),
@@ -582,10 +572,10 @@ class _AdminDivisionDetailFormState extends State<_AdminDivisionDetailForm> {
         content: Text(
           wasCreating ? '新增成功' : '修改成功',
           style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onPrimaryContainer,
+            color: theme.colorScheme.onPrimary,
           ),
         ),
-        backgroundColor: theme.colorScheme.primaryContainer,
+        backgroundColor: theme.colorScheme.primary,
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 2),
       ),
