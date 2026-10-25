@@ -9,3 +9,6 @@ server/data/
 
 # dart_frog build 产物内的运行数据目录（字段加密密钥、SQLite 数据文件，勿提交）
 server/build/data/
+
+# PowerDesigner 本地工作区缓存与日志（建模文件 documents/AICMHCS.pdma 本体提交）
+documents/.AICMHCS/

@@ -1,3 +1,4 @@
+import 'package:client/utils/log_helper.dart';
 import 'package:client/widgets/glass_panel.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -188,14 +189,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
     );
   }
 
-  Widget _buildPasswordField(
-    ThemeData theme, {
-    required TextEditingController controller,
-    required String label,
-    required bool obscure,
-    required VoidCallback onToggle,
-    required String? Function(String?) validator,
-  }) {
+  Widget _buildPasswordField(ThemeData theme, {required TextEditingController controller, required String label, required bool obscure, required VoidCallback onToggle, required String? Function(String?) validator}) {
     return TextFormField(
       controller: controller,
       obscureText: obscure,
@@ -274,7 +268,8 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
 
       if (!mounted) return;
       Navigator.of(context).pop(true);
-    } catch (e) {
+    } catch (e, st) {
+      LogHelper.error('client:ChangePasswordDialog._submit', e, st);
       if (!mounted) return;
       setState(() => _submitting = false);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -287,11 +282,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
 
   /// 三级等保强密码校验结果
   /// 返回 null 表示通过，否则返回错误提示文本
-  String? _validateStrongPassword(
-    String password, {
-    required String username,
-    required String oldPassword,
-  }) {
+  String? _validateStrongPassword(String password, {required String username, required String oldPassword}) {
     if (password.isEmpty) return '请输入新密码';
     if (password.length < 8) return '密码长度不能少于 8 位';
     if (password.length > 64) return '密码长度不能超过 64 位';

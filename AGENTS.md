@@ -67,10 +67,10 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 
 分层：`routes/`（HTTP 适配，文件路径即 URL）→ `services/`（业务逻辑）→ `lib/database/`（数据访问层，分两块：`engine/` 为网关抽象与达梦/SQLite 双实现，`migrator/` 为结构迁移——`schema_migrator.dart` 执行器 + `migrations/` 逐版本迁移文件与注册表）；达梦 FFI 绑定在 `lib/database/engine/dm/`（DPI / DmGateway）、SQLite 实现在 `lib/database/engine/sqlite/`，字段加密工具 `FieldCipher` 在 `lib/utils/`、API 请求体模型在 `lib/models/`；共享业务模型在 `common/lib/models/`（统一经 `package:common/model.dart` barrel 导入），DB 行解析（`fromRow` 类函数）留在服务层。**没有 ORM/代码生成环节**（协议就是手写 JSON + 手写模型；数据库结构走**手写版本化迁移**，见「口令与数据库对象」）。
 
-- **入口注入**：`main.dart` 自定义 `run()` 在启动时按 `AICMHCS_DB_DRIVER` 经 `openDatabaseGateway()`（`lib/database/engine/db_factory.dart`）打开网关（dm → `DmGateway` / sqlite → `SqliteGateway`）、经 `FieldCipher.fromConfig()` 解析字段加密密钥、带密钥跑 `SchemaMigrator.migrate()` 对齐结构、创建 `AuthService`，经 `handler.use(provider<T>(...))` 注入管线（现有 `DatabaseGateway` / `FieldCipher` / `AuthService`）；路由内 `context.read<T>()` 获取。新增单例服务照此在 `main.dart` 注册；
+- **入口注入**：`main.dart` 自定义 `run()` 在启动时按 `AICMHCS_DB_DRIVER` 经 `openDatabaseGateway()`（`lib/database/engine/db_factory.dart`）打开网关（dm → `DmGateway` / sqlite → `SqliteGateway`）、经 `FieldCipher.fromConfig()` 解析字段加密密钥、带密钥跑 `SchemaMigrator.migrate()` 对齐结构、创建 `AuthService`，经 `handler.use(provider<T>(...))` 注入管线（现有 `DatabaseGateway` / `FieldCipher` / `AuthService` / `AdminDivisionService` / `OperationLogService`，操作日志另经 `LogHelper.service` 静态注入供无 context 位置调用）；路由内 `context.read<T>()` 获取。新增单例服务照此在 `main.dart` 注册；
 - **统一响应**：`{'code': 0|非0, 'message': '...', 'data': ...}`，`code == 0` 表示成功。业务码与 HTTP 状态对应：40001/40002→400、40101/40102/40103→401、40301→403、40500→405、50000→500（全局兜底）。参照 `routes/api/auth/login.dart` 的 `_error` helper。响应报文会被 `/api` 加密中间件整体封入信封（见「安全层现状」）；
 - **业务异常模式**：service 层抛带 `httpStatus/code/message` 的异常（现有 `AuthException`，新模块可仿建），路由 `catch` 后转错误响应；用户不存在与口令错误统一提示，避免账号枚举；
-- **中间件**：全局 `routes/_middleware.dart`（CORS `*` 供 Flutter Web 跨域 + 未捕获异常兜底 500）；报文加解密与会话校验的共用实现抽在 `server/lib/middlewares/api_secure_middleware.dart`（`apiSecureMiddleware`），**由各叶子路由段的 `_middleware.dart` 引用**（现挂 `routes/api/auth/` 与 `routes/api/admin-divisions/`）。⚠️ 加密中间件**不能挂在会被路径穿越的段**（如 `routes/api/`）：dart_frog Router 对 mount 内层路由不命中时会回退尝试下一个 mount，且重建 context 时丢弃 shelf request context——路径穿越段先读掉 body 流后，最终命中段的中间件再读 body 会因 shelf 请求体只能读一次而报错，非 GET 请求全部 400。新增 API 模块时在其目录下建 `_middleware.dart` 一行引用 `apiSecureMiddleware` 即可（详见「安全层现状」）；
+- **中间件**：全局 `routes/_middleware.dart`（CORS `*` 供 Flutter Web 跨域 + 未捕获异常兜底 500 并落操作日志）；报文加解密与会话校验的共用实现抽在 `server/lib/middlewares/api_secure_middleware.dart`（`apiSecureMiddleware`），**由各叶子路由段的 `_middleware.dart` 引用**（现挂 `routes/api/auth/`、`routes/api/admin-divisions/` 与 `routes/api/logs/`）。⚠️ 加密中间件**不能挂在会被路径穿越的段**（如 `routes/api/`）：dart_frog Router 对 mount 内层路由不命中时会回退尝试下一个 mount，且重建 context 时丢弃 shelf request context——路径穿越段先读掉 body 流后，最终命中段的中间件再读 body 会因 shelf 请求体只能读一次而报错，非 GET 请求全部 400。新增 API 模块时在其目录下建 `_middleware.dart` 一行引用 `apiSecureMiddleware` 即可（详见「安全层现状」）；
 - **鉴权**：`Authorization: Bearer <token>`。令牌为内存会话（64 位十六进制，2 小时滑动续期，重启失效——生产环境应落库或接缓存）；登录同时下发会话密钥 `sessionKey`（`LoginSession` 持有，与 token 同生命周期），非白名单 `/api` 请求由加密中间件统一 `verifySession` 校验。
 
 ### 数据库访问约定（信创核心约束，务必遵守）
@@ -85,7 +85,7 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 ### 口令与数据库对象
 
 - 口令散列：`sha256(salt + password)` 十六进制，存储格式 `salt:hash`（salt 为 16 字节随机数的十六进制）。演示数据 `tool/seed_demo_data.dart` 直接复用 `AuthService.makeStoredPassword`，算法天然一致，不存在两处维护；
-- 数据库：达梦为 `AICMHCS` 模式，SQLite 为单个数据文件（默认 `data/aicmhcs.db`）。现有表：`SYS_USER`（系统用户，PHONE 存密文、PHONE_HMAC 为盲索引列，见「数据库访问约定」）、`SYS_LOGIN_LOG`（登录审计）、`SYS_SCHEMA_VERSION`（迁移版本历史），系统表前缀 `SYS_`；
+- 数据库：达梦为 `AICMHCS` 模式，SQLite 为单个数据文件（默认 `data/aicmhcs.db`）。现有表：`SYS_USER`（系统用户，PHONE 存密文、PHONE_HMAC 为盲索引列，见「数据库访问约定」）、`SYS_LOGIN_LOG`（登录审计）、`SYS_OPERATION_LOG`（操作日志，见「操作日志」）、`SYS_SCHEMA_VERSION`（迁移版本历史）、`BASE_ADMIN_DIVISIONS`（行政区划基础表，v3 seed 导入），系统表前缀 `SYS_`、基础表前缀 `BASE_`；
 - **结构变更走代码迁移**（`server/lib/database/migrator/`：`schema_migrator.dart` 执行器 + `migrations/` 迁移目录——`base/migration.dart` 的 `DbMigration` 定义、`migration_<创建时间戳>.dart` 每个迁移一个文件、`migrations.dart` 注册表 `dbMigrations`；启动/seed 时自动补齐到最新版本）：已发布的迁移**不可修改，只能向后追加**（版本号严格递增，启动时校验）；迁移里**不要写 `DROP TABLE IF EXISTS`**（对升级用户是数据丢失）；演示数据不进迁移（生产不得自动长出演示账号）。DDL 约定：表/列名全大写、主键达梦 `BIGINT IDENTITY(1,1)` / SQLite `INTEGER PRIMARY KEY AUTOINCREMENT`、约束命名 `PK_<表>` / `UK_<表>_<字段>`、时间列达梦 `TIMESTAMP(0)` / SQLite `TEXT`；中文注释达梦用 `COMMENT ON`、SQLite 用语句内 `--`。改结构 = 在 `migrations/` 新建 `migration_<时间戳>.dart`（文件名取迁移创建时刻 `YYYYMMDDHHmm`，文件内为顶层 const `dbMigration_<时间戳>`，两库通用语句放 `common`，方言差异放 `dm`/`sqlite`），再在 `migrations.dart` 的 `dbMigrations` 列表按版本顺序追加；语句表达不了的数据订正（如 v2 存量明文加密）附 `dataFix` 回调（写在同一迁移文件内）——必须幂等（中断重跑不重复处理），`FieldCipher` 密钥经 `SchemaMigrator` 构造函数注入，含 dataFix 的迁移未注入密钥时启动即报错（DDL 不落半途状态）；
 - `database/` 仅保留 `01_init_schema.sql`（表空间 + 应用账号——DBA 级对象创建进不了应用代码）；开发期推倒重来：达梦 `./tools/init_db.sh`（DROP USER 重建 + 迁移 + 演示账号），单机版删数据文件。
 
@@ -93,7 +93,7 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 
 - **导入约定**：统一 `import 'package:material_ui/material_ui.dart';`（全仓库 0 处 `flutter/material.dart`），新页面遵循；
 - **全局对象**在 `lib/main.dart`：`token`（登录令牌）、`sessionKey`（会话 API 加密密钥，随登录下发、与 token 同生命周期）、`loginUser`（当前登录用户）——三者均由 `LoginViewModel` 登录成功写入、注销时清空；另有 `getIt`（服务定位器）——Serverpod 的 `client` 已随迁移移除；
-- **Service 模式**：登录后的接口调用统一走 `services/base/base_service.dart` 的 `BaseService`（`get`/`post`：自动携带 Bearer token、请求体封信封、响应解信封并逐项校验 `code/message/data`，失败抛带 message 的异常、成功返回 data，上层 VM 再 `X.fromJson` 还原模型）。登录等明文接口留在 `AuthService`（自持 `http.Client` 明文调用后自行校验）——**不要**把 `login` 改走 `BaseService.post`：登录前拿不到 `token`/`sessionKey`，且服务端登录接口在明文白名单内、不收信封。新 Service 经 `getIt<BaseService>()` 调用，并在 `main.dart` 的 `setupServiceLocator()` 中注册。注意：`AdminDivisionsService` / `LogService` 仍是骨架（后端调用全部被注释），接线时经 `BaseService` 重写；
+- **Service 模式**：登录后的接口调用统一走 `services/base/base_service.dart` 的 `BaseService`（`get`/`post`：自动携带 Bearer token、请求体封信封、响应解信封并逐项校验 `code/message/data`，失败抛带 message 的异常、成功返回 data，上层 VM 再 `X.fromJson` 还原模型）。登录等明文接口留在 `AuthService`（自持 `http.Client` 明文调用后自行校验）——**不要**把 `login` 改走 `BaseService.post`：登录前拿不到 `token`/`sessionKey`，且服务端登录接口在明文白名单内、不收信封。新 Service 经 `getIt<BaseService>()` 调用，并在 `main.dart` 的 `setupServiceLocator()` 中注册。注意：`AdminDivisionsService` 仍是骨架（后端调用全部被注释），接线时经 `BaseService` 重写；`LogService` 已按该协议接通（操作日志上报，经 `utils/log_helper.dart` 的 `LogHelper` 使用，见「操作日志」）；
 - **ViewModel 模式**（参照 `hospital_management_view_model.dart`）：私有字段 + getter、`_loading`/`_errorMsg` 状态、状态变更后 `notifyListeners()`、异步方法返回 `Future<bool>` 表示成败。新 ViewModel 必须注册到 `main.dart` 的 `MultiProvider`；
 - **新页面接入路由**：菜单项在 `main_view_model.dart` 的 `menus` 列表中定义（带 `route`），页面构造器注册到 `lib/routes/menu_routes.dart`（key 与 `MenuItem.route` 一致）；
 - 后端地址配置在 `assets/config.json` 的 `apiUrl`，`main()` 中分别调用 `AuthService.loadConfig()` 与 `BaseService.loadConfig()` 读取；`http` 包已在 client 依赖中。
@@ -107,7 +107,7 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 - 会话密钥由登录接口随 token 一起下发（base64 的 32 字节随机数），与 token 同生命周期；客户端存全局 `sessionKey`，注销清空；
 - 服务端加密中间件（`lib/middlewares/api_secure_middleware.dart` 的 `apiSecureMiddleware`，由各叶子路由段 `_middleware.dart` 挂载，mount 回退陷阱见「中间件」条目）：白名单 `/api/auth/login`、`/api`（API 索引自描述）走明文；其余请求先凭 token `verifySession`，非 GET 请求解开请求体信封、明文经 `provider<ApiBody>` 注入管线（**业务路由取参必须用 `context.read<ApiBody>().json`，勿直接 `request.json()`——那是密文**；模型在 `server/lib/models/api_body.dart`），路由响应的 `{code,message,data}` 整体封入信封返回；无有效会话或解密失败时返回**明文错误**（此时客户端没有可用密钥，无法解密错误响应）；`tool/admin_division_api_smoke.dart` 为走真实 HTTP + 信封加密的链路冒烟脚本（后端启动后 `dart run`，演示账号）；
 - 客户端 `BaseService` 做对称封装（自动带 token、封/解信封、校验统一响应格式后返回 data）；登录前无密钥的接口（目前仅 login）留在 `AuthService` 明文调用；
-- 旧架构的 AES-128-CBC + MD5（`client/utils/security_util.dart`）**已随本次改造删除**；`AdminDivisionsService` / `LogService` 骨架中被注释的旧调用仍引用旧 `SecurityUtil`，接线时按 `BaseService` 协议重写，勿照抄注释代码。
+- 旧架构的 AES-128-CBC + MD5（`client/utils/security_util.dart`）**已随本次改造删除**；`AdminDivisionsService` 骨架中被注释的旧调用仍引用旧 `SecurityUtil`，接线时按 `BaseService` 协议重写，勿照抄注释代码（`LogService` 已按该协议重写，可作参考）。
 
 ### 字段级存储加密（等保，服务端）
 
@@ -118,6 +118,16 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 - 密钥管理：单一主密钥（base64 的 32 字节）经 HKDF-SHA256 按 `field-enc:<purpose>` / `field-mac:<purpose>` 派生加密与 MAC 子钥（每字段独立）。主密钥解析顺序：环境变量 `AICMHCS_FIELD_MASTER_KEY` → 密钥文件（默认 `data/aicmhcs.field.key`，首启自动生成并启动告警，单机版交付依赖此机制）——密钥文件须单独备份，**丢失即无法解密存量数据**；生产/等保环境必须用环境变量注入，密钥与数据库备份分开保存；
 - 存量数据经 v2 迁移的 `dataFix` 自动加密回填（幂等）；`tool/seed_demo_data.dart` 写入演示账号时同样走 `FieldCipher` seal/mac；
 - 已知局限：仅支持精确匹配（盲索引），模糊查询/排序/范围查询不可用；主密钥仍在应用服务器上（等保三级可后续演进为加密机/KMS 托管）。
+
+### 操作日志（SYS_OPERATION_LOG）
+
+操作/请求/异常日志统一落 `SYS_OPERATION_LOG`（v4 迁移建表）：LOG_TYPE 存中文「信息/警告/错误」（常量在 `OperationLogService`），USER_ID 一律由**服务端从令牌会话推导**（不信任客户端上报），LOG_NAME/LOG_CONTENT 由服务层统一截断 240/4000 字符（4000 是「中文内联进 SQL 文本」插入链路的工程上限，非 TEXT 列容量限制）。
+
+- **服务端写入**：`server/lib/services/operation_log_service.dart`（`OperationLogService`，main.dart provider 注入）；任意位置（含无 RequestContext 的深处）经静态门面 `server/lib/utils/log_helper.dart` 的 `LogHelper.info/warn/error` 调用——全部 fire-and-forget，写失败仅 stderr、不抛出、不再触发日志（防递归）。全局 `routes/_middleware.dart` 的异常兜底已自动落「错误」日志（server 端未处理异常全覆盖，服务层无需逐处 catch）；
+- **请求留痕**：`apiSecureMiddleware` 在解密成功后对每个业务请求落一条「信息」日志（LOG_NAME=路由路径，LOG_CONTENT=脱敏后入参 JSON，GET 记查询串）。`/api/logs` 自身在跳过清单（防日志放大）；登录与 `/api` 索引走白名单早退天然不留痕（登录审计在 `SYS_LOGIN_LOG`）；
+- **脱敏（等保红线）**：入参落库前必须经 `server/lib/utils/log_sanitizer.dart` 的 `redactSensitive`（按字段名递归屏蔽 `password*`/`phone` 等为 `***`）——`SYS_USER.PHONE` 已字段加密，日志表不得记明文；新增敏感字段时同步扩充 `_sensitiveKeys`；
+- **客户端上报**：`client/lib/utils/log_helper.dart` 的 `LogHelper`（未登录丢弃、失败静默、防递归）→ `client/lib/services/log_service.dart` → `POST /api/logs`（该接口响应 `data` 固定为 `{}`——`BaseService` 把 data 强转 Map，不能为 null）；`main.dart` 已挂 `FlutterError.onError` + `PlatformDispatcher.instance.onError` 全局兜底，存量 catch 均已补 `LogHelper.error`。LOG_NAME 命名约定：客户端 `client:类名.方法名`、服务端 `server:类名.方法名`、请求留痕为路由路径原样；
+- 链路冒烟：`tool/operation_log_smoke.dart`（后端启动后 `dart run`，驱动环境变量须与后端一致，验证留痕/上报/防放大并直查数据库断言）。
 
 ## UI 风格设定（client）
 
@@ -196,7 +206,7 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 
 - **后端已实现真实接口**：`POST /api/auth/login`、`GET /api/auth/me`、`GET /health`（数据库探活）——登录链路后端侧已通（达梦经 `init_db.sh` 初始化后可用，单机版 `AICMHCS_DB_DRIVER=sqlite` 首启自动建库）；
 - **客户端登录已接通**：`LoginViewModel.login()` 调用真实后端，成功后写入全局 `token`、`sessionKey` 与 `loginUser`（`LoginUser.fromJson` 解析），登录页跳转主界面前经 `MainViewModel.syncLoginUser()` 刷新工作副本，注销时三者清空。注意 `MainViewModel` 的医院/院区/科室仍为本地默认示例（`_defaultWorkUser`，后端暂无对应接口），登录页科室下拉选值（纯名称、无 ID）暂未映射进 `loginUser.deptId`；
-- 客户端 `AdminDivisionsService` / `LogService` 的后端调用全部被注释，行政区划联动当前**未接通**；医院管理加载与保存为 mock（`HospitalManagementViewModel` 中标注 `TODO`）。
+- 客户端 `AdminDivisionsService` 的后端调用仍全部被注释，行政区划联动（医院管理页内）当前**未接通**；`LogService` 已接通（操作日志上报）；医院管理加载与保存为 mock（`HospitalManagementViewModel` 中标注 `TODO`）。
 
 改动这些区域时保留 TODO 标注与被注释的调用代码，不要顺手删除。
 

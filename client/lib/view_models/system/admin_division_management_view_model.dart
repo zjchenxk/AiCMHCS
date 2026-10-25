@@ -1,6 +1,7 @@
 import 'package:client/main.dart';
 import 'package:client/models/admin_division_node.dart';
 import 'package:client/services/admin_divisions_service.dart';
+import 'package:client/utils/log_helper.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// 右侧信息表单模式。
@@ -66,7 +67,8 @@ class AdminDivisionManagementViewModel extends ChangeNotifier {
         ..clear()
         ..addAll(divisions.map(AdminDivisionNode.fromDivision));
       return true;
-    } catch (e) {
+    } catch (e, st) {
+      LogHelper.error('client:AdminDivisionManagementViewModel.loadRoots', e, st);
       _errorMsg = _messageOf(e);
       return false;
     } finally {
@@ -104,7 +106,8 @@ class AdminDivisionManagementViewModel extends ChangeNotifier {
           ..clear()
           ..addAll(children.map(AdminDivisionNode.fromDivision));
         node.childrenLoaded = true;
-      } catch (e) {
+      } catch (e, st) {
+        LogHelper.error('client:AdminDivisionManagementViewModel.toggleExpand', e, st);
         _errorMsg = _messageOf(e);
         notifyListeners();
         return false;
@@ -154,7 +157,8 @@ class AdminDivisionManagementViewModel extends ChangeNotifier {
       _creating = false;
       _creatingParentNode = null;
       return true;
-    } catch (e) {
+    } catch (e, st) {
+      LogHelper.error('client:AdminDivisionManagementViewModel.createDivision', e, st);
       _errorMsg = _messageOf(e);
       return false;
     } finally {
@@ -182,7 +186,8 @@ class AdminDivisionManagementViewModel extends ChangeNotifier {
         }
       }
       return true;
-    } catch (e) {
+    } catch (e, st) {
+      LogHelper.error('client:AdminDivisionManagementViewModel.updateDivision', e, st);
       _errorMsg = _messageOf(e);
       return false;
     } finally {
@@ -205,7 +210,8 @@ class AdminDivisionManagementViewModel extends ChangeNotifier {
       await _service.delete(node.code);
       _removeFromTree(node);
       return true;
-    } catch (e) {
+    } catch (e, st) {
+      LogHelper.error('client:AdminDivisionManagementViewModel.deleteDivision', e, st);
       _errorMsg = _messageOf(e);
       return false;
     } finally {

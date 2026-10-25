@@ -8,7 +8,9 @@ import 'package:server/database/migrator/migrations/base/migration.dart';
 import 'package:server/database/migrator/schema_migrator.dart';
 import 'package:server/services/admin_division_service.dart';
 import 'package:server/services/auth_service.dart';
+import 'package:server/services/operation_log_service.dart';
 import 'package:server/utils/field_cipher.dart';
+import 'package:server/utils/log_helper.dart';
 
 /// dart_frog 自定义入口：按配置打开数据库网关（达梦 / SQLite）、
 /// 解析字段加密密钥、对齐结构迁移，再把网关与认证服务注入中间件管线。
@@ -27,8 +29,17 @@ Future<HttpServer> run(Handler handler, InternetAddress ip, int port) async {
 
   final auth = AuthService(db, cipher);
   final adminDivisions = AdminDivisionService(db);
+  final operationLogs = OperationLogService(db);
+  // 静态门面：服务层深处、全局中间件等无 RequestContext 的位置经
+  // LogHelper 写日志；中间件/路由经下方 provider 取同一实例。
+  LogHelper.service = operationLogs;
 
-  final app = handler.use(provider<DatabaseGateway>((_) => db)).use(provider<FieldCipher>((_) => cipher)).use(provider<AuthService>((_) => auth)).use(provider<AdminDivisionService>((_) => adminDivisions));
+  final app = handler
+      .use(provider<DatabaseGateway>((_) => db))
+      .use(provider<FieldCipher>((_) => cipher))
+      .use(provider<AuthService>((_) => auth))
+      .use(provider<AdminDivisionService>((_) => adminDivisions))
+      .use(provider<OperationLogService>((_) => operationLogs));
 
   final server = await serve(app, ip, port);
   final dbDesc = switch (db.dialect) {

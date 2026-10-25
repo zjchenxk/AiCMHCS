@@ -2,6 +2,7 @@ import 'package:client/main.dart';
 import 'package:client/models/hospital_info.dart';
 import 'package:client/models/hospital_tree_node.dart';
 import 'package:client/services/admin_divisions_service.dart';
+import 'package:client/utils/log_helper.dart';
 import 'package:common/model.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -65,7 +66,8 @@ class HospitalManagementViewModel extends ChangeNotifier {
       if (_organTree.isNotEmpty) {
         selectOrgan(_organTree.first.id);
       }
-    } catch (e) {
+    } catch (e, st) {
+      LogHelper.error('client:HospitalManagementViewModel.loadOrganTree', e, st);
       _errorMsg = '加载医院列表失败：$e';
     } finally {
       _loading = false;
@@ -199,7 +201,8 @@ class HospitalManagementViewModel extends ChangeNotifier {
       notifyListeners();
 
       return true;
-    } catch (e) {
+    } catch (e, st) {
+      LogHelper.error('client:HospitalManagementViewModel.getProvinces', e, st);
       _addressLoading = false;
       _errorMsg = e.toString().replaceFirst(
         RegExp(r'^\w*(Exception|Error):\s*'),
@@ -242,7 +245,8 @@ class HospitalManagementViewModel extends ChangeNotifier {
       notifyListeners();
 
       return true;
-    } catch (e) {
+    } catch (e, st) {
+      LogHelper.error('client:HospitalManagementViewModel.getCitiesByProvince', e, st);
       _addressLoading = false;
       _errorMsg = e.toString().replaceFirst(
         RegExp(r'^\w*(Exception|Error):\s*'),
@@ -283,7 +287,8 @@ class HospitalManagementViewModel extends ChangeNotifier {
       notifyListeners();
 
       return true;
-    } catch (e) {
+    } catch (e, st) {
+      LogHelper.error('client:HospitalManagementViewModel.getCountiesByCity', e, st);
       _addressLoading = false;
       _errorMsg = e.toString().replaceFirst(
         RegExp(r'^\w*(Exception|Error):\s*'),
@@ -322,7 +327,8 @@ class HospitalManagementViewModel extends ChangeNotifier {
       notifyListeners();
 
       return true;
-    } catch (e) {
+    } catch (e, st) {
+      LogHelper.error('client:HospitalManagementViewModel.getTownsByCounty', e, st);
       _addressLoading = false;
       _errorMsg = e.toString().replaceFirst(
         RegExp(r'^\w*(Exception|Error):\s*'),
@@ -366,7 +372,8 @@ class HospitalManagementViewModel extends ChangeNotifier {
       await Future.delayed(const Duration(milliseconds: 300));
       _organInfoMap[info.id] = info;
       return true;
-    } catch (e) {
+    } catch (e, st) {
+      LogHelper.error('client:HospitalManagementViewModel.saveOrganInfo', e, st);
       _errorMsg = '保存失败：$e';
       return false;
     } finally {

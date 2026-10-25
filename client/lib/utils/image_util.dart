@@ -2,16 +2,14 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:client/utils/log_helper.dart';
 import 'package:image_picker/image_picker.dart';
 
 /// 图片选择与校验工具：分辨率校验 + 转 base64
 class ImageUtil {
   /// 从相册选择图片，校验分辨率不超过 [maxSize]（宽或高均不超过），
   /// 校验通过则返回 base64 字符串，失败返回 null 并通过 [onError] 提示。
-  static Future<String?> pickAndConvert({
-    required int maxSize,
-    required void Function(String msg) onError,
-  }) async {
+  static Future<String?> pickAndConvert({required int maxSize, required void Function(String msg) onError}) async {
     try {
       final picked = await ImagePicker().pickImage(
         source: ImageSource.gallery,
@@ -38,7 +36,8 @@ class ImageUtil {
         return null;
       }
       return base64Encode(bytes);
-    } catch (e) {
+    } catch (e, st) {
+      LogHelper.error('client:ImageUtil.pickAndConvert', e, st);
       onError('图片处理失败：$e');
       return null;
     }

@@ -1,0 +1,2 @@
+# PowerDesigner 建模文件不做换行转换，保持原样存储
+*.pdma -text

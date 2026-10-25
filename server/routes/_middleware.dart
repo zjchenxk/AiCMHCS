@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:dart_frog/dart_frog.dart';
+import 'package:server/utils/log_helper.dart';
 
 /// 全局中间件：CORS（Flutter Web 跨域调用）+ 统一异常兜底。
 const _corsHeaders = {
@@ -17,6 +20,15 @@ Handler middleware(Handler next) {
     try {
       response = await next(context);
     } catch (error, stackTrace) {
+      // 未处理异常统一落操作日志（server 端 try...catch 兜底）；
+      // 不等待——异常常因数据库不可用引发，等待会拖住 500 响应。
+      unawaited(
+        LogHelper.error(
+          'server:${context.request.method} ${context.request.uri.path}',
+          error,
+          stackTrace,
+        ),
+      );
       print('[AiCMHCS] 未处理异常: $error\n$stackTrace');
       response = Response.json(
         statusCode: 500,

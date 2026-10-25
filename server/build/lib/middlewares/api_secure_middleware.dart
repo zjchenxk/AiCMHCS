@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:common/utils/security_util.dart';
 import 'package:dart_frog/dart_frog.dart';
 import 'package:server/models/api_body.dart';
 import 'package:server/services/auth_service.dart';
+import 'package:server/utils/log_helper.dart';
+import 'package:server/utils/log_sanitizer.dart';
 
 /// /api/** 报文加解密中间件（等保通信保密性/完整性要求）。
 ///
@@ -21,6 +24,10 @@ import 'package:server/services/auth_service.dart';
 /// 再把路由响应整体封入信封返回。无有效会话或解密失败时返回明文错误
 /// （此时客户端没有可用密钥，无法解密错误响应）。
 const _plaintextPaths = {'/api/auth/login', '/api'};
+
+/// 请求留痕跳过的路径：日志上报接口自身（否则每条客户端日志都会
+/// 再产生一条请求日志，形成放大）。
+const _skipLogPaths = {'/api/logs'};
 
 /// 构建加密中间件（各叶子路由段的 _middleware.dart 调用）。
 Handler apiSecureMiddleware(Handler next) {
@@ -47,6 +54,7 @@ Handler apiSecureMiddleware(Handler next) {
     // 之外的入口），明文经 provider 注入，业务路由统一用
     // context.read<ApiBody>().json 取参（勿直接 request.json()，那是密文）。
     var ctx = context;
+    Map<String, dynamic>? plainBody;
     if (context.request.method != HttpMethod.get) {
       try {
         final raw = await ctx.request.body();
@@ -56,12 +64,27 @@ Handler apiSecureMiddleware(Handler next) {
                 session.sessionKey,
                 jsonDecode(raw) as Map<String, dynamic>,
               );
+        plainBody = plain;
         ctx = ctx.provide<ApiBody>(() => ApiBody(plain));
       } on SecurePayloadException catch (e) {
         return _error(400, 40002, '请求体解密失败：${e.message}');
       } catch (_) {
         return _error(400, 40002, '请求体必须是合法的加密信封 JSON');
       }
+    }
+
+    // 请求留痕（信息类）：LOG_NAME 记路由路径，LOG_CONTENT 记脱敏后的
+    // 明文入参（GET 无解密体，记查询串）；fire-and-forget 不阻塞响应。
+    // 登录与 /api 索引已在上方白名单分支早退，天然不留痕。
+    if (!_skipLogPaths.contains(context.request.uri.path)) {
+      final query = context.request.uri.query;
+      unawaited(
+        LogHelper.info(
+          context.request.uri.path,
+          content: plainBody != null ? encodeForLog(plainBody) : (query.isEmpty ? null : query),
+          userId: session.user.id,
+        ),
+      );
     }
 
     final response = await next(ctx);

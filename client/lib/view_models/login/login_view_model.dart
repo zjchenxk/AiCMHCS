@@ -1,5 +1,6 @@
 import 'package:client/main.dart';
 import 'package:client/services/auth_service.dart';
+import 'package:client/utils/log_helper.dart';
 import 'package:common/model.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -137,7 +138,9 @@ class LoginViewModel extends ChangeNotifier {
       notifyListeners();
 
       return false;
-    } catch (e) {
+    } catch (e, st) {
+      // 登录失败时通常尚未建立会话，LogHelper 会自行丢弃（无通道可上报）
+      LogHelper.error('client:LoginViewModel.login', e, st);
       _isLoading = false;
       _errorMessage = e.toString().replaceFirst(
         RegExp(r'^\w*(Exception|Error):\s*'),

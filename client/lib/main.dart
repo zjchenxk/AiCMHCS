@@ -1,9 +1,12 @@
+import 'dart:ui' show PlatformDispatcher;
+
 import 'package:client/providers/font_provider.dart';
 import 'package:client/providers/theme_provider.dart';
 import 'package:client/services/admin_divisions_service.dart';
 import 'package:client/services/auth_service.dart';
 import 'package:client/services/base/base_service.dart';
 import 'package:client/services/log_service.dart';
+import 'package:client/utils/log_helper.dart';
 import 'package:client/view_models/home/home_view_model.dart';
 import 'package:client/view_models/main/main_view_model.dart';
 import 'package:client/view_models/login/login_view_model.dart';
@@ -29,14 +32,31 @@ late LoginUser? loginUser;
 final getIt = GetIt.instance;
 
 void setupServiceLocator() {
+  getIt.registerLazySingleton<BaseService>(() => BaseService());
   getIt.registerLazySingleton<AuthService>(() => AuthService());
   getIt.registerLazySingleton<LogService>(() => LogService());
   getIt.registerLazySingleton<AdminDivisionsService>(() => AdminDivisionsService());
-  getIt.registerLazySingleton<BaseService>(() => BaseService());
 }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  //初始化全局会话变量（late 变量在赋值前读取会抛错，登录失败等场景
+  //LogHelper/BaseService 会先于赋值读取）
+  token = null;
+  sessionKey = null;
+  loginUser = null;
+
+  //全局异常兜底：框架构建/渲染异常与未处理异常上报操作日志（上报自身
+  //静默失败，见 LogHelper；原控制台输出保留）
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    LogHelper.error('client:FlutterError', details.exception, details.stack);
+  };
+  PlatformDispatcher.instance.onError = (error, stackTrace) {
+    LogHelper.error('client:Unhandled', error, stackTrace);
+    return true;
+  };
 
   //注册服务
   setupServiceLocator();

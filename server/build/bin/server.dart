@@ -9,12 +9,14 @@ import '../main.dart' as entrypoint;
 import '../routes/index.dart' as index;
 import '../routes/health.dart' as health;
 import '../routes/api/index.dart' as api_index;
+import '../routes/api/logs/index.dart' as api_logs_index;
 import '../routes/api/auth/me.dart' as api_auth_me;
 import '../routes/api/auth/login.dart' as api_auth_login;
 import '../routes/api/admin-divisions/index.dart' as api_admin_divisions_index;
 import '../routes/api/admin-divisions/[code].dart' as api_admin_divisions_$code;
 
 import '../routes/_middleware.dart' as middleware;
+import '../routes/api/logs/_middleware.dart' as api_logs_middleware;
 import '../routes/api/auth/_middleware.dart' as api_auth_middleware;
 import '../routes/api/admin-divisions/_middleware.dart' as api_admin_divisions_middleware;
 
@@ -36,6 +38,7 @@ Handler buildRootHandler() {
   final router = Router()
     ..mount('/', (context) => buildHandler()(context))
     ..mount('/api', (context) => buildApiHandler()(context))
+    ..mount('/api/logs', (context) => buildApiLogsHandler()(context))
     ..mount('/api/auth', (context) => buildApiAuthHandler()(context))
     ..mount('/api/admin-divisions', (context) => buildApiAdminDivisionsHandler()(context));
   return pipeline.addHandler(router);
@@ -52,6 +55,13 @@ Handler buildApiHandler() {
   final pipeline = const Pipeline();
   final router = Router()
     ..all('/', (context) => api_index.onRequest(context,));
+  return pipeline.addHandler(router);
+}
+
+Handler buildApiLogsHandler() {
+  final pipeline = const Pipeline().addMiddleware(api_logs_middleware.middleware);
+  final router = Router()
+    ..all('/', (context) => api_logs_index.onRequest(context,));
   return pipeline.addHandler(router);
 }
 
