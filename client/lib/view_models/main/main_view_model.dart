@@ -123,10 +123,16 @@ class MainViewModel extends ChangeNotifier {
       icon: Icons.settings_outlined,
       children: [
         MenuItem(
+          id: 'adminDivisions',
+          title: '行政区划设置',
+          icon: Icons.language_outlined,
+          route: '/system/adminDivision',
+        ),
+        MenuItem(
           id: 'hospital',
           title: '医院设置',
           icon: Icons.local_hospital_outlined,
-          route: '/system/organ',
+          route: '/system/hospital',
         ),
         MenuItem(id: 'campus', title: '院区设置', icon: Icons.domain_outlined),
         MenuItem(

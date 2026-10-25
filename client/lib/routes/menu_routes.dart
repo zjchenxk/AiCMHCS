@@ -1,4 +1,5 @@
 import 'package:client/models/child_info.dart';
+import 'package:client/views/system/admin_division_management_page.dart';
 import 'package:common/model.dart';
 import 'package:client/views/home/home_page.dart';
 import 'package:client/views/system/hospital_management_page.dart';
@@ -15,7 +16,8 @@ typedef MenuPageBuilder =
 /// 路由注册表：key 与 MenuItem.route 一一对应
 Map<String, MenuPageBuilder> menuRoutes = {
   '/home': _buildPage(HomePage.new),
-  '/system/organ': _buildPage(HospitalManagementPage.new),
+  '/system/hospital': _buildPage(HospitalManagementPage.new),
+  '/system/adminDivision': _buildPage(AdminDivisionManagementPage.new),
 };
 
 /// 简化注册的辅助函数（普通 function，不用 tear-off 时也可直接写 lambda）

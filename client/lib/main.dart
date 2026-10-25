@@ -7,6 +7,7 @@ import 'package:client/services/log_service.dart';
 import 'package:client/view_models/home/home_view_model.dart';
 import 'package:client/view_models/main/main_view_model.dart';
 import 'package:client/view_models/login/login_view_model.dart';
+import 'package:client/view_models/system/admin_division_management_view_model.dart';
 import 'package:client/view_models/system/hospital_management_view_model.dart';
 import 'package:client/views/login/login_page.dart';
 import 'package:common/model.dart';
@@ -52,9 +53,8 @@ void main() async {
         ChangeNotifierProvider(create: (context) => LoginViewModel()),
         ChangeNotifierProvider(create: (context) => MainViewModel()),
         ChangeNotifierProvider(create: (context) => HomeViewModel()),
-        ChangeNotifierProvider(
-          create: (context) => HospitalManagementViewModel(),
-        ),
+        ChangeNotifierProvider(create: (context) => HospitalManagementViewModel()),
+        ChangeNotifierProvider(create: (context) => AdminDivisionManagementViewModel()),
       ],
       child: const MyApp(),
     ),

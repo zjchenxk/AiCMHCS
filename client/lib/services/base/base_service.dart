@@ -19,10 +19,10 @@ class BaseService {
   }
 
   ///param path: 接口路径（如 /api/auth/me）
+  ///param queryParameters: URL 查询参数（GET 请求为明文，不进加密信封）
   ///returns: 解密并校验后的 data，失败抛带 message 的异常
-  Future<Map<String, dynamic>> get(String path) async {
-    final data = await _request('GET', path, null);
-    return data;
+  Future<Map<String, dynamic>> get(String path, {Map<String, String>? queryParameters}) {
+    return _request('GET', path, null, queryParameters: queryParameters);
   }
 
   ///param path: 接口路径
@@ -30,30 +30,40 @@ class BaseService {
   ///returns: 解密并校验后的 data，失败抛带 message 的异常
   Future<Map<String, dynamic>> post(String path, Map<String, dynamic> body) => _request('POST', path, body);
 
+  ///param path: 接口路径
+  ///param body: 明文请求体（自动加密）
+  ///returns: 解密并校验后的 data，失败抛带 message 的异常
+  Future<Map<String, dynamic>> put(String path, Map<String, dynamic> body) => _request('PUT', path, body);
+
+  ///param path: 接口路径（无请求体，DELETE 不进加密信封）
+  ///returns: 解密并校验后的 data，失败抛带 message 的异常
+  Future<Map<String, dynamic>> delete(String path) => _request('DELETE', path, null);
+
   Future<Map<String, dynamic>> _request(
     String method,
     String path,
-    Map<String, dynamic>? body,
-  ) async {
+    Map<String, dynamic>? body, {
+    Map<String, String>? queryParameters,
+  }) async {
     if (token == null || sessionKey == null) {
       throw Exception('用户未登录或登录已过期，请重新登录！');
     }
 
-    final uri = Uri.parse('$apiUrl$path');
+    var uri = Uri.parse('$apiUrl$path');
+    if (queryParameters != null && queryParameters.isNotEmpty) {
+      uri = uri.replace(queryParameters: queryParameters);
+    }
     final headers = {
       'Content-Type': 'application/json',
       'Authorization': 'Bearer $token',
     };
     final http.Response response;
     if (body == null) {
-      response = await client.get(uri, headers: headers);
+      response = method == 'DELETE' ? await client.delete(uri, headers: headers) : await client.get(uri, headers: headers);
     } else {
       final sealed = await SecurePayload.seal(sessionKey!, body);
-      response = await client.post(
-        uri,
-        headers: headers,
-        body: jsonEncode(sealed),
-      );
+      final encoded = jsonEncode(sealed);
+      response = method == 'PUT' ? await client.put(uri, headers: headers, body: encoded) : await client.post(uri, headers: headers, body: encoded);
     }
 
     var jsonResponse = jsonDecode(response.body) as Map<String, dynamic>;

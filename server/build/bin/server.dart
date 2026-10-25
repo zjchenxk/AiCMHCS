@@ -11,9 +11,12 @@ import '../routes/health.dart' as health;
 import '../routes/api/index.dart' as api_index;
 import '../routes/api/auth/me.dart' as api_auth_me;
 import '../routes/api/auth/login.dart' as api_auth_login;
+import '../routes/api/admin-divisions/index.dart' as api_admin_divisions_index;
+import '../routes/api/admin-divisions/[code].dart' as api_admin_divisions_$code;
 
 import '../routes/_middleware.dart' as middleware;
-import '../routes/api/_middleware.dart' as api_middleware;
+import '../routes/api/auth/_middleware.dart' as api_auth_middleware;
+import '../routes/api/admin-divisions/_middleware.dart' as api_admin_divisions_middleware;
 
 void main() async {
   final address = InternetAddress.anyIPv6;
@@ -33,7 +36,8 @@ Handler buildRootHandler() {
   final router = Router()
     ..mount('/', (context) => buildHandler()(context))
     ..mount('/api', (context) => buildApiHandler()(context))
-    ..mount('/api/auth', (context) => buildApiAuthHandler()(context));
+    ..mount('/api/auth', (context) => buildApiAuthHandler()(context))
+    ..mount('/api/admin-divisions', (context) => buildApiAdminDivisionsHandler()(context));
   return pipeline.addHandler(router);
 }
 
@@ -45,16 +49,23 @@ Handler buildHandler() {
 }
 
 Handler buildApiHandler() {
-  final pipeline = const Pipeline().addMiddleware(api_middleware.middleware);
+  final pipeline = const Pipeline();
   final router = Router()
     ..all('/', (context) => api_index.onRequest(context,));
   return pipeline.addHandler(router);
 }
 
 Handler buildApiAuthHandler() {
-  final pipeline = const Pipeline().addMiddleware(api_middleware.middleware);
+  final pipeline = const Pipeline().addMiddleware(api_auth_middleware.middleware);
   final router = Router()
     ..all('/login', (context) => api_auth_login.onRequest(context,))..all('/me', (context) => api_auth_me.onRequest(context,));
+  return pipeline.addHandler(router);
+}
+
+Handler buildApiAdminDivisionsHandler() {
+  final pipeline = const Pipeline().addMiddleware(api_admin_divisions_middleware.middleware);
+  final router = Router()
+    ..all('/<code>', (context,code,) => api_admin_divisions_$code.onRequest(context,code,))..all('/', (context) => api_admin_divisions_index.onRequest(context,));
   return pipeline.addHandler(router);
 }
 

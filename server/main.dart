@@ -6,6 +6,7 @@ import 'package:server/database/engine/database_gateway.dart';
 import 'package:server/database/engine/db_factory.dart';
 import 'package:server/database/migrator/migrations/base/migration.dart';
 import 'package:server/database/migrator/schema_migrator.dart';
+import 'package:server/services/admin_division_service.dart';
 import 'package:server/services/auth_service.dart';
 import 'package:server/utils/field_cipher.dart';
 
@@ -25,8 +26,9 @@ Future<HttpServer> run(Handler handler, InternetAddress ip, int port) async {
   }
 
   final auth = AuthService(db, cipher);
+  final adminDivisions = AdminDivisionService(db);
 
-  final app = handler.use(provider<DatabaseGateway>((_) => db)).use(provider<FieldCipher>((_) => cipher)).use(provider<AuthService>((_) => auth));
+  final app = handler.use(provider<DatabaseGateway>((_) => db)).use(provider<FieldCipher>((_) => cipher)).use(provider<AuthService>((_) => auth)).use(provider<AdminDivisionService>((_) => adminDivisions));
 
   final server = await serve(app, ip, port);
   final dbDesc = switch (db.dialect) {
