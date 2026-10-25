@@ -1,5 +1,5 @@
 import 'dart:ui';
-import 'package:client/utils/theme_color_mapper_util.dart';
+import 'package:client/utils/theme_color_mapper.dart';
 import 'package:client/view_models/login/login_view_model.dart';
 import 'package:client/view_models/main/main_view_model.dart';
 import 'package:client/views/main/main_page.dart';

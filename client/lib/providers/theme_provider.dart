@@ -1,4 +1,4 @@
-import 'package:client/utils/theme_data_util.dart';
+import 'package:client/utils/theme_data.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

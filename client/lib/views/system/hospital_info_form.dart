@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:client/models/hospital_info.dart';
 import 'package:client/models/hospital_tree_node.dart';
-import 'package:client/utils/image_util.dart';
+import 'package:client/utils/image_helper.dart';
 import 'package:client/view_models/system/hospital_management_view_model.dart';
 import 'package:common/model.dart';
 import 'package:material_ui/material_ui.dart';
@@ -72,7 +72,7 @@ class _HospitalInfoFormState extends State<HospitalInfoForm> {
 
   Future<void> _pickImage({required bool isLogo}) async {
     final maxSize = isLogo ? OrganImageLimit.logoMaxSize : OrganImageLimit.sealMaxSize;
-    final base64Str = await ImageUtil.pickAndConvert(
+    final base64Str = await ImageHelper.pickAndConvert(
       maxSize: maxSize,
       onError: _showError,
     );

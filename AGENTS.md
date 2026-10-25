@@ -135,7 +135,7 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 
 ### 主题（flex_color_scheme）
 
-- 主题定义在 `utils/theme_data_util.dart` 的 `AppThemes.themes`，共 7 套浅色主题：Blue / AquaBlue / Green / Gold / **Teal（默认）** / Purple / Red；
+- 主题定义在 `utils/theme_data.dart` 的 `AppThemes.themes`，共 7 套浅色主题：Blue / AquaBlue / Green / Gold / **Teal（默认）** / Purple / Red；
 - 每套主题使用**完全相同**的 `FlexSubThemesData` 配置（`interactionEffects`、`tintedDisabledControls`、`inputDecoratorIsFilled` + outline 边框、`alignedDropdown`、`comfortablePlatformDensity` 等）——新增主题必须复制同一份 subThemesData，只换 `FlexScheme`；
 - 主题切换与持久化由 `providers/theme_provider.dart`（`ThemeProvider`，SharedPreferences key `current_theme`）负责；字体 5 档缩放由 `FontProvider` 负责，`main.dart` 中统一应用到 textTheme 与各类按钮。
 

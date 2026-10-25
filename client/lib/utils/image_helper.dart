@@ -6,7 +6,7 @@ import 'package:client/utils/log_helper.dart';
 import 'package:image_picker/image_picker.dart';
 
 /// 图片选择与校验工具：分辨率校验 + 转 base64
-class ImageUtil {
+class ImageHelper {
   /// 从相册选择图片，校验分辨率不超过 [maxSize]（宽或高均不超过），
   /// 校验通过则返回 base64 字符串，失败返回 null 并通过 [onError] 提示。
   static Future<String?> pickAndConvert({required int maxSize, required void Function(String msg) onError}) async {

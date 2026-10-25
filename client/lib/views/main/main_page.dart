@@ -1,7 +1,7 @@
 import 'package:client/main.dart';
 import 'package:client/providers/theme_provider.dart';
-import 'package:client/utils/theme_color_mapper_util.dart';
-import 'package:client/utils/theme_data_util.dart';
+import 'package:client/utils/theme_color_mapper.dart';
+import 'package:client/utils/theme_data.dart';
 import 'package:client/views/help/help_center_page.dart';
 import 'package:client/widgets/glass_panel.dart';
 import 'package:material_ui/material_ui.dart';
@@ -701,11 +701,7 @@ class _MainPageState extends State<MainPage> {
     );
   }
 
-  Widget _buildCollapseHeader(
-    ThemeData theme,
-    MainViewModel mainViewModel,
-    bool isWide,
-  ) {
+  Widget _buildCollapseHeader(ThemeData theme, MainViewModel mainViewModel, bool isWide) {
     return Container(
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -788,13 +784,7 @@ class _MainPageState extends State<MainPage> {
     );
   }
 
-  Widget _buildMenuItem(
-    ThemeData theme,
-    MainViewModel mainViewModel,
-    MenuItem menu,
-    List<String> parentPath,
-    bool isWide,
-  ) {
+  Widget _buildMenuItem(ThemeData theme, MainViewModel mainViewModel, MenuItem menu, List<String> parentPath, bool isWide) {
     final hasChildren = menu.children.isNotEmpty;
     final expanded = mainViewModel.isExpanded(menu.id);
     final selected = mainViewModel.selectedMenuId == menu.id;
@@ -1054,10 +1044,7 @@ class _MainPageState extends State<MainPage> {
   }
 
   // 切换科室
-  Future<void> _showSwitchDeptDialog(
-    BuildContext context,
-    ThemeData theme,
-  ) async {
+  Future<void> _showSwitchDeptDialog(BuildContext context, ThemeData theme) async {
     final mainViewModel = context.read<MainViewModel>();
 
     final selected = await showDialog<(String, String)>(
