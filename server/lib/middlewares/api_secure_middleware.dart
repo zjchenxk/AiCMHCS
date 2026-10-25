@@ -7,14 +7,23 @@ import 'package:server/services/auth_service.dart';
 
 /// /api/** 报文加解密中间件（等保通信保密性/完整性要求）。
 ///
-/// 白名单接口（登录、API 自描述索引）走明文；其余请求凭 Authorization 中的
-/// token 找到会话密钥，先解开请求体信封、把明文经 provider 注入管线交给
-/// 下游路由（业务路由用 context.read<ApiBody>().json 取参），再把路由响应
-/// 整体封入信封返回。无有效会话或解密失败时返回明文错误（此时客户端没有
-/// 可用密钥，无法解密错误响应）。
+/// **必须挂在叶子路由段**（如 routes/api/auth/、routes/api/admin-divisions/
+/// 各自的 _middleware.dart），不能挂在会被路径穿越的段（如 routes/api/）：
+/// dart_frog Router 对 mount 的内层路由不命中时会回退继续尝试下一个
+/// mount，且重建 context 时丢弃原 shelf request context——body 流与
+/// provider 都传不过去。若本中间件在路径穿越段执行，回退后在最终
+/// 命中段再次执行时 body 已被消费（shelf 请求体只能读一次），非 GET
+/// 请求会全部报「请求体必须是合法的加密信封 JSON」。
+///
+/// 白名单接口（登录、API 自描述索引）走明文；其余请求凭 Authorization
+/// 中的 token 找到会话密钥，先解开请求体信封、把明文经 provider 注入
+/// 管线交给下游路由（业务路由用 context.read<ApiBody>().json 取参），
+/// 再把路由响应整体封入信封返回。无有效会话或解密失败时返回明文错误
+/// （此时客户端没有可用密钥，无法解密错误响应）。
 const _plaintextPaths = {'/api/auth/login', '/api'};
 
-Handler middleware(Handler next) {
+/// 构建加密中间件（各叶子路由段的 _middleware.dart 调用）。
+Handler apiSecureMiddleware(Handler next) {
   return (context) async {
     if (_plaintextPaths.contains(context.request.uri.path)) {
       return next(context);

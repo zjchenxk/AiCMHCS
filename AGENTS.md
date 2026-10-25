@@ -70,7 +70,7 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 - **入口注入**：`main.dart` 自定义 `run()` 在启动时按 `AICMHCS_DB_DRIVER` 经 `openDatabaseGateway()`（`lib/database/engine/db_factory.dart`）打开网关（dm → `DmGateway` / sqlite → `SqliteGateway`）、经 `FieldCipher.fromConfig()` 解析字段加密密钥、带密钥跑 `SchemaMigrator.migrate()` 对齐结构、创建 `AuthService`，经 `handler.use(provider<T>(...))` 注入管线（现有 `DatabaseGateway` / `FieldCipher` / `AuthService`）；路由内 `context.read<T>()` 获取。新增单例服务照此在 `main.dart` 注册；
 - **统一响应**：`{'code': 0|非0, 'message': '...', 'data': ...}`，`code == 0` 表示成功。业务码与 HTTP 状态对应：40001/40002→400、40101/40102/40103→401、40301→403、40500→405、50000→500（全局兜底）。参照 `routes/api/auth/login.dart` 的 `_error` helper。响应报文会被 `/api` 加密中间件整体封入信封（见「安全层现状」）；
 - **业务异常模式**：service 层抛带 `httpStatus/code/message` 的异常（现有 `AuthException`，新模块可仿建），路由 `catch` 后转错误响应；用户不存在与口令错误统一提示，避免账号枚举；
-- **中间件**：全局 `routes/_middleware.dart`（CORS `*` 供 Flutter Web 跨域 + 未捕获异常兜底 500）；`routes/api/_middleware.dart` 负责 `/api/**` 的报文加解密与会话校验（详见「安全层现状」）；
+- **中间件**：全局 `routes/_middleware.dart`（CORS `*` 供 Flutter Web 跨域 + 未捕获异常兜底 500）；报文加解密与会话校验的共用实现抽在 `server/lib/middlewares/api_secure_middleware.dart`（`apiSecureMiddleware`），**由各叶子路由段的 `_middleware.dart` 引用**（现挂 `routes/api/auth/` 与 `routes/api/admin-divisions/`）。⚠️ 加密中间件**不能挂在会被路径穿越的段**（如 `routes/api/`）：dart_frog Router 对 mount 内层路由不命中时会回退尝试下一个 mount，且重建 context 时丢弃 shelf request context——路径穿越段先读掉 body 流后，最终命中段的中间件再读 body 会因 shelf 请求体只能读一次而报错，非 GET 请求全部 400。新增 API 模块时在其目录下建 `_middleware.dart` 一行引用 `apiSecureMiddleware` 即可（详见「安全层现状」）；
 - **鉴权**：`Authorization: Bearer <token>`。令牌为内存会话（64 位十六进制，2 小时滑动续期，重启失效——生产环境应落库或接缓存）；登录同时下发会话密钥 `sessionKey`（`LoginSession` 持有，与 token 同生命周期），非白名单 `/api` 请求由加密中间件统一 `verifySession` 校验。
 
 ### 数据库访问约定（信创核心约束，务必遵守）
@@ -105,7 +105,7 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 - 算法与信封格式：AES-256-GCM，`{'payload': '<base64(nonce[12] + 密文 + 认证标签[16])>'}`，解开后是原始 JSON 对象（nonce 每次报文随机）；
 - 加解密实现前后端共享：`common/lib/utils/security_util.dart` 的 `SecurePayload`（`seal`/`open`/`generateSessionKey`，依赖 `cryptography` 包），失败抛 `SecurePayloadException`；
 - 会话密钥由登录接口随 token 一起下发（base64 的 32 字节随机数），与 token 同生命周期；客户端存全局 `sessionKey`，注销清空；
-- 服务端 `routes/api/_middleware.dart` 统一处理 `/api/**`：白名单 `/api/auth/login`、`/api`（API 索引自描述）走明文；其余请求先凭 token `verifySession`，非 GET 请求解开请求体信封、明文经 `provider<ApiBody>` 注入管线（**业务路由取参必须用 `context.read<ApiBody>().json`，勿直接 `request.json()`——那是密文**；模型在 `server/lib/models/api_body.dart`），路由响应的 `{code,message,data}` 整体封入信封返回；无有效会话或解密失败时返回**明文错误**（此时客户端没有可用密钥，无法解密错误响应）；
+- 服务端加密中间件（`lib/middlewares/api_secure_middleware.dart` 的 `apiSecureMiddleware`，由各叶子路由段 `_middleware.dart` 挂载，mount 回退陷阱见「中间件」条目）：白名单 `/api/auth/login`、`/api`（API 索引自描述）走明文；其余请求先凭 token `verifySession`，非 GET 请求解开请求体信封、明文经 `provider<ApiBody>` 注入管线（**业务路由取参必须用 `context.read<ApiBody>().json`，勿直接 `request.json()`——那是密文**；模型在 `server/lib/models/api_body.dart`），路由响应的 `{code,message,data}` 整体封入信封返回；无有效会话或解密失败时返回**明文错误**（此时客户端没有可用密钥，无法解密错误响应）；`tool/admin_division_api_smoke.dart` 为走真实 HTTP + 信封加密的链路冒烟脚本（后端启动后 `dart run`，演示账号）；
 - 客户端 `BaseService` 做对称封装（自动带 token、封/解信封、校验统一响应格式后返回 data）；登录前无密钥的接口（目前仅 login）留在 `AuthService` 明文调用；
 - 旧架构的 AES-128-CBC + MD5（`client/utils/security_util.dart`）**已随本次改造删除**；`AdminDivisionsService` / `LogService` 骨架中被注释的旧调用仍引用旧 `SecurityUtil`，接线时按 `BaseService` 协议重写，勿照抄注释代码。
 
