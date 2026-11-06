@@ -113,7 +113,7 @@ class _FakeHospitalService extends HospitalService {
   }
 
   @override
-  Future<(Hospital, int)> getDetail(String id) async {
+  Future<(Hospital, int, int)> getDetail(String id) async {
     var count = 0;
     void walk(String i) {
       count++;
@@ -123,7 +123,7 @@ class _FakeHospitalService extends HospitalService {
     }
 
     walk(id);
-    return (_withFlags(store[id]!), count);
+    return (_withFlags(store[id]!), count, 0);
   }
 
   @override

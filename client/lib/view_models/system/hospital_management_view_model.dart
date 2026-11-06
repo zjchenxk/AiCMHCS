@@ -244,10 +244,10 @@ class HospitalManagementViewModel extends ChangeNotifier {
     }
   }
 
-  /// 查询子树规模（含自身），删除确认提示用。
-  Future<int> subtreeCount(HospitalTreeNode node) async {
-    final (_, count) = await _hospitalService.getDetail(node.id);
-    return count;
+  /// 查询子树规模（含自身）与子树内院区数，删除确认提示用。
+  Future<(int, int)> subtreeInfo(HospitalTreeNode node) async {
+    final (_, subtree, campus) = await _hospitalService.getDetail(node.id);
+    return (subtree, campus);
   }
 
   /// 级联删除医院及其全部下级，成功后整表重拉重建树。

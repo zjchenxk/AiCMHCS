@@ -42,6 +42,18 @@ CREATE TABLE SYS_HOSPITAL (
     await seed(2, 1, 'H110101002', '示例人民医院-第一分院');
     await seed(3, 1, 'H110101003', '示例人民医院-第二分院');
     await seed(4, 2, 'H110101004', '第一分院-社区门诊');
+    // 院区表（deleteSubtree 前置校验依赖；用例按需写入行）
+    await db.executeDirect('''
+CREATE TABLE SYS_CAMPUS (
+  ID INTEGER PRIMARY KEY AUTOINCREMENT,
+  HOSP_ID INTEGER NOT NULL,
+  CODE TEXT,
+  NAME TEXT NOT NULL,
+  ADDRESS TEXT,
+  TEL TEXT,
+  CREATE_TIME TEXT NOT NULL,
+  UPDATE_TIME TEXT
+)''');
     service = HospitalService(db);
   });
 
@@ -193,5 +205,47 @@ CREATE TABLE SYS_HOSPITAL (
       service.deleteSubtree('999'),
       throwsA(isA<HospitalException>().having((e) => e.message, 'message', contains('不存在'))),
     );
+  });
+
+  test('subtreeCampusCount：统计子树各医院下的院区总数', () async {
+    Future<void> seedCampus(int id, int hospId, String code, String name) async {
+      await db.execute(
+        'INSERT INTO SYS_CAMPUS (ID, HOSP_ID, CODE, NAME, CREATE_TIME) '
+        'VALUES (?, ?, ?, ?, ?)',
+        [id, hospId, code, name, '2026-11-06 09:00:00'],
+      );
+    }
+
+    await seedCampus(1, 1, 'C0001', '主院区');
+    await seedCampus(2, 2, 'C0002', '第一分院-东城院区');
+    await seedCampus(3, 4, 'C0003', '社区门诊-西城院区');
+
+    // 子树 1 → 医院 1/2/3/4，院区共 3 个；子树 2 → 医院 2/4，2 个
+    expect(await service.subtreeCampusCount('1'), 3);
+    expect(await service.subtreeCampusCount('2'), 2);
+    expect(await service.subtreeCampusCount('3'), 0);
+  });
+
+  test('deleteSubtree：子树存在院区时阻止删除，无院区分支仍可删', () async {
+    await db.execute(
+      'INSERT INTO SYS_CAMPUS (HOSP_ID, CODE, NAME, CREATE_TIME) '
+      'VALUES (?, ?, ?, ?)',
+      [2, 'C0002', '第一分院-东城院区', '2026-11-06 09:00:00'],
+    );
+
+    // 医院子树 1 含下级 2，2 下有院区 → 阻止（含自身有院区同理）
+    await expectLater(
+      service.deleteSubtree('1'),
+      throwsA(isA<HospitalException>().having((e) => e.message, 'message', '请先删除院区后，再删除医院')),
+    );
+    await expectLater(
+      service.deleteSubtree('2'),
+      throwsA(isA<HospitalException>().having((e) => e.message, 'message', '请先删除院区后，再删除医院')),
+    );
+
+    // 无院区的兄弟分支不受影响
+    expect(await service.deleteSubtree('3'), 1);
+    final remain = await db.query('SELECT ID FROM SYS_HOSPITAL ORDER BY ID');
+    expect(remain.rows.expand((r) => r), ['1', '2', '4']);
   });
 }

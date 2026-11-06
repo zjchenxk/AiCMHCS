@@ -131,7 +131,7 @@ class FakeHospitalService extends HospitalService {
   }
 
   @override
-  Future<(Hospital, int)> getDetail(String id) async {
+  Future<(Hospital, int, int)> getDetail(String id) async {
     final h = store[id];
     if (h == null) throw Exception('医院不存在：$id');
     var count = 0;
@@ -143,7 +143,7 @@ class FakeHospitalService extends HospitalService {
     }
 
     walk(id);
-    return (_withFlags(h), count);
+    return (_withFlags(h), count, 0);
   }
 
   @override
@@ -326,9 +326,9 @@ void main() {
     expect(viewModel.hospitalTree.last.expanded, isTrue, reason: '新节点默认展开');
   });
 
-  test('subtreeCount：透传服务端子树规模（含自身）', () async {
+  test('subtreeInfo：透传服务端子树规模与院区数（含自身）', () async {
     await viewModel.loadHospitals();
-    expect(await viewModel.subtreeCount(viewModel.hospitalTree.first), 3);
-    expect(await viewModel.subtreeCount(viewModel.hospitalTree.last), 1);
+    expect(await viewModel.subtreeInfo(viewModel.hospitalTree.first), (3, 0));
+    expect(await viewModel.subtreeInfo(viewModel.hospitalTree.last), (1, 0));
   });
 }

@@ -45,6 +45,13 @@ const demoHospitals = [
   ),
 ];
 
+/// 演示院区：按 CODE 幂等写入，hospCode 取 demoHospitals 内代码。
+const demoCampuses = [
+  ('CDEMO001', 'HDEMO001', '主院区', '北京市东城区示例路1号', '010-88886601'),
+  ('CDEMO002', 'HDEMO001', '顺义院区', '北京市顺义区示例路2号', '010-88886602'),
+  ('CDEMO003', 'HDEMO002', '东城院区', '北京市东城区示例路1-1号', '010-88886603'),
+];
+
 Future<void> main() async {
   final config = AppConfig.fromEnv();
   final db = await openDatabaseGateway(config);
@@ -79,7 +86,7 @@ Future<void> main() async {
     }
     // 演示医院：按 CODE 幂等写入，先全部落库再回填父子引用
     final hospitalIds = <String, int>{};
-    for (final (code, parentCode, name, province, city, county, address, tel) in demoHospitals) {
+    for (final (code, _, name, province, city, county, address, tel) in demoHospitals) {
       final exists = await db.query(
         'SELECT ID FROM SYS_HOSPITAL WHERE CODE = ?',
         [code],
@@ -108,6 +115,28 @@ Future<void> main() async {
         'UPDATE SYS_HOSPITAL SET PARENT_ID = ? WHERE CODE = ?',
         [parent, code],
       );
+    }
+    // 演示院区：按 CODE 幂等写入，医院 ID 经上方 hospitalIds 映射取得
+    for (final (code, hospCode, name, address, tel) in demoCampuses) {
+      final exists = await db.query(
+        'SELECT COUNT(*) AS CNT FROM SYS_CAMPUS WHERE CODE = ?',
+        [code],
+      );
+      if (int.parse(exists.rowsAsMaps.first['CNT'] ?? '0') > 0) {
+        print('  院区 $code 已存在，跳过');
+        continue;
+      }
+      final hospId = hospitalIds[hospCode];
+      if (hospId == null) {
+        print('  院区 $code 所属医院 $hospCode 不存在，跳过');
+        continue;
+      }
+      await db.execute(
+        'INSERT INTO SYS_CAMPUS (HOSP_ID, CODE, NAME, ADDRESS, TEL, '
+        'CREATE_TIME) VALUES (?, ?, ?, ?, ?, ?)',
+        [hospId, code, name, address, tel, formatTimestamp(DateTime.now())],
+      );
+      print('  院区 $code $name 已写入');
     }
     print('完成。');
   } finally {

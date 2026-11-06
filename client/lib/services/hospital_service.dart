@@ -16,14 +16,15 @@ class HospitalService {
     return list.map((e) => Hospital.fromJson(e as Map<String, dynamic>)).toList();
   }
 
-  /// 获取医院详情与子树规模（删除前确认提示用）。
+  /// 获取医院详情、子树规模与子树内院区数（删除前确认提示用）。
   ///param id: 医院 ID
-  ///returns: (医院详情, 子树行数含自身)
-  Future<(Hospital, int)> getDetail(String id) async {
+  ///returns: (医院详情, 子树行数含自身, 子树内院区数)
+  Future<(Hospital, int, int)> getDetail(String id) async {
     final data = await _base.post('/api/hospital/query', {'id': id});
     return (
       Hospital.fromJson(data['hospital'] as Map<String, dynamic>),
       data['subtreeCount'] as int,
+      data['campusCount'] as int,
     );
   }
 

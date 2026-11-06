@@ -14,6 +14,10 @@ import '../routes/api/hospital/update.dart' as api_hospital_update;
 import '../routes/api/hospital/query.dart' as api_hospital_query;
 import '../routes/api/hospital/delete.dart' as api_hospital_delete;
 import '../routes/api/hospital/add.dart' as api_hospital_add;
+import '../routes/api/campus/update.dart' as api_campus_update;
+import '../routes/api/campus/query.dart' as api_campus_query;
+import '../routes/api/campus/delete.dart' as api_campus_delete;
+import '../routes/api/campus/add.dart' as api_campus_add;
 import '../routes/api/auth/me.dart' as api_auth_me;
 import '../routes/api/auth/login.dart' as api_auth_login;
 import '../routes/api/adminDivision/update.dart' as api_admin_division_update;
@@ -24,6 +28,7 @@ import '../routes/api/adminDivision/add.dart' as api_admin_division_add;
 import '../routes/_middleware.dart' as middleware;
 import '../routes/api/logs/_middleware.dart' as api_logs_middleware;
 import '../routes/api/hospital/_middleware.dart' as api_hospital_middleware;
+import '../routes/api/campus/_middleware.dart' as api_campus_middleware;
 import '../routes/api/auth/_middleware.dart' as api_auth_middleware;
 import '../routes/api/adminDivision/_middleware.dart' as api_admin_division_middleware;
 
@@ -47,6 +52,7 @@ Handler buildRootHandler() {
     ..mount('/api', (context) => buildApiHandler()(context))
     ..mount('/api/logs', (context) => buildApiLogsHandler()(context))
     ..mount('/api/hospital', (context) => buildApiHospitalHandler()(context))
+    ..mount('/api/campus', (context) => buildApiCampusHandler()(context))
     ..mount('/api/auth', (context) => buildApiAuthHandler()(context))
     ..mount('/api/adminDivision', (context) => buildApiAdminDivisionHandler()(context));
   return pipeline.addHandler(router);
@@ -77,6 +83,13 @@ Handler buildApiHospitalHandler() {
   final pipeline = const Pipeline().addMiddleware(api_hospital_middleware.middleware);
   final router = Router()
     ..all('/add', (context) => api_hospital_add.onRequest(context,))..all('/delete', (context) => api_hospital_delete.onRequest(context,))..all('/query', (context) => api_hospital_query.onRequest(context,))..all('/update', (context) => api_hospital_update.onRequest(context,));
+  return pipeline.addHandler(router);
+}
+
+Handler buildApiCampusHandler() {
+  final pipeline = const Pipeline().addMiddleware(api_campus_middleware.middleware);
+  final router = Router()
+    ..all('/add', (context) => api_campus_add.onRequest(context,))..all('/delete', (context) => api_campus_delete.onRequest(context,))..all('/query', (context) => api_campus_query.onRequest(context,))..all('/update', (context) => api_campus_update.onRequest(context,));
   return pipeline.addHandler(router);
 }
 

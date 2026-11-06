@@ -3,8 +3,8 @@ import 'package:server/models/api_body.dart';
 import 'package:server/services/hospital_service.dart';
 
 /// POST /api/hospital/query
-/// 请求体：{id} 查单个医院详情与子树规模（删除确认提示用）；缺省查
-/// 全部医院扁平列表（医院规模有限，前端据此建医联体树）。
+/// 请求体：{id} 查单个医院详情、子树规模与子树内院区数（删除确认
+/// 提示用）；缺省查全部医院扁平列表（医院规模有限，前端据此建医联体树）。
 Future<Response> onRequest(RequestContext context) async {
   if (context.request.method != HttpMethod.post) {
     return _error(405, 40500, '该接口仅支持 POST 请求');
@@ -19,16 +19,21 @@ Future<Response> onRequest(RequestContext context) async {
 
   final service = context.read<HospitalService>();
   try {
-    // id 优先：查单个详情 + 子树规模
+    // id 优先：查单个详情 + 子树规模 + 子树内院区数
     final i = (id as String?)?.trim() ?? '';
     if (i.isNotEmpty) {
       final hospital = await service.getById(i);
       final count = await service.subtreeCount(i);
+      final campusCount = await service.subtreeCampusCount(i);
       return Response.json(
         body: {
           'code': 0,
           'message': 'ok',
-          'data': {'hospital': hospital.toJson(), 'subtreeCount': count},
+          'data': {
+            'hospital': hospital.toJson(),
+            'subtreeCount': count,
+            'campusCount': campusCount,
+          },
         },
       );
     }

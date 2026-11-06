@@ -134,7 +134,12 @@ class MainViewModel extends ChangeNotifier {
           icon: Icons.local_hospital_outlined,
           route: '/system/hospital',
         ),
-        MenuItem(id: 'campus', title: '院区设置', icon: Icons.domain_outlined),
+        MenuItem(
+          id: 'campus',
+          title: '院区设置',
+          icon: Icons.domain_outlined,
+          route: '/system/campus',
+        ),
         MenuItem(
           id: 'department',
           title: '科室设置',

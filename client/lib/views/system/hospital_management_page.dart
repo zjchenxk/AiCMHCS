@@ -291,12 +291,13 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
     );
   }
 
-  /// 删除确认对话框：先统计子树规模，提示将连带删除的下级数量
+  /// 删除确认对话框：先统计子树规模与院区数；子树内存在院区时阻止
+  /// 删除（后端 deleteSubtree 同规则兜底校验）
   void _confirmDelete(BuildContext context, HospitalTreeNode node) {
     final theme = Theme.of(context);
     final viewModel = context.read<HospitalManagementViewModel>();
-    // 打开对话框即异步取子树规模（含自身）；future 只发起一次，随重建复用
-    final countFuture = viewModel.subtreeCount(node);
+    // 打开对话框即异步取子树规模与院区数；future 只发起一次，随重建复用
+    final infoFuture = viewModel.subtreeInfo(node);
 
     showDialog(
       context: context,
@@ -309,10 +310,12 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
             blur: 24,
             child: Padding(
               padding: const EdgeInsets.all(24),
-              child: FutureBuilder<int>(
-                future: countFuture,
+              child: FutureBuilder<(int, int)>(
+                future: infoFuture,
                 builder: (ctx, snapshot) {
-                  final subtreeText = snapshot.hasData ? (snapshot.data! > 1 ? '将同时删除其下共 ${snapshot.data!} 所医院（含自身）' : '该医院没有下级') : (snapshot.hasError ? '下级数量统计失败，仍将级联删除全部下级' : '正在统计下级数量…');
+                  final info = snapshot.data;
+                  final blocked = (info?.$2 ?? 0) > 0;
+                  final subtreeText = snapshot.hasData ? (info!.$1 > 1 ? '将同时删除其下共 ${info.$1} 所医院（含自身）' : '该医院没有下级') : (snapshot.hasError ? '下级数量统计失败，仍将级联删除全部下级' : '正在统计下级数量…');
                   return Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -347,6 +350,27 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
                           color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                         ),
                       ),
+                      if (blocked) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.block_outlined,
+                              color: theme.colorScheme.error,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                '该医院（含下级）下存在 ${info!.$2} 个院区，请先删除院区后，再删除医院',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.error,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 20),
 
                       Row(
@@ -354,7 +378,7 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
                         children: [
                           TextButton(
                             onPressed: () => Navigator.pop(ctx),
-                            child: const Text('取消'),
+                            child: Text(blocked ? '知道了' : '取消'),
                           ),
                           const SizedBox(width: 12),
                           FilledButton(
@@ -362,15 +386,18 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
                               backgroundColor: theme.colorScheme.error,
                               foregroundColor: theme.colorScheme.onError,
                             ),
-                            onPressed: () async {
-                              Navigator.pop(ctx);
-                              final ok = await viewModel.deleteHospital(node);
-                              if (!mounted) return;
-                              if (ok) {
-                                _showResultSnackBar('删除成功');
-                              }
-                              // 失败提示由 errorMsg 监听统一弹出
-                            },
+                            // 存在院区时禁用（后端同规则兜底）
+                            onPressed: blocked
+                                ? null
+                                : () async {
+                                    Navigator.pop(ctx);
+                                    final ok = await viewModel.deleteHospital(node);
+                                    if (!mounted) return;
+                                    if (ok) {
+                                      _showResultSnackBar('删除成功');
+                                    }
+                                    // 失败提示由 errorMsg 监听统一弹出
+                                  },
                             child: const Text('删除'),
                           ),
                         ],

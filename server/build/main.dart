@@ -8,6 +8,7 @@ import 'package:server/database/migrator/migrations/base/migration.dart';
 import 'package:server/database/migrator/schema_migrator.dart';
 import 'package:server/services/admin_division_service.dart';
 import 'package:server/services/auth_service.dart';
+import 'package:server/services/campus_service.dart';
 import 'package:server/services/hospital_service.dart';
 import 'package:server/services/operation_log_service.dart';
 import 'package:server/utils/field_cipher.dart';
@@ -31,6 +32,7 @@ Future<HttpServer> run(Handler handler, InternetAddress ip, int port) async {
   final auth = AuthService(db, cipher);
   final adminDivisions = AdminDivisionService(db);
   final hospitals = HospitalService(db);
+  final campuses = CampusService(db);
   final operationLogs = OperationLogService(db);
   // 静态门面：服务层深处、全局中间件等无 RequestContext 的位置经
   // LogHelper 写日志；中间件/路由经下方 provider 取同一实例。
@@ -42,6 +44,7 @@ Future<HttpServer> run(Handler handler, InternetAddress ip, int port) async {
       .use(provider<AuthService>((_) => auth))
       .use(provider<AdminDivisionService>((_) => adminDivisions))
       .use(provider<HospitalService>((_) => hospitals))
+      .use(provider<CampusService>((_) => campuses))
       .use(provider<OperationLogService>((_) => operationLogs));
 
   final server = await serve(app, ip, port);
