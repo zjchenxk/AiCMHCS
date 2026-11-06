@@ -5,6 +5,7 @@ import 'package:client/providers/theme_provider.dart';
 import 'package:client/services/admin_divisions_service.dart';
 import 'package:client/services/auth_service.dart';
 import 'package:client/services/base/base_service.dart';
+import 'package:client/services/hospital_service.dart';
 import 'package:client/services/log_service.dart';
 import 'package:client/utils/log_helper.dart';
 import 'package:client/view_models/home/home_view_model.dart';
@@ -36,6 +37,7 @@ void setupServiceLocator() {
   getIt.registerLazySingleton<AuthService>(() => AuthService());
   getIt.registerLazySingleton<LogService>(() => LogService());
   getIt.registerLazySingleton<AdminDivisionsService>(() => AdminDivisionsService());
+  getIt.registerLazySingleton<HospitalService>(() => HospitalService());
 }
 
 void main() async {

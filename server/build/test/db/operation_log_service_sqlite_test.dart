@@ -82,6 +82,26 @@ void main() {
     expect(row['LOG_CONTENT']!.endsWith('…'), isTrue);
   });
 
+  test('内容中的控制字符（含 NUL）落库前替换为空格，换行保留', () async {
+    // 模拟 base64Decode 的 FormatException 消息：内嵌含 NUL 的源串片段
+    const content = 'FormatException: Invalid character (at character 8192)\nABCD\u0000EFGH\u0001IJKL\u007F';
+    await service.add(
+      userId: 1,
+      logType: OperationLogService.typeError,
+      logName: 'client:FlutterError',
+      logContent: content,
+    );
+
+    final row = await lastRow();
+    final stored = row['LOG_CONTENT']!;
+    expect(
+      stored,
+      'FormatException: Invalid character (at character 8192)\nABCD EFGH IJKL ',
+    );
+    expect(stored.contains('\u0000'), isFalse);
+    expect(stored.contains('\n'), isTrue);
+  });
+
   test('中文内容（含非 ASCII）正常写入与读回', () async {
     const content = '异常：新增行政区划失败，编码重复（110000）';
     await service.add(

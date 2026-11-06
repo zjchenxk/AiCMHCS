@@ -2,7 +2,7 @@ import 'package:dart_frog/dart_frog.dart';
 import 'package:server/models/api_body.dart';
 import 'package:server/services/admin_division_service.dart';
 
-/// POST /api/adminDivisions/query
+/// POST /api/adminDivision/query
 /// 请求体：{code} 查单个区划详情与子树规模；{parentCode} 查下一级列表
 /// （缺省省级）。动作式路由，操作日志按路径即可辨识。
 Future<Response> onRequest(RequestContext context) async {

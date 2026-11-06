@@ -314,7 +314,12 @@ final class DmConnection {
     }
 
     // 逐行取数：W 路径没有 bind_col 的宽字符版本，用 getDataW 逐列读取。
+    // 超缓冲长列（TEXT/CLOB，如医院印章 base64）一次装不下时 DPI 返回
+    // SUCCESS_WITH_INFO 且 ind 为剩余总字节数，缓冲填「容量-1」个字符并
+    // 尾置 \u0000 终止符——须对同列重复调用续读直至 SUCCESS，否则既截断
+    // 又把终止符带进数据（分块语义经 tool 探针对 DM8 实测确认）。
     final rows = <List<String?>>[];
+    final capUnits = _colBufBytes ~/ 2 - 1; // 留 1 个终止符位
     final wbuf = calloc<Uint16>(_colBufBytes ~/ 2);
     final ind = calloc<Int64>();
     final rowNum = calloc<Uint64>();
@@ -325,23 +330,34 @@ final class DmConnection {
         _check(rc, stmt, '读取数据行失败');
         final row = List<String?>.filled(nCols, null);
         for (var i = 1; i <= nCols; i++) {
-          final grc = _dpi.getDataW(
-            stmt,
-            i,
-            Dpi.dsqlCWChar,
-            wbuf.cast(),
-            _colBufBytes,
-            ind,
-          );
-          _check(grc, stmt, '读取第 $i 列数据失败');
-          if (ind.value == Dpi.dsqlNullData) {
-            row[i - 1] = null;
-          } else {
+          final parts = StringBuffer();
+          var isNull = false;
+          while (true) {
+            final grc = _dpi.getDataW(
+              stmt,
+              i,
+              Dpi.dsqlCWChar,
+              wbuf.cast(),
+              _colBufBytes,
+              ind,
+            );
+            // 恰好整块读尽时驱动可能以 NO_DATA 收尾，视为本列完成
+            if (grc == Dpi.dsqlNoData) break;
+            if (ind.value == Dpi.dsqlNullData) {
+              isNull = true;
+              break;
+            }
+            _check(grc, stmt, '读取第 $i 列数据失败');
             var units = ind.value ~/ 2;
             if (units < 0) units = 0;
-            if (units > _colBufBytes ~/ 2) units = _colBufBytes ~/ 2;
-            row[i - 1] = String.fromCharCodes(wbuf.asTypedList(units));
+            if (units > capUnits) units = capUnits;
+            parts.write(String.fromCharCodes(wbuf.asTypedList(units)));
+            if (grc == Dpi.dsqlSuccess) break;
+            // SUCCESS_WITH_INFO：缓冲不足，继续读本列剩余部分；
+            // 空块属驱动异常，防御性终止避免死循环
+            if (units == 0) break;
           }
+          row[i - 1] = isNull ? null : parts.toString();
         }
         rows.add(row);
       }

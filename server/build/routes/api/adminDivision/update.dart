@@ -2,7 +2,7 @@ import 'package:dart_frog/dart_frog.dart';
 import 'package:server/models/api_body.dart';
 import 'package:server/services/admin_division_service.dart';
 
-/// POST /api/adminDivisions/update
+/// POST /api/adminDivision/update
 /// 请求体：{code, newCode?, name?}（code 定位记录；newCode 改编码时
 /// 级联更新全部下级父引用；至少修改一项）。
 Future<Response> onRequest(RequestContext context) async {

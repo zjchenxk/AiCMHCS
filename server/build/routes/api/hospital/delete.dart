@@ -1,9 +1,9 @@
 import 'package:dart_frog/dart_frog.dart';
 import 'package:server/models/api_body.dart';
-import 'package:server/services/admin_division_service.dart';
+import 'package:server/services/hospital_service.dart';
 
-/// POST /api/adminDivisions/delete
-/// 请求体：{code}，级联删除该区划及其全部下级。
+/// POST /api/hospital/delete
+/// 请求体：{id}，级联删除该医院及其全部下级。
 Future<Response> onRequest(RequestContext context) async {
   if (context.request.method != HttpMethod.post) {
     return _error(405, 40500, '该接口仅支持 POST 请求');
@@ -11,14 +11,14 @@ Future<Response> onRequest(RequestContext context) async {
 
   // 请求体已被加密中间件解开为明文（勿直接 request.json()，那是密文）。
   final body = context.read<ApiBody>().json;
-  final code = body['code'];
-  if (code is! String || code.trim().isEmpty) {
-    return _error(400, 40001, '行政区划代码不能为空');
+  final id = body['id'];
+  if (id is! String || id.trim().isEmpty) {
+    return _error(400, 40001, '医院ID不能为空');
   }
 
-  final service = context.read<AdminDivisionService>();
+  final service = context.read<HospitalService>();
   try {
-    final deleted = await service.deleteSubtree(code.trim());
+    final deleted = await service.deleteSubtree(id.trim());
     return Response.json(
       body: {
         'code': 0,
@@ -26,7 +26,7 @@ Future<Response> onRequest(RequestContext context) async {
         'data': {'deleted': deleted},
       },
     );
-  } on AdminDivisionException catch (e) {
+  } on HospitalException catch (e) {
     return _error(e.httpStatus, e.code, e.message);
   }
 }

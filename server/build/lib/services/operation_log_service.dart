@@ -32,6 +32,13 @@ class OperationLogService {
   /// 受单条 SQL 语句长度约束，故取保守值。
   static const int _maxContentLength = 4000;
 
+  /// 需清洗的控制字符：C0 中保留 \t(09)/\n(0A)/\r(0D)，其余（含 NUL）
+  /// 与 DEL(0x7F) 替换为空格。异常消息可能引用出错的原始字符串片段
+  /// （如 base64Decode 的 FormatException 会在消息里内嵌源串，含 NUL
+  /// 等控制符），不清洗轻则影响可读性，重则随非 ASCII 参数内联进 SQL
+  /// 文本直接破坏达梦语句解析（预处理报「不完整的语法项」，日志丢失）。
+  static final RegExp _controlChars = RegExp('[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]');
+
   ///param logType: 日志类别（信息/警告/错误）
   ///param logName: 日志名称（方法全路径或请求路由路径）
   ///param userId: 用户ID（无会话的请求/异常可为 null）
@@ -44,12 +51,15 @@ class OperationLogService {
       [
         userId,
         logType,
-        _clip(logName, _maxNameLength),
-        _clip(logContent, _maxContentLength),
+        _clip(_sanitize(logName), _maxNameLength),
+        _clip(_sanitize(logContent), _maxContentLength),
         formatTimestamp(DateTime.now()),
       ],
     );
   }
+
+  /// 控制字符替换为空格（保位、无语法风险）；\t\n\r 为正常排版字符保留。
+  static String? _sanitize(String? text) => text?.replaceAll(_controlChars, ' ');
 
   /// 超长文本截断，尾部追加省略号标记截断痕迹。
   static String? _clip(String? text, int maxLength) {

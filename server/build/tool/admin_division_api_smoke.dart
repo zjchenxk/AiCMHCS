@@ -46,17 +46,17 @@ Future<void> main() async {
   }
 
   // 2. 查询省级列表（parentCode 缺省），取第一个省作为父级
-  final provinces = (await post('/api/adminDivisions/query', {}))['divisions'] as List<dynamic>;
+  final provinces = (await post('/api/adminDivision/query', {}))['divisions'] as List<dynamic>;
   final parent = provinces.first as Map<String, dynamic>;
   print('2. 省级列表 ${provinces.length} 条，父级=${parent['code']} ${parent['name']} hasChildren=${parent['hasChildren']}');
 
   // 3. 查询该省当前子级
-  final before = (await post('/api/adminDivisions/query', {'parentCode': parent['code']}))['divisions'] as List<dynamic>;
+  final before = (await post('/api/adminDivision/query', {'parentCode': parent['code']}))['divisions'] as List<dynamic>;
   print('3. ${parent['name']} 子级 ${before.length} 条');
 
   // 4. 新增下级
   final testCode = '99${DateTime.now().millisecondsSinceEpoch}'.substring(0, 12).padRight(12, '0');
-  await post('/api/adminDivisions/add', {
+  await post('/api/adminDivision/add', {
     'code': testCode,
     'name': '冒烟测试区划',
     'parentCode': parent['code'],
@@ -64,17 +64,17 @@ Future<void> main() async {
   print('4. 新增成功: $testCode');
 
   // 5. 再查子级：必须包含新节点（新增后回读验证）
-  final after = (await post('/api/adminDivisions/query', {'parentCode': parent['code']}))['divisions'] as List<dynamic>;
+  final after = (await post('/api/adminDivision/query', {'parentCode': parent['code']}))['divisions'] as List<dynamic>;
   final hit = after.any((d) => (d as Map<String, dynamic>)['code'] == testCode);
   print('5. 重新查询子级 ${after.length} 条，包含新节点: $hit');
 
   // 6. 改名 + 按代码查详情与子树规模
-  await post('/api/adminDivisions/update', {'code': testCode, 'name': '冒烟测试区划（改名）'});
-  final detail = await post('/api/adminDivisions/query', {'code': testCode});
+  await post('/api/adminDivision/update', {'code': testCode, 'name': '冒烟测试区划（改名）'});
+  final detail = await post('/api/adminDivision/query', {'code': testCode});
   print('6. 改名+详情 OK subtreeCount=${detail['subtreeCount']}');
 
   // 7. 清理：级联删除
-  final deleted = await post('/api/adminDivisions/delete', {'code': testCode});
+  final deleted = await post('/api/adminDivision/delete', {'code': testCode});
   print('7. 删除成功 deleted=${deleted['deleted']}');
 
   client.close();

@@ -8,6 +8,7 @@
 // 连接参数与后端一致（AICMHCS_DB_HOST/PORT/USER/PASSWORD、AICMHCS_DB_FILE、
 // AICMHCS_FIELD_MASTER_KEY/KEY_FILE）。
 import 'package:server/app_config.dart';
+import 'package:server/database/engine/database_gateway.dart';
 import 'package:server/database/engine/db_factory.dart';
 import 'package:server/database/migrator/schema_migrator.dart';
 import 'package:server/services/auth_service.dart';
@@ -18,6 +19,30 @@ const demoUsers = [
   ('doctor01', 'Doctor@123', '王心怡', 'DOCTOR', '13900000111'),
   ('teacher01', 'Teacher@123', '李晓芳', 'TEACHER', '13700000222'),
   ('parent01', 'Parent@123', '张浩然', 'PARENT', '13600000333'),
+];
+
+/// 演示医院（医联体两级）：按 CODE 幂等写入，parentCode 取同列表内代码。
+const demoHospitals = [
+  (
+    'HDEMO001',
+    null,
+    '示例人民医院',
+    '北京市',
+    '北京市',
+    '东城区',
+    '示例路1号',
+    '010-88886666',
+  ),
+  (
+    'HDEMO002',
+    'HDEMO001',
+    '示例人民医院-儿童心理分院',
+    '北京市',
+    '北京市',
+    '东城区',
+    '示例路1-1号',
+    '010-88886667',
+  ),
 ];
 
 Future<void> main() async {
@@ -51,6 +76,38 @@ Future<void> main() async {
         ],
       );
       print('  $userCode / $password 已写入');
+    }
+    // 演示医院：按 CODE 幂等写入，先全部落库再回填父子引用
+    final hospitalIds = <String, int>{};
+    for (final (code, parentCode, name, province, city, county, address, tel) in demoHospitals) {
+      final exists = await db.query(
+        'SELECT ID FROM SYS_HOSPITAL WHERE CODE = ?',
+        [code],
+      );
+      if (exists.rows.isNotEmpty) {
+        hospitalIds[code] = int.parse(exists.rows.first[0]!);
+        print('  医院 $code 已存在，跳过');
+        continue;
+      }
+      await db.execute(
+        'INSERT INTO SYS_HOSPITAL (PARENT_ID, CODE, NAME, PROVINCE, CITY, '
+        'COUNTY, ADDRESS, TEL, CREATE_TIME) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [null, code, name, province, city, county, address, tel, formatTimestamp(DateTime.now())],
+      );
+      final row = await db.query(
+        'SELECT ID FROM SYS_HOSPITAL WHERE CODE = ?',
+        [code],
+      );
+      hospitalIds[code] = int.parse(row.rows.first[0]!);
+      print('  医院 $code $name 已写入');
+    }
+    for (final (code, parentCode, _, _, _, _, _, _) in demoHospitals) {
+      final parent = parentCode == null ? null : hospitalIds[parentCode];
+      if (parent == null) continue;
+      await db.execute(
+        'UPDATE SYS_HOSPITAL SET PARENT_ID = ? WHERE CODE = ?',
+        [parent, code],
+      );
     }
     print('完成。');
   } finally {

@@ -10,17 +10,22 @@ import '../routes/index.dart' as index;
 import '../routes/health.dart' as health;
 import '../routes/api/index.dart' as api_index;
 import '../routes/api/logs/index.dart' as api_logs_index;
+import '../routes/api/hospital/update.dart' as api_hospital_update;
+import '../routes/api/hospital/query.dart' as api_hospital_query;
+import '../routes/api/hospital/delete.dart' as api_hospital_delete;
+import '../routes/api/hospital/add.dart' as api_hospital_add;
 import '../routes/api/auth/me.dart' as api_auth_me;
 import '../routes/api/auth/login.dart' as api_auth_login;
-import '../routes/api/adminDivisions/update.dart' as api_admin_divisions_update;
-import '../routes/api/adminDivisions/query.dart' as api_admin_divisions_query;
-import '../routes/api/adminDivisions/delete.dart' as api_admin_divisions_delete;
-import '../routes/api/adminDivisions/add.dart' as api_admin_divisions_add;
+import '../routes/api/adminDivision/update.dart' as api_admin_division_update;
+import '../routes/api/adminDivision/query.dart' as api_admin_division_query;
+import '../routes/api/adminDivision/delete.dart' as api_admin_division_delete;
+import '../routes/api/adminDivision/add.dart' as api_admin_division_add;
 
 import '../routes/_middleware.dart' as middleware;
 import '../routes/api/logs/_middleware.dart' as api_logs_middleware;
+import '../routes/api/hospital/_middleware.dart' as api_hospital_middleware;
 import '../routes/api/auth/_middleware.dart' as api_auth_middleware;
-import '../routes/api/adminDivisions/_middleware.dart' as api_admin_divisions_middleware;
+import '../routes/api/adminDivision/_middleware.dart' as api_admin_division_middleware;
 
 void main() async {
   final address = InternetAddress.anyIPv6;
@@ -41,8 +46,9 @@ Handler buildRootHandler() {
     ..mount('/', (context) => buildHandler()(context))
     ..mount('/api', (context) => buildApiHandler()(context))
     ..mount('/api/logs', (context) => buildApiLogsHandler()(context))
+    ..mount('/api/hospital', (context) => buildApiHospitalHandler()(context))
     ..mount('/api/auth', (context) => buildApiAuthHandler()(context))
-    ..mount('/api/adminDivisions', (context) => buildApiAdminDivisionsHandler()(context));
+    ..mount('/api/adminDivision', (context) => buildApiAdminDivisionHandler()(context));
   return pipeline.addHandler(router);
 }
 
@@ -67,6 +73,13 @@ Handler buildApiLogsHandler() {
   return pipeline.addHandler(router);
 }
 
+Handler buildApiHospitalHandler() {
+  final pipeline = const Pipeline().addMiddleware(api_hospital_middleware.middleware);
+  final router = Router()
+    ..all('/add', (context) => api_hospital_add.onRequest(context,))..all('/delete', (context) => api_hospital_delete.onRequest(context,))..all('/query', (context) => api_hospital_query.onRequest(context,))..all('/update', (context) => api_hospital_update.onRequest(context,));
+  return pipeline.addHandler(router);
+}
+
 Handler buildApiAuthHandler() {
   final pipeline = const Pipeline().addMiddleware(api_auth_middleware.middleware);
   final router = Router()
@@ -74,10 +87,10 @@ Handler buildApiAuthHandler() {
   return pipeline.addHandler(router);
 }
 
-Handler buildApiAdminDivisionsHandler() {
-  final pipeline = const Pipeline().addMiddleware(api_admin_divisions_middleware.middleware);
+Handler buildApiAdminDivisionHandler() {
+  final pipeline = const Pipeline().addMiddleware(api_admin_division_middleware.middleware);
   final router = Router()
-    ..all('/add', (context) => api_admin_divisions_add.onRequest(context,))..all('/delete', (context) => api_admin_divisions_delete.onRequest(context,))..all('/query', (context) => api_admin_divisions_query.onRequest(context,))..all('/update', (context) => api_admin_divisions_update.onRequest(context,));
+    ..all('/add', (context) => api_admin_division_add.onRequest(context,))..all('/delete', (context) => api_admin_division_delete.onRequest(context,))..all('/query', (context) => api_admin_division_query.onRequest(context,))..all('/update', (context) => api_admin_division_update.onRequest(context,));
   return pipeline.addHandler(router);
 }
 

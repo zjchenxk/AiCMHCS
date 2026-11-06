@@ -3,6 +3,12 @@
 /// SQL 字面量直接内联（经 W 路径执行，中文无乱码），其余参数照常绑定。
 ///
 /// 返回 (改写后的 SQL, 实际需绑定的参数)。
+
+/// 内联前需替换为空格的控制字符：C0 中保留 \t\n\r（SQL 文本合法换行与
+/// 缩进），其余（含 NUL）与 DEL 一律替换——NUL 等控制符会终止达梦的
+/// 语句解析（预处理报「不完整的语法项」，见 OperationLogService 清洗）。
+final RegExp _inlineControlChars = RegExp('[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]');
+
 (String, List<Object?>) rewriteDmParams(String sql, List<Object?> params) {
   if (params.isEmpty) return (sql, params);
 
@@ -39,7 +45,7 @@
           bound.add(value);
           out.write('?');
         } else {
-          out.write("'${text.replaceAll("'", "''")}'");
+          out.write("'${text.replaceAll("'", "''").replaceAll(_inlineControlChars, ' ')}'");
         }
       }
     } else {

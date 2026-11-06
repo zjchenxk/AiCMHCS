@@ -64,14 +64,27 @@ Future<void> main(List<String> args) async {
   }
 
   // 2. 业务请求（无参与带参数各一次，POST 入参留痕记脱敏后 JSON）：应各留痕一条「信息」
-  await sealed('POST', '/api/adminDivisions/query', {});
-  await sealed('POST', '/api/adminDivisions/query', {'parentCode': '110000'});
+  await sealed('POST', '/api/adminDivision/query', {});
+  await sealed('POST', '/api/adminDivision/query', {'parentCode': '110000'});
 
   // 3. 客户端通道上报一条「错误」日志（POST /api/logs 本身不应留痕请求日志）
   await sealed('POST', '/api/logs', {
     'logType': '错误',
     'logName': 'client:Smoke.test',
     'logContent': '模拟异常：操作日志冒烟测试\n#0      Smoke.test (smoke.dart:1:1)',
+  });
+
+  // 3.5 上报「有毒」错误日志：内容含 NUL 控制符（异常消息引用出错源串
+  // 片段所致）且超长截断追加非 ASCII 省略号——该组合曾使达梦内联 SQL
+  // 预处理失败，错误日志整体丢失
+  final poison =
+      'FormatException: Invalid character (at character 8192)\n'
+      'ABCD\u0000EFGH\u0001\n'
+      '${List.filled(4200, '#').join()}';
+  await sealed('POST', '/api/logs', {
+    'logType': '错误',
+    'logName': 'client:Smoke.poison',
+    'logContent': poison,
   });
 
   // 等待后台 fire-and-forget 的请求留痕落库（网关 isolate 异步写）
@@ -96,10 +109,10 @@ Future<void> main(List<String> args) async {
     }
 
     final requestLogHit = rows.any(
-      (row) => row['LOG_NAME'] == '/api/adminDivisions/query' && row['LOG_TYPE'] == '信息' && row['USER_ID'] == adminId,
+      (row) => row['LOG_NAME'] == '/api/adminDivision/query' && row['LOG_TYPE'] == '信息' && row['USER_ID'] == adminId,
     );
     final queryLogged = rows.any(
-      (row) => row['LOG_NAME'] == '/api/adminDivisions/query' && row['LOG_CONTENT'] == '{"parentCode":"110000"}',
+      (row) => row['LOG_NAME'] == '/api/adminDivision/query' && row['LOG_CONTENT'] == '{"parentCode":"110000"}',
     );
     final uploadHit = rows.any(
       (row) => row['LOG_NAME'] == 'client:Smoke.test' && row['LOG_TYPE'] == '错误' && row['USER_ID'] == adminId,
@@ -109,6 +122,18 @@ Future<void> main(List<String> args) async {
     print('5. 断言：请求留痕=$requestLogHit 查询串留痕=$queryLogged 客户端上报=$uploadHit 日志接口防放大=$noAmplify');
     if (!requestLogHit || !queryLogged || !uploadHit || !noAmplify) {
       throw StateError('操作日志链路断言失败');
+    }
+
+    // 有毒日志专项断言：已落库、含异常关键信息、NUL 已清洗、截断标记在
+    final poisonRows = (await db.query(
+      'SELECT LOG_CONTENT FROM SYS_OPERATION_LOG WHERE LOG_NAME = ? ORDER BY ID DESC LIMIT 1',
+      ['client:Smoke.poison'],
+    )).rowsAsMaps;
+    final poisonContent = poisonRows.isNotEmpty ? poisonRows.first['LOG_CONTENT'] : null;
+    final poisonHit = poisonContent != null && poisonContent.contains('8192') && !poisonContent.contains('\u0000') && poisonContent.endsWith('…');
+    print('6. 断言：含控制符错误日志落库（含 8192 / NUL 已清洗 / 截断标记）=$poisonHit');
+    if (!poisonHit) {
+      throw StateError('含控制符错误日志落库断言失败');
     }
     print('操作日志链路全部正常');
   } finally {

@@ -1,7 +1,9 @@
 /// 医院树节点（支持上下级，用于医联体）
 class HospitalTreeNode {
   final String id;
-  final String name;
+
+  /// 医院名称（可改名，随保存更新）
+  String name;
   final String? parentId; // 为 null 表示根节点（顶级医院）
   final List<HospitalTreeNode> children;
   bool expanded;

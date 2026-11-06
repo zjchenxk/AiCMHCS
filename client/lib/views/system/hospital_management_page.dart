@@ -6,6 +6,10 @@ import 'package:client/widgets/glass_panel.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+/// 医院管理页：左侧医联体树形列表（全量加载）；右侧信息表单三态——
+/// 未选中给提示、选中医院可编辑（基本信息可改、上级只读）、添加顶级/
+/// 下级医院时切换为新增表单（表单清空、上级医院显示目标父级且只读）；
+/// 删除为级联删除（连全部下级）。
 class HospitalManagementPage extends BasePage {
   const HospitalManagementPage({
     super.key,
@@ -18,24 +22,32 @@ class HospitalManagementPage extends BasePage {
 }
 
 class _HospitalManagementPageState extends State<HospitalManagementPage> {
+  /// dispose 中不能再用 context 取 Provider，保存实例引用供移除监听
+  late final HospitalManagementViewModel _viewModel;
+
   @override
   void initState() {
     super.initState();
 
     // 通过 Provider 获取全局注入的实例（不再自己 new）
-    final viewModel = context.read<HospitalManagementViewModel>();
-    viewModel.loadOrganTree();
+    _viewModel = context.read<HospitalManagementViewModel>();
+    // 仅首次进入加载：切页回来保留已加载的树与选中状态
+    // （VM 为全局单例，重复 loadHospitals 会重建整棵树、丢失展开状态）；
+    // 延迟到首帧后发起，避免 build 期间同步 notifyListeners
+    if (_viewModel.hospitalTree.isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _viewModel.loadHospitals();
+      });
+    }
 
     // 监听 errorMsg 变化，用 SnackBar 提示错误
-    viewModel.addListener(_onViewModelChanged);
+    _viewModel.addListener(_onViewModelChanged);
   }
 
   @override
   void dispose() {
     // 注意：实例来自 Provider 全局注入，这里只移除监听，不要 viewModel.dispose()
-    context.read<HospitalManagementViewModel>().removeListener(
-      _onViewModelChanged,
-    );
+    _viewModel.removeListener(_onViewModelChanged);
     super.dispose();
   }
 
@@ -45,41 +57,41 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
     //获取当前主题
     final ThemeData theme = Theme.of(context);
 
-    final viewModel = context.read<HospitalManagementViewModel>();
-    if (viewModel.errorMsg != null) {
+    if (_viewModel.errorMsg != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            viewModel.errorMsg!,
-            style: theme.textTheme.bodyMedium,
+            _viewModel.errorMsg!,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onError,
+            ),
           ),
-          backgroundColor: Colors.red,
+          backgroundColor: theme.colorScheme.error,
           behavior: SnackBarBehavior.floating, // 悬浮式，不遮挡底部布局
           duration: const Duration(seconds: 3),
           action: SnackBarAction(
             label: '关闭',
-            textColor: Colors.white,
-            onPressed: viewModel.clearError,
+            textColor: theme.colorScheme.onPrimary,
+            onPressed: _viewModel.clearError,
           ),
         ),
       );
       // 提示后立即清空，避免同一错误重复弹出
-      viewModel.clearError();
+      _viewModel.clearError();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    //获取当前主题
-    final ThemeData theme = Theme.of(context);
-
     // 使用 watch 监听变化，VM notifyListeners 后自动刷新
     final viewModel = context.watch<HospitalManagementViewModel>();
 
-    return viewModel.loading ? const Center(child: CircularProgressIndicator()) : _buildBody(theme, viewModel);
+    return viewModel.loading ? const Center(child: CircularProgressIndicator()) : _buildBody(context, viewModel);
   }
 
-  Widget _buildBody(ThemeData theme, HospitalManagementViewModel viewModel) {
+  Widget _buildBody(BuildContext context, HospitalManagementViewModel viewModel) {
+    final theme = Theme.of(context);
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -91,53 +103,27 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
             margin: const EdgeInsets.all(8),
             child: Column(
               children: [
-                Container(
-                  height: 60,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  color: theme.colorScheme.primaryContainer,
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.account_tree,
-                        size: 18,
-                        color: theme.colorScheme.primary,
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          '医院列表',
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.primary,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: '添加顶级医院',
-                        icon: Icon(
-                          Icons.add_home_work_outlined,
-                          size: 20,
-                          color: theme.colorScheme.primary,
-                        ),
-                        onPressed: () => _showAddRootDialog(theme, Icons.home_work_outlined),
-                      ),
-                    ],
+                _buildPanelHeader(
+                  theme,
+                  title: '医院列表',
+                  icon: Icons.account_tree_outlined,
+                  trailing: IconButton(
+                    tooltip: '添加顶级医院',
+                    icon: Icon(
+                      Icons.add_home_work_outlined,
+                      size: 20,
+                      color: theme.colorScheme.primary,
+                    ),
+                    // 右侧表单切换为新增顶级（上级为空）
+                    onPressed: viewModel.busy ? null : () => viewModel.startCreate(),
                   ),
                 ),
 
                 Expanded(
-                  child: viewModel.organTree.isEmpty
+                  child: viewModel.hospitalTree.isEmpty
                       ? const Center(child: Text('暂无医院数据'))
                       : ListView(
-                          children: viewModel.organTree
-                              .map(
-                                (n) => _buildTreeTile(theme, viewModel, n, 0),
-                              )
-                              .toList(),
+                          children: viewModel.hospitalTree.map((n) => _buildTreeTile(context, viewModel, n, 0)).toList(),
                         ),
                 ),
               ],
@@ -145,47 +131,81 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
           ),
         ),
 
-        // 右侧：医院信息表单
+        // 右侧：固定显示的医院信息卡片（按表单模式切换内容）
         Expanded(
           flex: 6,
-          child: viewModel.selectedNode == null
-              ? const Center(child: Text('请先在左侧选择医院'))
-              : HospitalInfoForm(
-                  key: ValueKey(viewModel.selectedNode!.id),
-                  node: viewModel.selectedNode!,
-                  info: viewModel.selectedOrganInfo!,
-                  onSave: (info) async {
-                    final ok = await viewModel.saveOrganInfo(info);
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          ok ? '保存成功' : '保存失败：${viewModel.errorMsg ?? ''}',
-                        ),
-                        backgroundColor: ok ? Colors.green : Colors.red,
+          child: Card(
+            color: theme.colorScheme.surfaceContainer,
+            margin: const EdgeInsets.all(8),
+            child: Column(
+              children: [
+                _buildPanelHeader(
+                  theme,
+                  title: '医院信息',
+                  icon: Icons.local_hospital_outlined,
+                ),
+
+                Expanded(
+                  child: switch (viewModel.formMode) {
+                    HospitalFormMode.empty => const Center(child: Text('请先在左侧选择医院')),
+                    // key 含模式与目标父级/医院 ID：切换模式或目标时表单重建，
+                    // 实现新增表单清空、编辑表单回填
+                    _ => HospitalInfoForm(
+                      key: ValueKey(
+                        viewModel.formMode == HospitalFormMode.create ? 'create:${viewModel.creatingParentNode?.id ?? ''}' : 'edit:${viewModel.selectedNode!.id}',
                       ),
-                    );
+                      viewModel: viewModel,
+                    ),
                   },
                 ),
+              ],
+            ),
+          ),
         ),
       ],
     );
   }
 
+  /// 面板抬头：primaryContainer 背景条（左右两栏同款）
+  Widget _buildPanelHeader(ThemeData theme, {required String title, required IconData icon, Widget? trailing}) {
+    return Container(
+      height: 60,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      color: theme.colorScheme.primaryContainer,
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: theme.colorScheme.primary),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              title,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.primary,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          ?trailing,
+        ],
+      ),
+    );
+  }
+
   /// 递归构建树节点
-  Widget _buildTreeTile(
-    ThemeData theme,
-    HospitalManagementViewModel viewModel,
-    HospitalTreeNode node,
-    int depth,
-  ) {
+  Widget _buildTreeTile(BuildContext context, HospitalManagementViewModel viewModel, HospitalTreeNode node, int depth) {
+    final theme = Theme.of(context);
     final selected = viewModel.selectedNode?.id == node.id;
     return Column(
       children: [
         ListTile(
           dense: true,
           contentPadding: EdgeInsets.only(left: 12.0 + depth * 20, right: 4),
-          leading: const Icon(Icons.home_work_outlined, size: 18),
+          leading: Icon(
+            Icons.home_work_outlined,
+            size: 18,
+            color: selected ? theme.colorScheme.primary : null,
+          ),
           title: Text(
             node.name,
             style: theme.textTheme.bodyMedium?.copyWith(
@@ -231,10 +251,10 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
                           Icon(
                             Icons.delete_outline,
                             size: 18,
-                            color: theme.colorScheme.primary,
+                            color: theme.colorScheme.error,
                           ),
                           const SizedBox(width: 10),
-                          const Text('删除医院'),
+                          const Text('删除'),
                         ],
                       ),
                     ),
@@ -245,20 +265,15 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                     side: BorderSide(
-                      color: theme.colorScheme.outlineVariant.withValues(
-                        alpha: 0.3,
-                      ),
+                      color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
                     ),
                   ),
                   onSelected: (action) {
                     if (action == 'add') {
-                      _showAddChildDialog(
-                        theme,
-                        Icons.home_work_outlined,
-                        node,
-                      );
+                      // 右侧表单切换为新增下级（上级医院显示该节点）
+                      viewModel.startCreate(parent: node);
                     } else if (action == 'delete') {
-                      _confirmDelete(theme, node);
+                      _confirmDelete(context, node);
                     }
                   },
                 ),
@@ -266,55 +281,27 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
             ),
           ),
           selected: selected,
-          onTap: () => viewModel.selectOrgan(node.id),
+          onTap: () => viewModel.selectNode(node),
         ),
         if (node.expanded)
           ...node.children.map(
-            (c) => _buildTreeTile(theme, viewModel, c, depth + 1),
+            (c) => _buildTreeTile(context, viewModel, c, depth + 1),
           ),
       ],
     );
   }
 
-  void _showAddRootDialog(ThemeData theme, IconData icon) {
-    _showNameDialog(theme, icon, '添加顶级医院', (name) async {
-      // 顶级医院：通过 addChildHospital 传入虚拟根节点逻辑，这里简化为接口后刷新
-      // 实际项目应调用 context.read<OrganViewModel>().addRootHospital(name)
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('TODO：调用添加顶级医院接口'),
-        ),
-      );
-    });
-  }
-
-  void _showAddChildDialog(
-    ThemeData theme,
-    IconData icon,
-    HospitalTreeNode parent,
-  ) {
-    _showNameDialog(theme, icon, '添加「${parent.name}」下级医院', (name) async {
-      await context.read<HospitalManagementViewModel>().addChildOrgan(
-        parent,
-        name,
-      );
-    });
-  }
-
-  void _showNameDialog(
-    ThemeData theme,
-    IconData icon,
-    String title,
-    Future<void> Function(String) onOk,
-  ) {
-    final controller = TextEditingController();
-    final formKey = GlobalKey<FormState>();
+  /// 删除确认对话框：先统计子树规模，提示将连带删除的下级数量
+  void _confirmDelete(BuildContext context, HospitalTreeNode node) {
+    final theme = Theme.of(context);
+    final viewModel = context.read<HospitalManagementViewModel>();
+    // 打开对话框即异步取子树规模（含自身）；future 只发起一次，随重建复用
+    final countFuture = viewModel.subtreeCount(node);
 
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
         backgroundColor: Colors.transparent,
-        // 收窄对话框左右边距，让宽度由内容决定
         insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
@@ -322,99 +309,75 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
             blur: 24,
             child: Padding(
               padding: const EdgeInsets.all(24),
-              child: Form(
-                key: formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 标题
-                    Row(
-                      children: [
-                        Icon(icon, color: theme.colorScheme.primary, size: 22),
-                        const SizedBox(width: 10),
-                        Text(
-                          title,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
+              child: FutureBuilder<int>(
+                future: countFuture,
+                builder: (ctx, snapshot) {
+                  final subtreeText = snapshot.hasData ? (snapshot.data! > 1 ? '将同时删除其下共 ${snapshot.data!} 所医院（含自身）' : '该医院没有下级') : (snapshot.hasError ? '下级数量统计失败，仍将级联删除全部下级' : '正在统计下级数量…');
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 标题
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.delete_outline,
+                            color: theme.colorScheme.error,
+                            size: 22,
                           ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // 输入框
-                    TextFormField(
-                      controller: controller,
-                      autofocus: true,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onPrimaryContainer,
-                      ),
-                      decoration: InputDecoration(
-                        labelText: '医院名称',
-                        labelStyle: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.6),
-                        ),
-                        // 毛玻璃底色：半透明 surface
-                        filled: true,
-                        fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 14,
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide(
-                            color: theme.colorScheme.outlineVariant.withValues(
-                              alpha: 0.3,
+                          const SizedBox(width: 10),
+                          Text(
+                            '删除确认',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide(
-                            color: theme.colorScheme.primary,
-                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      Text(
+                        '确定删除医院「${node.name}」吗？',
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        subtreeText,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                         ),
                       ),
-                      onFieldSubmitted: (_) => _confirmName(ctx, formKey, controller, onOk),
-                      validator: (v) => (v == null || v.trim().isEmpty) ? '请输入医院名称' : null,
-                    ),
-                    const SizedBox(height: 20),
+                      const SizedBox(height: 20),
 
-                    // 按钮
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          child: Text(
-                            '取消',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.colorScheme.onSurface,
-                            ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            child: const Text('取消'),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-
-                        FilledButton(
-                          onPressed: () async {
-                            if (controller.text.trim().isEmpty) return;
-                            Navigator.pop(ctx);
-                            await onOk(controller.text);
-                          },
-                          child: Text(
-                            '确定',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.colorScheme.onPrimary,
+                          const SizedBox(width: 12),
+                          FilledButton(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: theme.colorScheme.error,
+                              foregroundColor: theme.colorScheme.onError,
                             ),
+                            onPressed: () async {
+                              Navigator.pop(ctx);
+                              final ok = await viewModel.deleteHospital(node);
+                              if (!mounted) return;
+                              if (ok) {
+                                _showResultSnackBar('删除成功');
+                              }
+                              // 失败提示由 errorMsg 监听统一弹出
+                            },
+                            child: const Text('删除'),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                        ],
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
           ),
@@ -423,96 +386,19 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
     );
   }
 
-  Future<void> _confirmName(
-    BuildContext ctx,
-    GlobalKey<FormState> formKey,
-    TextEditingController controller,
-    Future<void> Function(String) onOk,
-  ) async {
-    if (!formKey.currentState!.validate()) return;
-    final name = controller.text.trim();
-    Navigator.pop(ctx);
-    await onOk(name);
-  }
-
-  void _confirmDelete(ThemeData theme, HospitalTreeNode node) {
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.transparent,
-        // 收窄对话框左右边距，让宽度由内容决定
-        insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: GlassPanel(
-            blur: 24,
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 标题
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.delete_outline,
-                        color: theme.colorScheme.primary,
-                        size: 22,
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        '删除确认',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  Text(
-                    '确定删除医院「${node.name}」吗？',
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 20),
-
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: Text(
-                          '取消',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onSurface,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-
-                      FilledButton(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: Colors.red,
-                        ),
-                        onPressed: () async {
-                          Navigator.pop(ctx);
-                          await context.read<HospitalManagementViewModel>().removeOrgan(node);
-                        },
-                        child: Text(
-                          '删除',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onPrimary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+  void _showResultSnackBar(String message) {
+    final theme = Theme.of(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onPrimary,
           ),
         ),
+        backgroundColor: theme.colorScheme.primary,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
       ),
     );
   }
