@@ -1,42 +1,50 @@
 import 'package:client/main.dart';
-import 'package:client/models/hospital_tree_node.dart';
 import 'package:client/services/campus_service.dart';
-import 'package:client/services/hospital_service.dart';
 import 'package:client/utils/log_helper.dart';
 import 'package:common/model.dart';
 import 'package:material_ui/material_ui.dart';
 
-/// 院区管理 ViewModel：左侧医院树全量加载（一次取扁平列表本地建树）、
-/// 院区全量拉取后按医院分组，右侧展示选中医院的院区列表。
-///
-/// 增删成功后院区整表重拉（院区规模有限，整表重拉最简单且保证本地与
-/// 后端一致）；医院树仅作选择载体，不做增删（走医院设置页）。
-class CampusManagementViewModel extends ChangeNotifier {
-  /// 构造函数：注入医院与院区服务（缺省从服务定位器取，测试可覆写）。
-  CampusManagementViewModel({
-    HospitalService? hospitalService,
-    CampusService? campusService,
-  }) : _hospitalService = hospitalService ?? getIt<HospitalService>(),
-       _campusService = campusService ?? getIt<CampusService>();
+/// 右侧信息表单模式（同医院管理）。
+enum CampusFormMode {
+  /// 未选中任何院区（表单区显示提示）。
+  empty,
 
-  final HospitalService _hospitalService;
+  /// 编辑选中院区。
+  edit,
+
+  /// 新增模式（表单清空，归属为登录用户所属医院）。
+  create,
+}
+
+/// 院区管理 ViewModel：院区归属当前登录用户的所属医院（hospId），全量
+/// 拉取该医院的院区列表、右侧信息表单三态（编辑选中院区 / 新增）。
+///
+/// 增删成功后整表重拉并保持选中状态；同一医院且已加载时 loadData 直接
+/// 跳过（切页保留状态），切换登录用户（医院变化）时强制重拉。
+class CampusManagementViewModel extends ChangeNotifier {
+  /// 构造函数：注入院区服务（缺省从服务定位器取，测试可覆写）。
+  CampusManagementViewModel({CampusService? campusService}) : _campusService = campusService ?? getIt<CampusService>();
+
   final CampusService _campusService;
 
-  final List<HospitalTreeNode> _hospitalTree = [];
-  final Map<String, List<Campus>> _campusesByHosp = {};
-  HospitalTreeNode? _selectedNode;
+  final List<Campus> _campuses = [];
+  String? _hospId;
+  bool _loaded = false;
+  Campus? _selectedCampus;
+  bool _creating = false;
   bool _loading = false;
   bool _busy = false;
   String? _errorMsg;
 
-  /// 医院树（顶级医院列表，子级挂在各节点 children 下）。
-  List<HospitalTreeNode> get hospitalTree => _hospitalTree;
+  /// 当前院区列表（按创建顺序）。
+  List<Campus> get campuses => _campuses;
 
-  /// 当前选中医院节点（右侧院区列表数据源、树上高亮依据）。
-  HospitalTreeNode? get selectedNode => _selectedNode;
+  /// 当前选中院区（编辑态表单回填、列表高亮依据；新增模式下保留，
+  /// 取消新增或选中新院区即回到其编辑态）。
+  Campus? get selectedCampus => _selectedCampus;
 
-  /// 选中医院的院区列表（未选中医院为空）。
-  List<Campus> get campuses => _selectedNode == null ? const [] : (_campusesByHosp[_selectedNode!.id] ?? const []);
+  /// 右侧表单当前模式。
+  CampusFormMode get formMode => _creating ? CampusFormMode.create : (_selectedCampus == null ? CampusFormMode.empty : CampusFormMode.edit);
 
   /// 首屏加载中。
   bool get loading => _loading;
@@ -46,19 +54,39 @@ class CampusManagementViewModel extends ChangeNotifier {
 
   String? get errorMsg => _errorMsg;
 
+  /// 当前绑定的医院 ID（未加载为 null）。
+  String? get hospId => _hospId;
+
+  /// 登录用户未设置所属医院（页面据此显示引导提示而非空列表）。
+  bool get unbound => _loaded && (_hospId == null || _hospId!.isEmpty);
+
   // ---------------- 加载 ----------------
 
-  /// 加载医院树与全部院区（进入页面时调用），默认选中首个顶级医院。
-  Future<bool> loadData() async {
+  /// 加载登录用户所属医院的院区（进入页面时调用）。
+  ///
+  /// hospId 为空视为未绑定：清空列表并置提示；同一医院且已加载时跳过
+  /// 重拉（切页保留状态），医院变化（切换登录用户）时强制重拉。
+  Future<bool> loadData(String? hospId) async {
+    final h = hospId?.trim() ?? '';
+    if (_loaded && h == _hospId) return true;
+
+    _hospId = h;
+    if (h.isEmpty) {
+      _loaded = true;
+      _campuses.clear();
+      _selectedCampus = null;
+      _creating = false;
+      _errorMsg = '当前登录用户未设置所属医院，无法管理院区';
+      notifyListeners();
+      return false;
+    }
+
     _loading = true;
     _errorMsg = null;
     notifyListeners();
     try {
-      await _loadHospitals();
       await _refreshCampuses();
-      if (_selectedNode == null && _hospitalTree.isNotEmpty) {
-        _selectedNode = _hospitalTree.first;
-      }
+      _loaded = true;
       return true;
     } catch (e, st) {
       LogHelper.error('client:CampusManagementViewModel.loadData', e, st);
@@ -70,100 +98,73 @@ class CampusManagementViewModel extends ChangeNotifier {
     }
   }
 
-  /// 拉取全量医院并重建本地树（保持旧树展开与选中状态）。
-  Future<void> _loadHospitals() async {
-    final hospitals = await _hospitalService.getAll();
-
-    // 记录旧树状态（展开标记、选中）
-    final oldExpanded = <String, bool>{};
-    void collect(List<HospitalTreeNode> nodes) {
-      for (final n in nodes) {
-        oldExpanded[n.id] = n.expanded;
-        collect(n.children);
-      }
-    }
-
-    collect(_hospitalTree);
-    final oldSelectedId = _selectedNode?.id;
-
-    final nodes = <String, HospitalTreeNode>{
-      for (final h in hospitals)
-        h.id: HospitalTreeNode(
-          id: h.id,
-          name: h.name,
-          parentId: h.parentId,
-          expanded: oldExpanded[h.id] ?? true,
-        ),
-    };
-
-    final roots = <HospitalTreeNode>[];
-    for (final h in hospitals) {
-      final node = nodes[h.id]!;
-      final parent = h.parentId == null ? null : nodes[h.parentId];
-      if (parent != null) {
-        parent.children.add(node);
-      } else {
-        // 上级缺失（含 null）按顶级处理，孤儿节点不至丢失
-        roots.add(node);
-      }
-    }
-    _hospitalTree
+  /// 拉取当前医院的全量院区并重建列表（选中院区被删时回退空态）。
+  Future<void> _refreshCampuses() async {
+    final campuses = await _campusService.getByHospital(_hospId!);
+    _campuses
       ..clear()
-      ..addAll(roots);
-
-    // 选中保持：被删则清空
-    _selectedNode = oldSelectedId == null ? null : nodes[oldSelectedId];
+      ..addAll(campuses);
+    final selectedId = _selectedCampus?.id;
+    if (selectedId != null) {
+      _selectedCampus = _findById(selectedId);
+    }
   }
 
-  /// 拉取全量院区并按医院分组。
-  Future<void> _refreshCampuses() async {
-    final campuses = await _campusService.getAll();
-    final map = <String, List<Campus>>{};
-    for (final c in campuses) {
-      map.putIfAbsent(c.hospId, () => []).add(c);
+  /// 在列表中按 ID 查找院区。
+  Campus? _findById(String id) {
+    for (final c in _campuses) {
+      if (c.id == id) return c;
     }
-    _campusesByHosp
-      ..clear()
-      ..addAll(map);
+    return null;
   }
 
   // ---------------- 交互 ----------------
 
-  /// 选中医院（右侧切换为该医院的院区列表）。
-  void selectNode(HospitalTreeNode node) {
-    _selectedNode = node;
+  /// 选中院区（右侧切换为该院区的编辑表单，同时退出新增模式）。
+  void selectCampus(Campus campus) {
+    _creating = false;
+    _selectedCampus = campus;
     notifyListeners();
   }
 
-  /// 展开/折叠节点（树为全量加载，仅翻转标记）。
-  void toggleExpand(HospitalTreeNode node) {
-    node.expanded = !node.expanded;
+  /// 进入新增模式：右侧表单清空，归属为登录用户所属医院。
+  void startCreate() {
+    _creating = true;
+    notifyListeners();
+  }
+
+  /// 取消新增，回到选中院区的编辑态（未选中则空态）。
+  void cancelCreate() {
+    _creating = false;
     notifyListeners();
   }
 
   // ---------------- 增删改 ----------------
 
-  /// 新增院区到当前选中医院，成功后整表重拉。
+  /// 新增院区到登录用户所属医院，成功后整表重拉、选中新院区并退出
+  /// 新增模式。
   Future<bool> createCampus({
     required String code,
     required String name,
     String? address,
     String? tel,
   }) async {
-    final target = _selectedNode;
-    if (target == null) return false;
+    final hospId = _hospId;
+    if (hospId == null || hospId.isEmpty) return false;
     _busy = true;
     _errorMsg = null;
     notifyListeners();
     try {
-      await _campusService.create(
-        hospId: target.id,
+      final created = await _campusService.create(
+        hospId: hospId,
         code: code,
         name: name,
         address: address,
         tel: tel,
       );
       await _refreshCampuses();
+      _selectedCampus = _findById(created.id);
+      _creating = false;
       return true;
     } catch (e, st) {
       LogHelper.error('client:CampusManagementViewModel.createCampus', e, st);
@@ -175,14 +176,16 @@ class CampusManagementViewModel extends ChangeNotifier {
     }
   }
 
-  /// 修改院区（changes 键同后端契约：code/name/address/tel），成功后整表重拉。
+  /// 修改选中院区（changes 键同后端契约：code/name/address/tel；
+  /// 归属医院不可改），成功后整表重拉。
   Future<bool> updateCampus(String id, Map<String, Object?> changes) async {
     _busy = true;
     _errorMsg = null;
     notifyListeners();
     try {
-      await _campusService.update(id, changes);
+      final updated = await _campusService.update(id, changes);
       await _refreshCampuses();
+      _selectedCampus = _findById(updated.id);
       return true;
     } catch (e, st) {
       LogHelper.error('client:CampusManagementViewModel.updateCampus', e, st);
@@ -194,7 +197,7 @@ class CampusManagementViewModel extends ChangeNotifier {
     }
   }
 
-  /// 删除院区，成功后整表重拉。
+  /// 删除院区，成功后整表重拉；删除选中院区时回退空态。
   Future<bool> deleteCampus(Campus campus) async {
     _busy = true;
     _errorMsg = null;

@@ -3,15 +3,15 @@ import 'package:client/services/base/base_service.dart';
 import 'package:common/model.dart';
 
 /// 院区服务：基于 BaseService 走后端 /api/campus/*（自动加解密信封、
-/// 携带 token）。院区规模有限，查询接口整表取扁平列表、由 ViewModel
-/// 按医院分组。
+/// 携带 token）。院区归属登录用户的所属医院，查询按医院 ID 过滤。
 class CampusService {
   /// 经服务定位器取加密客户端（登录后才可用；构造期不取，便于测试覆写）。
   BaseService get _base => getIt<BaseService>();
 
-  /// 获取全部院区（扁平列表），按医院与创建顺序。
-  Future<List<Campus>> getAll() async {
-    final data = await _base.post('/api/campus/query', {});
+  /// 获取指定医院下的院区列表（按创建顺序）。
+  ///param hospId: 医院 ID
+  Future<List<Campus>> getByHospital(String hospId) async {
+    final data = await _base.post('/api/campus/query', {'hospId': hospId});
     final list = data['campuses'] as List<dynamic>? ?? const [];
     return list.map((e) => Campus.fromJson(e as Map<String, dynamic>)).toList();
   }

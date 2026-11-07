@@ -143,6 +143,18 @@ Future<void> main() async {
       );
       print('  院区 $code $name 已写入');
     }
+    // 演示账号归属医院：未设置时绑到示例人民医院，供院区管理等按登录
+    // 用户所属医院过滤的功能演示（幂等，只补空值不覆盖既有绑定）
+    final demoHospId = hospitalIds['HDEMO001'];
+    if (demoHospId != null) {
+      final userCodes = demoUsers.map((u) => u.$1).toList();
+      final placeholders = List.filled(userCodes.length, '?').join(', ');
+      await db.execute(
+        'UPDATE SYS_USER SET HOSP_ID = ? WHERE USER_CODE IN ($placeholders) '
+        'AND HOSP_ID IS NULL',
+        [demoHospId, ...userCodes],
+      );
+    }
     print('完成。');
   } finally {
     await db.close();

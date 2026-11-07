@@ -32,7 +32,8 @@ class MainViewModel extends ChangeNotifier {
   LoginUser loginUser = _defaultWorkUser;
 
   /// 登录成功后以全局 loginUser 刷新工作副本
-  /// （医院/院区/科室仍用本地默认，后端暂不下发）
+  /// （医院名称/院区/科室显示仍用本地默认，后端暂不下发；
+  /// hospId 保留后端下发的真实所属医院 ID，供院区管理等按医院过滤的功能）
   void syncLoginUser() {
     final user = app.loginUser;
     if (user == null) return;
@@ -41,7 +42,6 @@ class MainViewModel extends ChangeNotifier {
       deptName: _defaultWorkUser.deptName,
       campusId: _defaultWorkUser.campusId,
       campusName: _defaultWorkUser.campusName,
-      hospId: _defaultWorkUser.hospId,
       hospName: _defaultWorkUser.hospName,
     );
     notifyListeners();
