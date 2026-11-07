@@ -79,6 +79,9 @@ class FieldCipher {
   /// 字段用途：SYS_USER.PHONE（联系电话）。
   static const phonePurpose = 'phone';
 
+  /// 字段用途：SYS_USER.ID_CARD_NO（身份证号码）。
+  static const idCardNoPurpose = 'id-card-no';
+
   /// 是否为本次自动生成的密钥文件（调用方据此提示运维单独备份密钥）。
   bool keyFileWasGenerated = false;
 

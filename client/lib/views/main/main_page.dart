@@ -172,8 +172,8 @@ class _MainPageState extends State<MainPage> {
       selector: (context, mainViewModel) => mainViewModel.loginUser,
       builder: (context, loginUser, _) {
         final items = <(String, String?)>[
-          ('当前医院', loginUser.organName),
-          ('当前院区', loginUser.branchName),
+          ('当前医院', loginUser.hospName),
+          ('当前院区', loginUser.campusName),
           ('当前科室', loginUser.deptName),
         ];
 

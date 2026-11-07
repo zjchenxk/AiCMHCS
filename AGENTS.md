@@ -78,14 +78,14 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 - 业务代码统一经 `DatabaseGateway`（`lib/database/engine/database_gateway.dart`）访问数据库，**不要直接使用 `Dpi` / `DmConnection` / sqlite3**（FFI 调用同步阻塞，会卡住 HTTP 事件循环）；两个实现（`DmGateway` / `SqliteGateway`）共用 `lib/database/engine/worker_gateway.dart` 的 isolate 工作区基类：连接在独立 isolate 串行执行，默认 30 秒超时；达梦侧 `query`/`ping` 失败自动重连并重试一次，`execute`/`executeDirect` **不重试**（防重复写入）。`Dpi.open()` 已处理 DLL 依赖链多轮加载（`dmdpi → dmcomm → libcrypto`），勿重复造轮子；
 - **字符集**：达梦全程走 DPI 的 W 系列（UTF-16）接口，GB18030 实例由 DPI 自动转码，Dart 侧始终处理 Unicode。`dpi_bind_param` 无宽字符版本——**绑定参数只支持 ASCII**；该限制已下沉到 `DmGateway`（`lib/database/engine/dm/dm_param_rewrite.dart` 自动把非 ASCII 参数转义内联、ASCII 照常绑定），**业务层直接写参数化 SQL，中文参数照常传，不要手拼 SQL 字面量**；
 - SQL 占位符 `?` 两库通用；`DbResult` 所有列以字符串返回（NULL 为 null），数值/时间由模型层按需转换（参照 `AuthService._loginUserFromRow`）；
-- **敏感字段加密存储（等保）**：`SYS_USER.PHONE` 等敏感个人信息列存 `FieldCipher`（`lib/utils/field_cipher.dart`）的 AES-256-GCM 密文（`v1:` 版本前缀 + base64，同明文每次密文不同），配套冗余哈希列 `PHONE_HMAC`（HMAC-SHA256 盲索引，应用侧密钥防穷举）供精确查询——查询一律在应用侧 `cipher.mac(purpose, 明文)` 后 `WHERE PHONE_HMAC = ?` 绑定，**不支持 LIKE 模糊查询/排序**；写入经 `seal`、读出经 `open`（不带版本前缀的存量明文原样返回兜底）；purpose 按字段区分（现有 `FieldCipher.phonePurpose`），新敏感字段选新 purpose 即可派生独立子钥；密文与 HMAC 均为 ASCII，天然满足达梦绑定参数限制；**日志与异常信息中不得输出解密后的明文**；
+- **敏感字段加密存储（等保）**：`SYS_USER.PHONE` / `SYS_USER.ID_CARD_NO` 等敏感个人信息列存 `FieldCipher`（`lib/utils/field_cipher.dart`）的 AES-256-GCM 密文（`v1:` 版本前缀 + base64，同明文每次密文不同），配套冗余哈希列 `PHONE_HMAC` / `ID_CARD_NO_HMAC`（HMAC-SHA256 盲索引，应用侧密钥防穷举）供精确查询——查询一律在应用侧 `cipher.mac(purpose, 明文)` 后 `WHERE <字段>_HMAC = ?` 绑定，**不支持 LIKE 模糊查询/排序**；写入经 `seal`、读出经 `open`（不带版本前缀的存量明文原样返回兜底）；purpose 按字段区分（现有 `FieldCipher.phonePurpose` / `FieldCipher.idCardNoPurpose`），新敏感字段选新 purpose 即可派生独立子钥；密文与 HMAC 均为 ASCII，天然满足达梦绑定参数限制；**日志与异常信息中不得输出解密后的明文**；
 - **时间列**：统一在 Dart 侧用 `formatTimestamp(DateTime.now())` 生成后作为参数绑定写入（达梦隐式转 TIMESTAMP(0)；SQLite 的 `CURRENT_TIMESTAMP` 是 UTC，且 Windows 系统 winsqlite3.dll 的 `'localtime'` 修饰符返回 NULL，SQL 端时间函数不可依赖）；
 - SQLite 网关（`lib/database/engine/sqlite/sqlite_gateway.dart`）：Windows 原生库解析顺序 `AICMHCS_SQLITE3_DLL` → exe 同目录 `sqlite3.dll` → 系统 `winsqlite3.dll`（单机版打包时随包分发官方 sqlite3.dll 即可）；`:memory:` 供测试，按路径缓存防 dart_frog 热重载泄漏 isolate。依赖锁定 `sqlite3` **2.4.0 双保险**：`server/pubspec.yaml` 精确锁定（勿加 `^`）+ 根 `pubspec.yaml` 的 `dependency_overrides`——后者优先级高于一切约束，实测连 `pub upgrade --major-versions` 都会被挡下（pub 会警告 `dependency_overrides prevents upgrades for: sqlite3`，属预期，无需处理）。原因：3.x 删除了 `open.dart` 的动态库覆盖机制、改为构建期 hook 下载预编译库，与 dart_frog 打包/离线信创环境/随包分发 dll 冲突。将来若要升 3.x，必须先删根 pubspec 的 override。
 
 ### 口令与数据库对象
 
 - 口令散列：`sha256(salt + password)` 十六进制，存储格式 `salt:hash`（salt 为 16 字节随机数的十六进制）。演示数据 `tool/seed_demo_data.dart` 直接复用 `AuthService.makeStoredPassword`，算法天然一致，不存在两处维护；
-- 数据库：达梦为 `AICMHCS` 模式，SQLite 为单个数据文件（默认 `data/aicmhcs.db`）。现有表：`SYS_USER`（系统用户，PHONE 存密文、PHONE_HMAC 为盲索引列，见「数据库访问约定」）、`SYS_LOGIN_LOG`（登录审计）、`SYS_OPERATION_LOG`（操作日志，见「操作日志」）、`SYS_SCHEMA_VERSION`（迁移版本历史）、`BASE_ADMIN_DIVISIONS`（行政区划基础表，v3 seed 导入）、`SYS_HOSPITAL`（医院表，医联体树形 PARENT_ID 自关联，v5），系统表前缀 `SYS_`、基础表前缀 `BASE_`；
+- 数据库：达梦为 `AICMHCS` 模式，SQLite 为单个数据文件（默认 `data/aicmhcs.db`）。现有表：`SYS_USER`（系统用户，v7 改造为 USER_TYPE 用户类别 + PERMISSION_LEVEL 权限级别（0-个人级/1-机构级/2-跨机构级）角色体系，时间列 CREATE_TIME/UPDATE_TIME，PHONE 与 ID_CARD_NO 存密文并配 `*_HMAC` 盲索引列，另有 HIS/MCHIS 用户代码、CERT_ID、SIGNATURE_IMAGE、DEPT_ID、HOSP_ID（与 SYS_CAMPUS.HOSP_ID 同名对齐），见「数据库访问约定」；存量 TEACHER/PARENT 类别原值保留待人工订正）、`SYS_LOGIN_LOG`（登录审计）、`SYS_OPERATION_LOG`（操作日志，见「操作日志」）、`SYS_SCHEMA_VERSION`（迁移版本历史）、`BASE_ADMIN_DIVISIONS`（行政区划基础表，v3 seed 导入）、`SYS_HOSPITAL`（医院表，医联体树形 PARENT_ID 自关联，v5），系统表前缀 `SYS_`、基础表前缀 `BASE_`；
 - **结构变更走代码迁移**（`server/lib/database/migrator/`：`schema_migrator.dart` 执行器 + `migrations/` 迁移目录——`base/migration.dart` 的 `DbMigration` 定义、`migration_<创建时间戳>.dart` 每个迁移一个文件、`migrations.dart` 注册表 `dbMigrations`；启动/seed 时自动补齐到最新版本）：已发布的迁移**不可修改，只能向后追加**（版本号严格递增，启动时校验）；迁移里**不要写 `DROP TABLE IF EXISTS`**（对升级用户是数据丢失）；演示数据不进迁移（生产不得自动长出演示账号）。DDL 约定：表/列名全大写、主键达梦 `BIGINT IDENTITY(1,1)` / SQLite `INTEGER PRIMARY KEY AUTOINCREMENT`、约束命名 `PK_<表>` / `UK_<表>_<字段>`、时间列达梦 `TIMESTAMP(0)` / SQLite `TEXT`；中文注释达梦用 `COMMENT ON`、SQLite 用语句内 `--`。改结构 = 在 `migrations/` 新建 `migration_<时间戳>.dart`（文件名取迁移创建时刻 `YYYYMMDDHHmm`，文件内为顶层 const `dbMigration_<时间戳>`，两库通用语句放 `common`，方言差异放 `dm`/`sqlite`），再在 `migrations.dart` 的 `dbMigrations` 列表按版本顺序追加；语句表达不了的数据订正（如 v2 存量明文加密）附 `dataFix` 回调（写在同一迁移文件内）——必须幂等（中断重跑不重复处理），`FieldCipher` 密钥经 `SchemaMigrator` 构造函数注入，含 dataFix 的迁移未注入密钥时启动即报错（DDL 不落半途状态）；
 - `database/` 仅保留 `01_init_schema.sql`（表空间 + 应用账号——DBA 级对象创建进不了应用代码）；开发期推倒重来：达梦 `./tools/init_db.sh`（DROP USER 重建 + 迁移 + 演示账号），单机版删数据文件。
 
@@ -111,12 +111,12 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 
 ### 字段级存储加密（等保，服务端）
 
-敏感个人信息字段（首期 `SYS_USER.PHONE`）在数据库中加密存储，DBA 与拖库者均无法还原明文：
+敏感个人信息字段（`SYS_USER.PHONE`、`SYS_USER.ID_CARD_NO`）在数据库中加密存储，DBA 与拖库者均无法还原明文：
 
 - 实现：`server/lib/utils/field_cipher.dart` 的 `FieldCipher`（依赖 `cryptography` 包），**仅服务端持有**——客户端收发的 JSON 中敏感字段仍是明文，由传输信封保护，客户端零改动；算法与传输信封同为 AES-256-GCM 但**密钥独立**；
 - 密文格式 `v1:<base64(nonce+密文+标签)>`（`v1` 为密钥版本号，为将来轮换预留，当前仅 v1）；盲索引列 `<字段>_HMAC` 为 HMAC-SHA256 十六进制，供等值查询（查询范式见「数据库访问约定」）；
 - 密钥管理：单一主密钥（base64 的 32 字节）经 HKDF-SHA256 按 `field-enc:<purpose>` / `field-mac:<purpose>` 派生加密与 MAC 子钥（每字段独立）。主密钥解析顺序：环境变量 `AICMHCS_FIELD_MASTER_KEY` → 密钥文件（默认 `data/aicmhcs.field.key`，首启自动生成并启动告警，单机版交付依赖此机制）——密钥文件须单独备份，**丢失即无法解密存量数据**；生产/等保环境必须用环境变量注入，密钥与数据库备份分开保存；
-- 存量数据经 v2 迁移的 `dataFix` 自动加密回填（幂等）；`tool/seed_demo_data.dart` 写入演示账号时同样走 `FieldCipher` seal/mac；
+- 存量数据经 v2 迁移的 `dataFix` 自动加密回填（幂等）；`SYS_USER.ID_CARD_NO` 为 v7 新增列（purpose `id-card-no`），存量无数据无需回填；`tool/seed_demo_data.dart` 写入演示账号时同样走 `FieldCipher` seal/mac；
 - 已知局限：仅支持精确匹配（盲索引），模糊查询/排序/范围查询不可用；主密钥仍在应用服务器上（等保三级可后续演进为加密机/KMS 托管）。
 
 ### 操作日志（SYS_OPERATION_LOG）
@@ -206,7 +206,7 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 ## 当前已知 Mock / 待接线（勿误判为已接通）
 
 - **后端已实现真实接口**：`POST /api/auth/login`、`GET /api/auth/me`、`GET /health`（数据库探活）——登录链路后端侧已通（达梦经 `init_db.sh` 初始化后可用，单机版 `AICMHCS_DB_DRIVER=sqlite` 首启自动建库）；
-- **客户端登录已接通**：`LoginViewModel.login()` 调用真实后端，成功后写入全局 `token`、`sessionKey` 与 `loginUser`（`LoginUser.fromJson` 解析），登录页跳转主界面前经 `MainViewModel.syncLoginUser()` 刷新工作副本，注销时三者清空。注意 `MainViewModel` 的医院/院区/科室仍为本地默认示例（`_defaultWorkUser`，后端暂无对应接口），登录页科室下拉选值（纯名称、无 ID）暂未映射进 `loginUser.deptId`；
+- **客户端登录已接通**：`LoginViewModel.login()` 调用真实后端，成功后写入全局 `token`、`sessionKey` 与 `loginUser`（`LoginUser.fromJson` 解析），登录页跳转主界面前经 `MainViewModel.syncLoginUser()` 刷新工作副本，注销时三者清空。登录响应 user 已对齐 SYS_USER 新结构下发全量协议字段：`userType`/`permissionLevel`/`phone`/`idCardNo`/`hisUserCode`/`mchisUserCode`/`certId`/`signatureImage`/`deptId`/`hospId`（PHONE/ID_CARD_NO 服务端 `FieldCipher.open` 解密后明文下发，传输由信封保护）；`deptName`/`campusId`/`campusName`/`hospName` 为 SQL `NULL AS` 占位，待科室/院区/医院关联查询补齐。`LoginUser` 工作区字段已统一新命名 `hospId`/`hospName`/`campusId`/`campusName`（协议 JSON 键与字段同名，不兼容旧 `organId`/`branchId` 键，前后端需同步），注意 `MainViewModel` 的医院/院区/科室展示仍用本地默认示例（`_defaultWorkUser`），登录页科室下拉选值（纯名称、无 ID）暂未映射进 `loginUser.deptId`；
 - 行政区划与医院管理均已接通真实后端：`AdminDivisionsService` 走 `/api/adminDivision/*`（树形懒加载 + 医院表单地址级联），`HospitalService` 走 `/api/hospital/*`（医院查看/新增/修改/级联删除，右侧表单三态录入，同行政区划交互），`LogService` 走 `/api/logs`（操作日志上报）；
 
 改动这些区域时保留 TODO 标注与被注释的调用代码，不要顺手删除。

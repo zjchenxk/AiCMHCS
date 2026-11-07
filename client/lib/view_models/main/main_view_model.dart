@@ -19,11 +19,11 @@ class MainViewModel extends ChangeNotifier {
     id: 0,
     userCode: '',
     userName: '',
-    roleCode: '',
-    organId: 'O001',
-    organName: '首都医科大学附属北京儿童医院',
-    branchId: 'B001',
-    branchName: '顺义院区',
+    userType: '',
+    hospId: 'O001',
+    hospName: '首都医科大学附属北京儿童医院',
+    campusId: 'B001',
+    campusName: '顺义院区',
     deptId: 'D001',
     deptName: '儿童保健科',
   );
@@ -37,12 +37,12 @@ class MainViewModel extends ChangeNotifier {
     final user = app.loginUser;
     if (user == null) return;
     loginUser = user.copyWith(
-      organId: _defaultWorkUser.organId,
-      organName: _defaultWorkUser.organName,
-      branchId: _defaultWorkUser.branchId,
-      branchName: _defaultWorkUser.branchName,
       deptId: _defaultWorkUser.deptId,
       deptName: _defaultWorkUser.deptName,
+      campusId: _defaultWorkUser.campusId,
+      campusName: _defaultWorkUser.campusName,
+      hospId: _defaultWorkUser.hospId,
+      hospName: _defaultWorkUser.hospName,
     );
     notifyListeners();
   }

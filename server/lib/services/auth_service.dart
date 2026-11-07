@@ -65,14 +65,27 @@ class AuthService {
   final _sessions = <String, LoginSession>{};
 
   /// 从数据库行解析登录用户（各列均以字符串返回，数值按需转换；
-  /// PHONE 为密文，经 FieldCipher 解密，不带版本前缀的存量明文原样返回）。
+  /// PHONE / ID_CARD_NO 为密文，经 FieldCipher 解密，不带版本前缀的
+  /// 存量明文原样返回；DEPT_NAME / CAMPUS_* / HOSP_NAME 暂为 NULL 占位，
+  /// 待科室/院区关联下发时补齐）。
   Future<LoginUser> _loginUserFromRow(Map<String, String?> row) async => LoginUser(
     id: int.parse(row['ID'] ?? '0'),
     userCode: row['USER_CODE'] ?? '',
     userName: row['USER_NAME'] ?? '',
-    roleCode: row['ROLE_CODE'] ?? '',
+    userType: row['USER_TYPE'] ?? '',
+    permissionLevel: row['PERMISSION_LEVEL'],
     phone: await _cipher.open(FieldCipher.phonePurpose, row['PHONE']),
-    lastLoginAt: row['LAST_LOGIN_AT'],
+    idCardNo: await _cipher.open(FieldCipher.idCardNoPurpose, row['ID_CARD_NO']),
+    hisUserCode: row['HIS_USER_CODE'],
+    mchisUserCode: row['MCHIS_USER_CODE'],
+    certId: row['CERT_ID'],
+    signatureImage: row['SIGNATURE_IMAGE'],
+    deptId: row['DEPT_ID'],
+    deptName: row['DEPT_NAME'],
+    campusId: row['CAMPUS_ID'],
+    campusName: row['CAMPUS_NAME'],
+    hospId: row['HOSP_ID'],
+    hospName: row['HOSP_NAME'],
   );
 
   /// 口令散列算法：sha256(salt + password) 的十六进制。
@@ -98,20 +111,18 @@ class AuthService {
     );
   }
 
-  /// 登录：校验用户名口令、写审计日志、更新最近登录时间、签发令牌。
-  Future<LoginSession> login(
-    String userCode,
-    String password, {
-    String? ip,
-  }) async {
+  /// 登录：校验用户名口令、写审计日志、签发令牌（登录时间由 SYS_LOGIN_LOG 审计）。
+  Future<LoginSession> login(String userCode, String password, {String? ip}) async {
     final uCode = userCode.trim();
     if (uCode.isEmpty || password.isEmpty) {
       throw const AuthException(400, 40001, '用户名和密码不能为空');
     }
 
     final result = await _db.query(
-      'SELECT ID, USER_CODE, PASSWORD, USER_NAME, ROLE_CODE, PHONE, STATUS, '
-      'LAST_LOGIN_AT FROM SYS_USER WHERE USER_CODE = ?',
+      'SELECT ID, USER_CODE, USER_NAME, PASSWORD, USER_TYPE, PERMISSION_LEVEL, PHONE, ID_CARD_NO, '
+      'HIS_USER_CODE, MCHIS_USER_CODE, CERT_ID, SIGNATURE_IMAGE, DEPT_ID, NULL AS DEPT_NAME, '
+      'NULL AS CAMPUS_ID, NULL AS CAMPUS_NAME, HOSP_ID, NULL AS HOSP_NAME, STATUS '
+      'FROM SYS_USER WHERE USER_CODE = ?',
       [uCode],
     );
 
@@ -137,10 +148,6 @@ class AuthService {
       throw const AuthException(403, 40301, '账号已被停用，请联系管理员');
     }
 
-    await _db.execute(
-      'UPDATE SYS_USER SET LAST_LOGIN_AT = ? WHERE ID = ?',
-      [formatTimestamp(DateTime.now()), user.id],
-    );
     await _logLogin(user.id, uCode, ip, 'SUCCESS', null);
 
     _pruneExpired();
@@ -174,18 +181,12 @@ class AuthService {
 
   /// 写登录审计（含中文的失败原因经参数传入，由达梦网关自动内联；
   /// 登录时间由 Dart 侧生成后绑定，见 formatTimestamp）。
-  Future<void> _logLogin(
-    int? userId,
-    String userCode,
-    String? ip,
-    String result,
-    String? failReason,
-  ) async {
+  Future<void> _logLogin(int? userId, String userCode, String? ip, String result, String? failReason) async {
     try {
       await _db.execute(
         'INSERT INTO SYS_LOGIN_LOG '
-        '(USER_ID, USER_CODE, LOGIN_IP, LOGIN_TIME, LOGIN_RESULT, '
-        'FAIL_REASON) VALUES (?, ?, ?, ?, ?, ?)',
+        '(USER_ID, USER_CODE, LOGIN_IP, LOGIN_TIME, LOGIN_RESULT, FAIL_REASON) '
+        'VALUES (?, ?, ?, ?, ?, ?)',
         [
           userId,
           userCode,

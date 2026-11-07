@@ -14,11 +14,13 @@ import 'package:server/database/migrator/schema_migrator.dart';
 import 'package:server/services/auth_service.dart';
 import 'package:server/utils/field_cipher.dart';
 
+/// 演示账号（userCode / 口令 / 姓名 / 用户类别 / 权限级别 / 手机号）。
+/// TEACHER / PARENT 不在新值域内，按迁移约定原值保留待人工订正。
 const demoUsers = [
-  ('admin', 'Admin@123', '系统管理员', 'ADMIN', '13800000001'),
-  ('doctor01', 'Doctor@123', '王心怡', 'DOCTOR', '13900000111'),
-  ('teacher01', 'Teacher@123', '李晓芳', 'TEACHER', '13700000222'),
-  ('parent01', 'Parent@123', '张浩然', 'PARENT', '13600000333'),
+  ('admin', 'Admin@123', '系统管理员', 'ADMIN', 2, '13800000001'),
+  ('doctor01', 'Doctor@123', '王心怡', 'DOCTOR', 1, '13900000111'),
+  ('teacher01', 'Teacher@123', '李晓芳', 'TEACHER', 0, '13700000222'),
+  ('parent01', 'Parent@123', '张浩然', 'PARENT', 0, '13600000333'),
 ];
 
 /// 演示医院（医联体两级）：按 CODE 幂等写入，parentCode 取同列表内代码。
@@ -60,7 +62,7 @@ Future<void> main() async {
     final applied = await SchemaMigrator(db, fieldCipher: cipher).migrate();
     final migrated = applied.isEmpty ? '已是最新' : '已应用 ${applied.map((m) => 'v${m.version}').join('、')}';
     print('结构迁移：$migrated');
-    for (final (userCode, password, userName, role, phone) in demoUsers) {
+    for (final (userCode, password, userName, userType, permissionLevel, phone) in demoUsers) {
       final exists = await db.query(
         'SELECT COUNT(*) AS CNT FROM SYS_USER WHERE USER_CODE = ?',
         [userCode],
@@ -71,15 +73,18 @@ Future<void> main() async {
       }
       await db.execute(
         'INSERT INTO SYS_USER '
-        '(USER_CODE, PASSWORD, USER_NAME, ROLE_CODE, PHONE, PHONE_HMAC, '
-        'STATUS) VALUES (?, ?, ?, ?, ?, ?, 1)',
+        '(USER_CODE, PASSWORD, USER_NAME, USER_TYPE, PERMISSION_LEVEL, '
+        'PHONE, PHONE_HMAC, STATUS, CREATE_TIME) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)',
         [
           userCode,
           AuthService.makeStoredPassword(password),
           userName,
-          role,
+          userType,
+          permissionLevel,
           await cipher.seal(FieldCipher.phonePurpose, phone),
           await cipher.mac(FieldCipher.phonePurpose, phone),
+          formatTimestamp(DateTime.now()),
         ],
       );
       print('  $userCode / $password 已写入');

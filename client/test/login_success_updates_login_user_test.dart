@@ -28,10 +28,9 @@ class FakeAuthService extends AuthService {
         'id': 2,
         'userCode': 'doctor01',
         'userName': '李医生',
-        'roleCode': 'DOCTOR',
-        'roleName': '儿童心理医生',
+        'userType': 'DOCTOR',
+        'userTypeName': '儿童心理医生',
         'phone': '13800000001',
-        'lastLoginAt': '2026-10-11 09:00:00',
         'organId': null,
         'organName': null,
         'branchId': null,
@@ -112,13 +111,13 @@ void main() {
     expect(loginUser!.id, 2);
     expect(loginUser!.userCode, 'doctor01');
     expect(loginUser!.userName, '李医生');
-    expect(loginUser!.roleCode, 'DOCTOR');
+    expect(loginUser!.userType, 'DOCTOR');
 
     // MainViewModel 工作副本：身份真实、医院/院区/科室保留本地默认
     expect(mainViewModel.loginUser.id, 2);
     expect(mainViewModel.loginUser.userName, '李医生');
-    expect(mainViewModel.loginUser.organName, '首都医科大学附属北京儿童医院');
-    expect(mainViewModel.loginUser.branchName, '顺义院区');
+    expect(mainViewModel.loginUser.hospName, '首都医科大学附属北京儿童医院');
+    expect(mainViewModel.loginUser.campusName, '顺义院区');
     expect(mainViewModel.loginUser.deptId, 'D001');
     expect(mainViewModel.loginUser.deptName, '儿童保健科');
 
