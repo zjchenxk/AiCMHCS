@@ -19,8 +19,9 @@ enum CampusFormMode {
 /// 院区管理 ViewModel：院区归属当前登录用户的所属医院（hospId），全量
 /// 拉取该医院的院区列表、右侧信息表单三态（编辑选中院区 / 新增）。
 ///
-/// 增删成功后整表重拉并保持选中状态；同一医院且已加载时 loadData 直接
-/// 跳过（切页保留状态），切换登录用户（医院变化）时强制重拉。
+/// 增删成功后整表重拉并保持选中状态。每次进入页面 loadData 都强制
+/// 重拉——医院管理等兄弟页面可能已改动医院数据，跳过缓存才能保证
+/// 切回时数据一致（选中状态经 _refreshCampuses 保留）。
 class CampusManagementViewModel extends ChangeNotifier {
   /// 构造函数：注入院区服务（缺省从服务定位器取，测试可覆写）。
   CampusManagementViewModel({CampusService? campusService}) : _campusService = campusService ?? getIt<CampusService>();
@@ -64,11 +65,11 @@ class CampusManagementViewModel extends ChangeNotifier {
 
   /// 加载登录用户所属医院的院区（进入页面时调用）。
   ///
-  /// hospId 为空视为未绑定：清空列表并置提示；同一医院且已加载时跳过
-  /// 重拉（切页保留状态），医院变化（切换登录用户）时强制重拉。
+  /// hospId 为空视为未绑定：清空列表并置提示；每次调用都强制重拉
+  /// （兄弟页面可能已改动医院数据，切回本页须重新拉取），选中状态
+  /// 尽量保留。
   Future<bool> loadData(String? hospId) async {
     final h = hospId?.trim() ?? '';
-    if (_loaded && h == _hospId) return true;
 
     _hospId = h;
     if (h.isEmpty) {

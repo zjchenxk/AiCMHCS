@@ -237,15 +237,39 @@ class HospitalService {
     return count;
   }
 
+  /// 统计子树各医院下的科室总数（SYS_DEPARTMENT，HOSP_ID 关联），
+  /// 供删除前确认提示与前置阻止校验。
+  Future<int> subtreeDeptCount(String id) async {
+    await getById(id);
+    final ids = await _collectSubtreeIds(id);
+    var count = 0;
+    for (var i = 0; i < ids.length; i += _batchSize) {
+      final batch = ids.skip(i).take(_batchSize).toList();
+      final placeholders = List.filled(batch.length, '?').join(', ');
+      final result = await _db.query(
+        'SELECT COUNT(*) AS CNT FROM SYS_DEPARTMENT WHERE HOSP_ID IN ($placeholders)',
+        batch,
+      );
+      count += int.parse(result.rowsAsMaps.first['CNT'] ?? '0');
+    }
+    return count;
+  }
+
   /// 级联删除医院及其全部下级，返回删除行数。中断后重试幂等。
   ///
   /// 子树内任一医院下存在院区（SYS_CAMPUS）时阻止删除——须先在院区
-  /// 管理中删除对应院区，防止院区沦为孤儿数据。
+  /// 管理中删除对应院区；子树内存在直挂医院下的科室（SYS_DEPARTMENT，
+  /// 删光院区后仍可能残留）时同样阻止——须先在科室管理中删除对应
+  /// 科室，防止科室沦为孤儿数据。
   Future<int> deleteSubtree(String id) async {
     await getById(id);
     final campusCount = await subtreeCampusCount(id);
     if (campusCount > 0) {
       throw const HospitalException(400, 40001, '请先删除院区后，再删除医院');
+    }
+    final deptCount = await subtreeDeptCount(id);
+    if (deptCount > 0) {
+      throw const HospitalException(400, 40001, '请先删除科室后，再删除医院');
     }
     final ids = await _collectSubtreeIds(id);
     var deleted = 0;

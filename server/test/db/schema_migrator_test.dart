@@ -33,12 +33,12 @@ void main() {
 
   test('空库全量迁移：建表并记录版本', () async {
     final applied = await SchemaMigrator(db, fieldCipher: cipher).migrate();
-    expect(applied.map((m) => m.version), [1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(applied.map((m) => m.version), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
 
     final tables = await tableNames();
     expect(
       tables,
-      containsAll(['SYS_USER', 'SYS_LOGIN_LOG', 'SYS_SCHEMA_VERSION', 'BASE_ADMIN_DIVISIONS', 'SYS_OPERATION_LOG', 'SYS_HOSPITAL', 'SYS_CAMPUS']),
+      containsAll(['SYS_USER', 'SYS_LOGIN_LOG', 'SYS_SCHEMA_VERSION', 'BASE_ADMIN_DIVISIONS', 'SYS_OPERATION_LOG', 'SYS_HOSPITAL', 'SYS_CAMPUS', 'SYS_DEPARTMENT']),
     );
 
     final versions = await db.query(
@@ -53,6 +53,7 @@ void main() {
       ['6', contains('院区')],
       ['7', contains('SYS_USER')],
       ['8', contains('ROLE_CODE')],
+      ['9', contains('科室')],
     ]);
   });
 

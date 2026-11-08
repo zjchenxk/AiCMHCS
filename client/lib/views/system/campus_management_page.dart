@@ -278,7 +278,7 @@ class _CampusManagementPageState extends State<CampusManagementPage> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    '确定删除院区「${campus.name}」吗？',
+                    '确定删除院区「${campus.name}」吗？院区下存在科室时不能删除，需先删除科室。',
                     style: theme.textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 20),

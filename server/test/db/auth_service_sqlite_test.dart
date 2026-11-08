@@ -69,6 +69,44 @@ void main() {
     expect(logs.rows.single, ['admin', '127.0.0.1', 'SUCCESS', null]);
   });
 
+  test('登录成功：关联下发医院/院区/科室真实名称', () async {
+    // 种子：医院 9 → 院区 8 → 科室 7（挂院区下），用户挂该医院与科室
+    await db.execute(
+      'INSERT INTO SYS_HOSPITAL (ID, CODE, NAME, PROVINCE, CITY, ADDRESS, '
+      'CREATE_TIME) VALUES (9, \'H0009\', \'测试三级医院\', \'北京市\', '
+      '\'北京市\', \'测试路9号\', \'2026-11-08 09:00:00\')',
+    );
+    await db.execute(
+      'INSERT INTO SYS_CAMPUS (ID, HOSP_ID, CODE, NAME, CREATE_TIME) '
+      'VALUES (8, 9, \'C0008\', \'城南院区\', \'2026-11-08 09:00:00\')',
+    );
+    await db.execute(
+      'INSERT INTO SYS_DEPARTMENT (ID, HOSP_ID, CAMPUS_ID, CODE, NAME, '
+      'CREATE_TIME) VALUES (7, 9, 8, \'D0007\', \'儿童心理科\', '
+      '\'2026-11-08 09:00:00\')',
+    );
+    await db.execute(
+      'INSERT INTO SYS_USER '
+      '(USER_CODE, PASSWORD, USER_NAME, USER_TYPE, HOSP_ID, DEPT_ID, STATUS) '
+      'VALUES (?, ?, ?, ?, ?, ?, 1)',
+      ['doctor09', AuthService.makeStoredPassword('Doctor@123'), '关联用户', 'DOCTOR', 9, 7],
+    );
+
+    final session = await auth.login('doctor09', 'Doctor@123');
+    expect(session.user.hospId, '9');
+    expect(session.user.hospName, '测试三级医院');
+    expect(session.user.deptId, '7');
+    expect(session.user.deptName, '儿童心理科');
+    // 院区经所属科室的 CAMPUS_ID 间接关联
+    expect(session.user.campusId, '8');
+    expect(session.user.campusName, '城南院区');
+
+    // 未设置归属的用户名称字段为 null（LEFT JOIN 不命中）
+    final bare = await auth.login('admin', 'Admin@123');
+    expect(bare.user.hospName, isNull);
+    expect(bare.user.deptName, isNull);
+  });
+
   test('存量明文行登录：手机号原样返回（读兼容兜底）', () async {
     await db.execute(
       'INSERT INTO SYS_USER '

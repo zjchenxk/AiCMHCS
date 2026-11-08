@@ -14,7 +14,8 @@ class MainViewModel extends ChangeNotifier {
     ('D005', '产科'),
   ];
 
-  // 本地默认工作区（示例数据：医院/院区/科室后端暂不下发，实际从接口获取）
+  // 本地默认工作区（示例数据：登录 SQL 已关联下发医院/科室/院区真实
+  // 名称，仅用户未设置对应归属时用此兜底，避免界面显示空白）
   static const _defaultWorkUser = LoginUser(
     id: 0,
     userCode: '',
@@ -32,17 +33,18 @@ class MainViewModel extends ChangeNotifier {
   LoginUser loginUser = _defaultWorkUser;
 
   /// 登录成功后以全局 loginUser 刷新工作副本
-  /// （医院名称/院区/科室显示仍用本地默认，后端暂不下发；
-  /// hospId 保留后端下发的真实所属医院 ID，供院区管理等按医院过滤的功能）
+  /// （医院/科室/院区名称优先用登录接口关联下发的真实数据，
+  /// 未设置的字段保底本地默认示例；hospId/deptId/campusId 始终
+  /// 保留后端真实值，供院区/科室管理等按归属过滤的功能）
   void syncLoginUser() {
     final user = app.loginUser;
     if (user == null) return;
     loginUser = user.copyWith(
-      deptId: _defaultWorkUser.deptId,
-      deptName: _defaultWorkUser.deptName,
-      campusId: _defaultWorkUser.campusId,
-      campusName: _defaultWorkUser.campusName,
-      hospName: _defaultWorkUser.hospName,
+      deptId: user.deptId ?? _defaultWorkUser.deptId,
+      deptName: user.deptName ?? _defaultWorkUser.deptName,
+      campusId: user.campusId ?? _defaultWorkUser.campusId,
+      campusName: user.campusName ?? _defaultWorkUser.campusName,
+      hospName: user.hospName ?? _defaultWorkUser.hospName,
     );
     notifyListeners();
   }
@@ -144,6 +146,7 @@ class MainViewModel extends ChangeNotifier {
           id: 'department',
           title: '科室设置',
           icon: Icons.meeting_room_outlined,
+          route: '/system/department',
         ),
         MenuItem(id: 'staff', title: '人员设置', icon: Icons.people_outline),
         MenuItem(id: 'permission', title: '权限设置', icon: Icons.lock_outline),

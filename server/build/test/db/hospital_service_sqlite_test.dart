@@ -54,6 +54,20 @@ CREATE TABLE SYS_CAMPUS (
   CREATE_TIME TEXT NOT NULL,
   UPDATE_TIME TEXT
 )''');
+    // 科室表（deleteSubtree 前置校验依赖；用例按需写入行）
+    await db.executeDirect('''
+CREATE TABLE SYS_DEPARTMENT (
+  ID INTEGER PRIMARY KEY AUTOINCREMENT,
+  PARENT_ID INTEGER,
+  CODE TEXT NOT NULL,
+  NAME TEXT NOT NULL,
+  ADDRESS TEXT,
+  TEL TEXT,
+  CAMPUS_ID INTEGER,
+  HOSP_ID INTEGER NOT NULL,
+  CREATE_TIME TEXT NOT NULL,
+  UPDATE_TIME TEXT
+)''');
     service = HospitalService(db);
   });
 
@@ -244,6 +258,48 @@ CREATE TABLE SYS_CAMPUS (
     );
 
     // 无院区的兄弟分支不受影响
+    expect(await service.deleteSubtree('3'), 1);
+    final remain = await db.query('SELECT ID FROM SYS_HOSPITAL ORDER BY ID');
+    expect(remain.rows.expand((r) => r), ['1', '2', '4']);
+  });
+
+  test('subtreeDeptCount：统计子树各医院下的科室总数', () async {
+    Future<void> seedDept(int id, int hospId, String code, String name) async {
+      await db.execute(
+        'INSERT INTO SYS_DEPARTMENT (ID, HOSP_ID, CODE, NAME, CREATE_TIME) '
+        'VALUES (?, ?, ?, ?, ?)',
+        [id, hospId, code, name, '2026-11-07 09:00:00'],
+      );
+    }
+
+    await seedDept(1, 1, 'D0001', '儿童保健科');
+    await seedDept(2, 2, 'D0002', '儿童心理科');
+    await seedDept(3, 4, 'D0003', '社区门诊-儿童保健科');
+
+    // 子树 1 → 医院 1/2/3/4，科室共 3 个；子树 2 → 医院 2/4，2 个
+    expect(await service.subtreeDeptCount('1'), 3);
+    expect(await service.subtreeDeptCount('2'), 2);
+    expect(await service.subtreeDeptCount('3'), 0);
+  });
+
+  test('deleteSubtree：子树存在直挂科室时阻止删除，删光科室后仍可删', () async {
+    await db.execute(
+      'INSERT INTO SYS_DEPARTMENT (HOSP_ID, CODE, NAME, CREATE_TIME) '
+      'VALUES (?, ?, ?, ?)',
+      [4, 'D0003', '社区门诊-儿童保健科', '2026-11-07 09:00:00'],
+    );
+
+    // 医院子树 1 含下级 4，4 下有科室 → 阻止（删光院区后仍可能残留）
+    await expectLater(
+      service.deleteSubtree('1'),
+      throwsA(isA<HospitalException>().having((e) => e.message, 'message', '请先删除科室后，再删除医院')),
+    );
+    await expectLater(
+      service.deleteSubtree('4'),
+      throwsA(isA<HospitalException>().having((e) => e.message, 'message', '请先删除科室后，再删除医院')),
+    );
+
+    // 无科室的兄弟分支不受影响
     expect(await service.deleteSubtree('3'), 1);
     final remain = await db.query('SELECT ID FROM SYS_HOSPITAL ORDER BY ID');
     expect(remain.rows.expand((r) => r), ['1', '2', '4']);

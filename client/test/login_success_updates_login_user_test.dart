@@ -1,7 +1,8 @@
 // 登录成功用户信息接线测试：
 // 表单校验通过 → AuthService 返回 token+user → LoginViewModel 写入全局 loginUser →
 // 登录页跳转前触发 MainViewModel.syncLoginUser() → 工作副本刷新为真实身份
-// （医院/院区/科室保留本地默认，后端暂不下发）。
+// （医院/院区/科室名称优先用登录接口关联下发的真实数据，
+// 未设置的字段保底本地默认示例）。
 import 'package:client/main.dart';
 import 'package:client/providers/font_provider.dart';
 import 'package:client/providers/theme_provider.dart';
@@ -9,6 +10,7 @@ import 'package:client/services/auth_service.dart';
 import 'package:client/view_models/login/login_view_model.dart';
 import 'package:client/view_models/main/main_view_model.dart';
 import 'package:client/views/login/login_page.dart';
+import 'package:common/model.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -31,12 +33,12 @@ class FakeAuthService extends AuthService {
         'userType': 'DOCTOR',
         'userTypeName': '儿童心理医生',
         'phone': '13800000001',
-        'organId': null,
-        'organName': null,
-        'branchId': null,
-        'branchName': null,
-        'deptId': null,
-        'deptName': null,
+        'hospId': '1',
+        'hospName': '测试三级医院',
+        'campusId': '8',
+        'campusName': '城南院区',
+        'deptId': '7',
+        'deptName': '儿童心理科',
       },
     };
   }
@@ -113,15 +115,32 @@ void main() {
     expect(loginUser!.userName, '李医生');
     expect(loginUser!.userType, 'DOCTOR');
 
-    // MainViewModel 工作副本：身份真实、医院/院区/科室保留本地默认
+    // MainViewModel 工作副本：身份真实、医院/院区/科室为登录接口
+    // 关联下发的真实数据（不被本地默认覆盖）
     expect(mainViewModel.loginUser.id, 2);
     expect(mainViewModel.loginUser.userName, '李医生');
-    expect(mainViewModel.loginUser.hospName, '首都医科大学附属北京儿童医院');
-    expect(mainViewModel.loginUser.campusName, '顺义院区');
-    expect(mainViewModel.loginUser.deptId, 'D001');
-    expect(mainViewModel.loginUser.deptName, '儿童保健科');
+    expect(mainViewModel.loginUser.hospId, '1');
+    expect(mainViewModel.loginUser.hospName, '测试三级医院');
+    expect(mainViewModel.loginUser.campusName, '城南院区');
+    expect(mainViewModel.loginUser.deptId, '7');
+    expect(mainViewModel.loginUser.deptName, '儿童心理科');
 
     // 顶栏用户菜单数据源使用真实姓名
     expect(mainViewModel.userName, '李医生');
+  });
+
+  test('未设置归属的账号：工作副本名称字段保底本地默认示例', () {
+    loginUser = const LoginUser(
+      id: 3,
+      userCode: 'teacher01',
+      userName: '李老师',
+      userType: 'TEACHER',
+    );
+    final vm = MainViewModel();
+    vm.syncLoginUser();
+    expect(vm.loginUser.userName, '李老师');
+    expect(vm.loginUser.hospName, '首都医科大学附属北京儿童医院');
+    expect(vm.loginUser.campusName, '顺义院区');
+    expect(vm.loginUser.deptName, '儿童保健科');
   });
 }

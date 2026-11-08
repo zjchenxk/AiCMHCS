@@ -168,11 +168,20 @@ class CampusService {
   }
 
   /// 删除院区，返回删除行数（0 或 1）。
+  ///
+  /// 院区下存在科室（SYS_DEPARTMENT.CAMPUS_ID 指向自身）时阻止删除——
+  /// 须先在科室管理中删除对应科室，防止科室沦为孤儿数据。
   Future<int> delete(String id) async {
     await getById(id);
-    return _db.execute('DELETE FROM SYS_CAMPUS WHERE ID = ?', [
-      _toInt(id, '院区ID'),
-    ]);
+    final idValue = _toInt(id, '院区ID');
+    final dup = await _db.query(
+      'SELECT COUNT(*) AS CNT FROM SYS_DEPARTMENT WHERE CAMPUS_ID = ?',
+      [idValue],
+    );
+    if (int.parse(dup.rowsAsMaps.first['CNT'] ?? '0') > 0) {
+      throw const CampusException(400, 40001, '院区下存在科室，不能删除，请先删除科室');
+    }
+    return _db.execute('DELETE FROM SYS_CAMPUS WHERE ID = ?', [idValue]);
   }
 
   /// 从数据库行解析。

@@ -40,6 +40,20 @@ CREATE TABLE SYS_CAMPUS (
   CREATE_TIME TEXT NOT NULL,
   UPDATE_TIME TEXT
 )''');
+    // 科室表（delete 前置校验依赖；用例按需写入行）。
+    await db.executeDirect('''
+CREATE TABLE SYS_DEPARTMENT (
+  ID INTEGER PRIMARY KEY AUTOINCREMENT,
+  PARENT_ID INTEGER,
+  CODE TEXT NOT NULL,
+  NAME TEXT NOT NULL,
+  ADDRESS TEXT,
+  TEL TEXT,
+  CAMPUS_ID INTEGER,
+  HOSP_ID INTEGER NOT NULL,
+  CREATE_TIME TEXT NOT NULL,
+  UPDATE_TIME TEXT
+)''');
     // 医院：示例人民医院 → 儿童心理分院。
     Future<void> seedHospital(int id, int? parentId, String code, String name) async {
       await db.execute(
@@ -225,5 +239,20 @@ CREATE TABLE SYS_CAMPUS (
       service.delete('1'),
       throwsA(isA<CampusException>().having((e) => e.message, 'message', contains('不存在'))),
     );
+  });
+
+  test('delete：院区下存在科室时阻止删除', () async {
+    await db.execute(
+      'INSERT INTO SYS_DEPARTMENT (HOSP_ID, CAMPUS_ID, CODE, NAME, '
+      'CREATE_TIME) VALUES (?, ?, ?, ?, ?)',
+      [1, 2, 'D0001', '儿童心理科', '2026-11-07 09:00:00'],
+    );
+
+    await expectLater(
+      service.delete('2'),
+      throwsA(isA<CampusException>().having((e) => e.message, 'message', '院区下存在科室，不能删除，请先删除科室')),
+    );
+    // 无科室的院区不受影响
+    expect(await service.delete('1'), 1);
   });
 }

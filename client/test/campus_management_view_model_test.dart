@@ -100,15 +100,25 @@ void main() {
     expect(viewModel.formMode, CampusFormMode.empty);
   });
 
-  test('loadData：同一医院重复加载跳过（切页保留状态）', () async {
+  test('loadData：同一医院重复加载强制重拉且保留选中（切回页面刷新）', () async {
     await viewModel.loadData('1');
     viewModel.selectCampus(viewModel.campuses.first);
     final calls = campusService.getByHospitalCalls;
 
     final ok = await viewModel.loadData('1');
     expect(ok, isTrue);
-    expect(campusService.getByHospitalCalls, calls, reason: '同一医院不应重拉');
+    expect(campusService.getByHospitalCalls, greaterThan(calls), reason: '切回页面应重拉，保证兄弟页面改动后数据一致');
     expect(viewModel.selectedCampus?.name, '主院区', reason: '选中状态保留');
+  });
+
+  test('loadData：重拉后兄弟页面删除的院区从列表消失', () async {
+    await viewModel.loadData('1');
+    expect(viewModel.campuses.map((c) => c.name), ['主院区', '顺义院区']);
+
+    // 模拟在医院管理等兄弟页面删除了顺义院区
+    campusService.store.remove('2');
+    expect(await viewModel.loadData('1'), isTrue);
+    expect(viewModel.campuses.map((c) => c.name), ['主院区']);
   });
 
   test('loadData：医院变化（切换账号）时强制重拉并清空选中', () async {

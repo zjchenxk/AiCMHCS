@@ -66,8 +66,8 @@ class AuthService {
 
   /// 从数据库行解析登录用户（各列均以字符串返回，数值按需转换；
   /// PHONE / ID_CARD_NO 为密文，经 FieldCipher 解密，不带版本前缀的
-  /// 存量明文原样返回；DEPT_NAME / CAMPUS_* / HOSP_NAME 暂为 NULL 占位，
-  /// 待科室/院区关联下发时补齐）。
+  /// 存量明文原样返回；工作区名称列由登录 SQL 关联 SYS_HOSPITAL /
+  /// SYS_DEPARTMENT / SYS_CAMPUS 带出，未设置时为 null）。
   Future<LoginUser> _loginUserFromRow(Map<String, String?> row) async => LoginUser(
     id: int.parse(row['ID'] ?? '0'),
     userCode: row['USER_CODE'] ?? '',
@@ -119,10 +119,16 @@ class AuthService {
     }
 
     final result = await _db.query(
-      'SELECT ID, USER_CODE, USER_NAME, PASSWORD, USER_TYPE, PERMISSION_LEVEL, PHONE, ID_CARD_NO, '
-      'HIS_USER_CODE, MCHIS_USER_CODE, CERT_ID, SIGNATURE_IMAGE, DEPT_ID, NULL AS DEPT_NAME, '
-      'NULL AS CAMPUS_ID, NULL AS CAMPUS_NAME, HOSP_ID, NULL AS HOSP_NAME, STATUS '
-      'FROM SYS_USER WHERE USER_CODE = ?',
+      'SELECT U.ID, U.USER_CODE, U.USER_NAME, U.PASSWORD, U.USER_TYPE, '
+      'U.PERMISSION_LEVEL, U.PHONE, U.ID_CARD_NO, U.HIS_USER_CODE, '
+      'U.MCHIS_USER_CODE, U.CERT_ID, U.SIGNATURE_IMAGE, U.DEPT_ID, '
+      'D.NAME AS DEPT_NAME, D.CAMPUS_ID AS CAMPUS_ID, C.NAME AS CAMPUS_NAME, '
+      'U.HOSP_ID, H.NAME AS HOSP_NAME, U.STATUS '
+      'FROM SYS_USER U '
+      'LEFT JOIN SYS_DEPARTMENT D ON D.ID = U.DEPT_ID '
+      'LEFT JOIN SYS_CAMPUS C ON C.ID = D.CAMPUS_ID '
+      'LEFT JOIN SYS_HOSPITAL H ON H.ID = U.HOSP_ID '
+      'WHERE U.USER_CODE = ?',
       [uCode],
     );
 

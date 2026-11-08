@@ -54,6 +54,17 @@ const demoCampuses = [
   ('CDEMO003', 'HDEMO002', '东城院区', '北京市东城区示例路1-1号', '010-88886603'),
 ];
 
+/// 演示科室：按 CODE 幂等写入，campusCode 取 demoCampuses 内代码、
+/// parentCode 取同列表内代码（上级科室在前，写入顺序即依赖顺序）。
+const demoDepartments = [
+  ('DDEMO001', 'CDEMO001', null, '儿童保健科', '北京市东城区示例路1号门诊楼2层', '010-88886011'),
+  ('DDEMO002', 'CDEMO001', null, '儿童心理科', '北京市东城区示例路1号门诊楼3层', '010-88886012'),
+  ('DDEMO003', 'CDEMO001', 'DDEMO002', '儿童心理门诊', '北京市东城区示例路1号门诊楼3层', '010-88886013'),
+  ('DDEMO004', 'CDEMO001', 'DDEMO002', '发育行为门诊', '北京市东城区示例路1号门诊楼3层', '010-88886014'),
+  ('DDEMO005', 'CDEMO002', null, '儿童保健科', '北京市顺义区示例路2号门诊楼1层', '010-88886021'),
+  ('DDEMO006', 'CDEMO003', null, '儿童心理科', '北京市东城区示例路1-1号门诊楼2层', '010-88886031'),
+];
+
 Future<void> main() async {
   final config = AppConfig.fromEnv();
   final db = await openDatabaseGateway(config);
@@ -121,13 +132,16 @@ Future<void> main() async {
         [parent, code],
       );
     }
-    // 演示院区：按 CODE 幂等写入，医院 ID 经上方 hospitalIds 映射取得
+    // 演示院区：按 CODE 幂等写入，医院 ID 经上方 hospitalIds 映射取得，
+    // ID 收进 campusIds 供下方演示科室挂载
+    final campusIds = <String, int>{};
     for (final (code, hospCode, name, address, tel) in demoCampuses) {
       final exists = await db.query(
-        'SELECT COUNT(*) AS CNT FROM SYS_CAMPUS WHERE CODE = ?',
+        'SELECT ID FROM SYS_CAMPUS WHERE CODE = ?',
         [code],
       );
-      if (int.parse(exists.rowsAsMaps.first['CNT'] ?? '0') > 0) {
+      if (exists.rows.isNotEmpty) {
+        campusIds[code] = int.parse(exists.rows.first[0]!);
         print('  院区 $code 已存在，跳过');
         continue;
       }
@@ -141,7 +155,63 @@ Future<void> main() async {
         'CREATE_TIME) VALUES (?, ?, ?, ?, ?, ?)',
         [hospId, code, name, address, tel, formatTimestamp(DateTime.now())],
       );
+      final row = await db.query(
+        'SELECT ID FROM SYS_CAMPUS WHERE CODE = ?',
+        [code],
+      );
+      campusIds[code] = int.parse(row.rows.first[0]!);
       print('  院区 $code $name 已写入');
+    }
+    // 演示科室：按 CODE 幂等写入，院区 ID 经上方 campusIds 映射取得、
+    // 上级科室 ID 经本循环边写边存的 deptIds 映射取得（列表上级在前）
+    final deptIds = <String, int>{};
+    for (final (code, campusCode, parentCode, name, address, tel) in demoDepartments) {
+      final exists = await db.query(
+        'SELECT COUNT(*) AS CNT FROM SYS_DEPARTMENT WHERE CODE = ?',
+        [code],
+      );
+      if (int.parse(exists.rowsAsMaps.first['CNT'] ?? '0') > 0) {
+        print('  科室 $code 已存在，跳过');
+        continue;
+      }
+      final campus = campusIds[campusCode];
+      if (campus == null) {
+        print('  科室 $code 所属院区 $campusCode 不存在，跳过');
+        continue;
+      }
+      // 按院区代码反查所属医院：演示数据院区与医院一一对应，
+      // 直接在 demoCampuses 内找到该院区的医院代码
+      final hospCode = demoCampuses.where((c) => c.$1 == campusCode).map((c) => c.$2).firstOrNull;
+      final hosp = hospitalIds[hospCode ?? ''];
+      if (hosp == null) {
+        print('  科室 $code 所属医院不存在，跳过');
+        continue;
+      }
+      final parent = parentCode == null ? null : deptIds[parentCode];
+      if (parentCode != null && parent == null) {
+        print('  科室 $code 上级科室 $parentCode 未写入，跳过');
+        continue;
+      }
+      await db.execute(
+        'INSERT INTO SYS_DEPARTMENT (HOSP_ID, CAMPUS_ID, PARENT_ID, CODE, '
+        'NAME, ADDRESS, TEL, CREATE_TIME) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          hosp,
+          campus,
+          parent,
+          code,
+          name,
+          address,
+          tel,
+          formatTimestamp(DateTime.now()),
+        ],
+      );
+      final row = await db.query(
+        'SELECT ID FROM SYS_DEPARTMENT WHERE CODE = ?',
+        [code],
+      );
+      deptIds[code] = int.parse(row.rows.first[0]!);
+      print('  科室 $code $name 已写入');
     }
     // 演示账号归属医院：未设置时绑到示例人民医院，供院区管理等按登录
     // 用户所属医院过滤的功能演示（幂等，只补空值不覆盖既有绑定）

@@ -7,7 +7,16 @@
             "request": "launch",
             "type": "dart",
             "program": "lib/main.dart",
-            "deviceId": "chrome"
+            "deviceId": "chrome",
+            // --no-pub：F5 复合启动时 client 自动 pub get 会把 workspace
+            // 下 server/ 的临时 lockfile 当 stray 删除，与 dart_frog build
+            // 正在使用的 server/pubspec.lock 相撞导致构建崩溃（PathNotFound
+            // Exception）；依赖变更时在仓库根手动 flutter pub get 即可
+            "args": [
+                "--no-pub"
+            ]
+            // CanvasKit 本地化见 client/web/flutter_bootstrap.js 的
+            // canvasKitBaseUrl 配置（JS loader config，比 dart-define 优先）
         },
         {
             "name": "server",
