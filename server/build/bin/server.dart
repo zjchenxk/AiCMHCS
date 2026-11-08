@@ -9,6 +9,12 @@ import '../main.dart' as entrypoint;
 import '../routes/index.dart' as index;
 import '../routes/health.dart' as health;
 import '../routes/api/index.dart' as api_index;
+import '../routes/api/role/update.dart' as api_role_update;
+import '../routes/api/role/query.dart' as api_role_query;
+import '../routes/api/role/permissionSave.dart' as api_role_permission_save;
+import '../routes/api/role/permissionQuery.dart' as api_role_permission_query;
+import '../routes/api/role/delete.dart' as api_role_delete;
+import '../routes/api/role/add.dart' as api_role_add;
 import '../routes/api/menu/update.dart' as api_menu_update;
 import '../routes/api/menu/query.dart' as api_menu_query;
 import '../routes/api/menu/delete.dart' as api_menu_delete;
@@ -34,6 +40,7 @@ import '../routes/api/adminDivision/delete.dart' as api_admin_division_delete;
 import '../routes/api/adminDivision/add.dart' as api_admin_division_add;
 
 import '../routes/_middleware.dart' as middleware;
+import '../routes/api/role/_middleware.dart' as api_role_middleware;
 import '../routes/api/menu/_middleware.dart' as api_menu_middleware;
 import '../routes/api/logs/_middleware.dart' as api_logs_middleware;
 import '../routes/api/hospital/_middleware.dart' as api_hospital_middleware;
@@ -60,6 +67,7 @@ Handler buildRootHandler() {
   final router = Router()
     ..mount('/', (context) => buildHandler()(context))
     ..mount('/api', (context) => buildApiHandler()(context))
+    ..mount('/api/role', (context) => buildApiRoleHandler()(context))
     ..mount('/api/menu', (context) => buildApiMenuHandler()(context))
     ..mount('/api/logs', (context) => buildApiLogsHandler()(context))
     ..mount('/api/hospital', (context) => buildApiHospitalHandler()(context))
@@ -81,6 +89,13 @@ Handler buildApiHandler() {
   final pipeline = const Pipeline();
   final router = Router()
     ..all('/', (context) => api_index.onRequest(context,));
+  return pipeline.addHandler(router);
+}
+
+Handler buildApiRoleHandler() {
+  final pipeline = const Pipeline().addMiddleware(api_role_middleware.middleware);
+  final router = Router()
+    ..all('/add', (context) => api_role_add.onRequest(context,))..all('/delete', (context) => api_role_delete.onRequest(context,))..all('/permissionQuery', (context) => api_role_permission_query.onRequest(context,))..all('/permissionSave', (context) => api_role_permission_save.onRequest(context,))..all('/query', (context) => api_role_query.onRequest(context,))..all('/update', (context) => api_role_update.onRequest(context,));
   return pipeline.addHandler(router);
 }
 

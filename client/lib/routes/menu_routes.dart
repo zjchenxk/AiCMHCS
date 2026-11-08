@@ -6,6 +6,7 @@ import 'package:common/model.dart';
 import 'package:client/views/home/home_page.dart';
 import 'package:client/views/system/hospital_management_page.dart';
 import 'package:client/views/system/menu_management_page.dart';
+import 'package:client/views/system/role_management_page.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// 统一的页面构造签名：每个功能页都能拿到当前登录用户和当前儿童
@@ -23,6 +24,7 @@ Map<String, MenuPageBuilder> menuRoutes = {
   '/system/campus': _buildPage(CampusManagementPage.new),
   '/system/department': _buildPage(DepartmentManagementPage.new),
   '/system/menu': _buildPage(MenuManagementPage.new),
+  '/system/role': _buildPage(RoleManagementPage.new),
   '/system/adminDivision': _buildPage(AdminDivisionManagementPage.new),
 };
 

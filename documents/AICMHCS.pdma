@@ -4062,13 +4062,13 @@
         }
       },
       "freezeEntityHeader": {
-        "logicEntity": {
+        "physicEntity": {
           "defKey": {
             "width": 210,
             "fixed": ""
           },
           "defName": {
-            "width": 312,
+            "width": 270,
             "fixed": ""
           },
           "primaryKey": {
@@ -4079,12 +4079,16 @@
             "width": 80,
             "fixed": ""
           },
+          "autoIncrement": {
+            "width": 70,
+            "fixed": ""
+          },
           "bizDomainType": {
             "width": 180,
             "fixed": ""
           },
-          "baseDataType": {
-            "width": 200,
+          "dbDataType": {
+            "width": 150,
             "fixed": ""
           },
           "dataLen": {
@@ -4093,6 +4097,10 @@
           },
           "numScale": {
             "width": 80,
+            "fixed": ""
+          },
+          "defaultValue": {
+            "width": 200,
             "fixed": ""
           },
           "intro": {
@@ -12354,6 +12362,6 @@
     "readonly": false,
     "allowWs": false
   },
-  "updateTime": 1794125064068,
+  "updateTime": 1794140301833,
   "signature": "c6eff41698963bc19bfac580f0636c72"
 }

@@ -21,7 +21,8 @@ enum MenuFormMode {
 /// 菜单管理 ViewModel：左侧「模块→菜单→操作」树（顶级项目为多根
 /// 列表），右侧信息表单三态（编辑选中项目 / 新增）。
 ///
-/// 树数据来自 /api/menu/query 的扁平列表、由本类按 parentId 组树；
+/// 树数据来自 /api/menu/query 的扁平列表、由本类按 parentId 组树、
+/// 各层按 ITEM_CODE 顺序排序；
 /// 增删成功后整表重拉重建，展开与选中状态尽量保留。每次进入页面
 /// loadData 都强制重拉——保证切回本页时数据一致。
 class MenuManagementViewModel extends ChangeNotifier {
@@ -132,22 +133,26 @@ class MenuManagementViewModel extends ChangeNotifier {
 
   /// 由扁平列表组树（old 为重建前的旧根列表，保留展开状态）。
   ///
-  /// 顶级项目（parentId 为空）为多根；parentId 指向缺失项目的孤儿
+  /// 顶级项目（parentId 为空）为多根，各层子项均按 ITEM_CODE 顺序
+  /// 排序（与角色管理权限树同口径）；parentId 指向缺失项目的孤儿
   /// 数据不展示（删除有下级校验、正常流程不会产生）。
   List<MenuTreeNode> _buildTree(List<MenuTreeNode> old) {
+    int compare(Menu a, Menu b) => a.itemCode.compareTo(b.itemCode);
     MenuTreeNode buildNode(Menu menu) {
       final node = MenuTreeNode(
         id: menu.id,
         menu: menu,
         expanded: _findByKey(old, 'menu:${menu.id}')?.expanded ?? true,
       );
-      for (final child in _menus.where((m) => m.id != menu.id && m.parentId == menu.id)) {
+      final children = _menus.where((m) => m.id != menu.id && m.parentId == menu.id).toList()..sort(compare);
+      for (final child in children) {
         node.children.add(buildNode(child));
       }
       return node;
     }
 
-    return _menus.where((m) => m.parentId == null || m.parentId!.isEmpty).map(buildNode).toList();
+    final roots = _menus.where((m) => m.parentId == null || m.parentId!.isEmpty).toList()..sort(compare);
+    return roots.map(buildNode).toList();
   }
 
   /// 在根列表中递归查找节点（按键）。

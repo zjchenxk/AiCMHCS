@@ -13,6 +13,7 @@ import 'package:server/services/department_service.dart';
 import 'package:server/services/hospital_service.dart';
 import 'package:server/services/menu_service.dart';
 import 'package:server/services/operation_log_service.dart';
+import 'package:server/services/role_service.dart';
 import 'package:server/utils/field_cipher.dart';
 import 'package:server/utils/log_helper.dart';
 
@@ -37,6 +38,7 @@ Future<HttpServer> run(Handler handler, InternetAddress ip, int port) async {
   final campuses = CampusService(db);
   final departments = DepartmentService(db);
   final menus = MenuService(db);
+  final roles = RoleService(db);
   final operationLogs = OperationLogService(db);
   // 静态门面：服务层深处、全局中间件等无 RequestContext 的位置经
   // LogHelper 写日志；中间件/路由经下方 provider 取同一实例。
@@ -51,6 +53,7 @@ Future<HttpServer> run(Handler handler, InternetAddress ip, int port) async {
       .use(provider<CampusService>((_) => campuses))
       .use(provider<DepartmentService>((_) => departments))
       .use(provider<MenuService>((_) => menus))
+      .use(provider<RoleService>((_) => roles))
       .use(provider<OperationLogService>((_) => operationLogs));
 
   final server = await serve(app, ip, port);
