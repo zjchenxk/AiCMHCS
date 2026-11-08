@@ -9,6 +9,7 @@ import 'package:client/services/campus_service.dart';
 import 'package:client/services/department_service.dart';
 import 'package:client/services/hospital_service.dart';
 import 'package:client/services/log_service.dart';
+import 'package:client/services/menu_service.dart';
 import 'package:client/utils/log_helper.dart';
 import 'package:client/view_models/home/home_view_model.dart';
 import 'package:client/view_models/main/main_view_model.dart';
@@ -17,6 +18,7 @@ import 'package:client/view_models/system/admin_division_management_view_model.d
 import 'package:client/view_models/system/campus_management_view_model.dart';
 import 'package:client/view_models/system/department_management_view_model.dart';
 import 'package:client/view_models/system/hospital_management_view_model.dart';
+import 'package:client/view_models/system/menu_management_view_model.dart';
 import 'package:client/views/login/login_page.dart';
 import 'package:common/model.dart';
 import 'package:material_ui/material_ui.dart';
@@ -44,6 +46,7 @@ void setupServiceLocator() {
   getIt.registerLazySingleton<HospitalService>(() => HospitalService());
   getIt.registerLazySingleton<CampusService>(() => CampusService());
   getIt.registerLazySingleton<DepartmentService>(() => DepartmentService());
+  getIt.registerLazySingleton<MenuService>(() => MenuService());
 }
 
 void main() async {
@@ -84,6 +87,7 @@ void main() async {
         ChangeNotifierProvider(create: (context) => HospitalManagementViewModel()),
         ChangeNotifierProvider(create: (context) => CampusManagementViewModel()),
         ChangeNotifierProvider(create: (context) => DepartmentManagementViewModel()),
+        ChangeNotifierProvider(create: (context) => MenuManagementViewModel()),
         ChangeNotifierProvider(create: (context) => AdminDivisionManagementViewModel()),
       ],
       child: const MyApp(),

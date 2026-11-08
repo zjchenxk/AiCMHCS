@@ -54,7 +54,7 @@ void main() {
     await insertUser('teacher01', 'TEACHER');
 
     final applied = await SchemaMigrator(db, fieldCipher: cipher).migrate();
-    expect(applied.map((m) => m.version), [2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(applied.map((m) => m.version), [2, 3, 4, 5, 6, 7, 8, 9, 10]);
 
     final rows = (await db.query(
       'SELECT USER_CODE, USER_TYPE, PERMISSION_LEVEL FROM SYS_USER '

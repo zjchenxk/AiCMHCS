@@ -126,30 +126,36 @@ class MainViewModel extends ChangeNotifier {
       children: [
         MenuItem(
           id: 'adminDivisions',
-          title: '行政区划设置',
+          title: '行政区划管理',
           icon: Icons.language_outlined,
           route: '/system/adminDivision',
         ),
         MenuItem(
+          id: 'menu',
+          title: '菜单管理',
+          icon: Icons.menu_book_outlined,
+          route: '/system/menu',
+        ),
+        MenuItem(
           id: 'hospital',
-          title: '医院设置',
+          title: '医院管理',
           icon: Icons.local_hospital_outlined,
           route: '/system/hospital',
         ),
         MenuItem(
           id: 'campus',
-          title: '院区设置',
+          title: '院区管理',
           icon: Icons.domain_outlined,
           route: '/system/campus',
         ),
         MenuItem(
           id: 'department',
-          title: '科室设置',
+          title: '科室管理',
           icon: Icons.meeting_room_outlined,
           route: '/system/department',
         ),
-        MenuItem(id: 'staff', title: '人员设置', icon: Icons.people_outline),
-        MenuItem(id: 'permission', title: '权限设置', icon: Icons.lock_outline),
+        MenuItem(id: 'role', title: '角色管理', icon: Icons.group_outlined),
+        MenuItem(id: 'staff', title: '人员管理', icon: Icons.people_outline),
       ],
     ),
   ];
