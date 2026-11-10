@@ -18,10 +18,7 @@ import 'package:provider/provider.dart';
 class UserInfoForm extends StatefulWidget {
   final UserManagementViewModel viewModel;
 
-  const UserInfoForm({
-    super.key,
-    required this.viewModel,
-  });
+  const UserInfoForm({super.key, required this.viewModel});
 
   @override
   State<UserInfoForm> createState() => _UserInfoFormState();
@@ -760,11 +757,7 @@ class _UserInfoFormState extends State<UserInfoForm> {
   );
 
   // 统一的毛玻璃输入框装饰
-  InputDecoration glassDecoration(
-    ThemeData theme,
-    String label, {
-    bool required = false,
-  }) {
+  InputDecoration glassDecoration(ThemeData theme, String label, {bool required = false}) {
     return InputDecoration(
       label: required
           ? Text.rich(

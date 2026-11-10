@@ -77,15 +77,7 @@ class DepartmentService {
   /// （院区必须存在且属该医院）；均空直接挂医院下（该医院必须未设置
   /// 任何院区）。校验：CODE 必填且全表唯一（回读新行 ID 的自然键）、
   /// 名称必填且同挂载点内唯一、各字段不超长。
-  Future<Department> create({
-    required String hospId,
-    required String code,
-    required String name,
-    String? campusId,
-    String? parentId,
-    String? address,
-    String? tel,
-  }) async {
+  Future<Department> create({required String hospId, required String code, required String name, String? campusId, String? parentId, String? address, String? tel}) async {
     final c = _required(code, '科室代码', _codeMaxLength);
     final n = _required(name, '科室名称', _nameMaxLength);
     final hospValue = await _ensureHospital(hospId);
@@ -126,18 +118,19 @@ class DepartmentService {
       }
       campusValue = campusValueById;
     } else {
+      // 取消下面的限制！chenxk，2026-11-10
       // 医院下的顶级科室：该医院必须未设置任何院区
-      final dup = await _db.query(
-        'SELECT COUNT(*) AS CNT FROM SYS_CAMPUS WHERE HOSP_ID = ?',
-        [hospValue],
-      );
-      if (int.parse(dup.rowsAsMaps.first['CNT'] ?? '0') > 0) {
-        throw const DepartmentException(
-          400,
-          40001,
-          '该医院已设置院区，科室必须挂在院区下',
-        );
-      }
+      // final dup = await _db.query(
+      //   'SELECT COUNT(*) AS CNT FROM SYS_CAMPUS WHERE HOSP_ID = ?',
+      //   [hospValue],
+      // );
+      // if (int.parse(dup.rowsAsMaps.first['CNT'] ?? '0') > 0) {
+      //   throw const DepartmentException(
+      //     400,
+      //     40001,
+      //     '该医院已设置院区，科室必须挂在院区下',
+      //   );
+      // }
     }
 
     await _ensureCodeUnique(c);
@@ -291,13 +284,7 @@ class DepartmentService {
   /// 顶级科室按同一挂载根（同院区，或同医院且均无院区）判重
   /// （excludeId 用于修改时排除自身）。可空挂载条件的 null 匹配以
   /// IS NULL 字面量写进 SQL、不经参数绑定（两库对 null 绑定行为不一致）。
-  Future<void> _ensureNameUnique(
-    int hospId, {
-    required int? campusValue,
-    required int? parentId,
-    required String name,
-    int? excludeId,
-  }) async {
+  Future<void> _ensureNameUnique(int hospId, {required int? campusValue, required int? parentId, required String name, int? excludeId}) async {
     String where;
     List<Object?> params;
     if (parentId != null) {

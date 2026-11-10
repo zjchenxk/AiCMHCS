@@ -12,10 +12,7 @@ import 'package:provider/provider.dart';
 class DepartmentInfoForm extends StatefulWidget {
   final DepartmentManagementViewModel viewModel;
 
-  const DepartmentInfoForm({
-    super.key,
-    required this.viewModel,
-  });
+  const DepartmentInfoForm({super.key, required this.viewModel});
 
   @override
   State<DepartmentInfoForm> createState() => _DepartmentInfoFormState();
@@ -36,6 +33,14 @@ class _DepartmentInfoFormState extends State<DepartmentInfoForm> {
 
   bool _saving = false;
 
+  // 显式焦点链（回车定向跳格，模式同 role_form_dialog）：nextFocus 按
+  // 整页焦点树找下一个可聚焦节点，会把焦点漏到左侧树的用户节点上；
+  // 显式 FocusNode 逐框定向，且可跳过下拉选择框（回车链不经过）。
+  late final FocusNode _codeFocus;
+  late final FocusNode _nameFocus;
+  late final FocusNode _addressFocus;
+  late final FocusNode _telFocus;
+
   @override
   void initState() {
     super.initState();
@@ -45,6 +50,10 @@ class _DepartmentInfoFormState extends State<DepartmentInfoForm> {
     _nameCtrl = TextEditingController(text: department?.name);
     _addressCtrl = TextEditingController(text: department?.address);
     _telCtrl = TextEditingController(text: department?.tel);
+    _codeFocus = FocusNode();
+    _nameFocus = FocusNode();
+    _addressFocus = FocusNode();
+    _telFocus = FocusNode();
   }
 
   @override
@@ -53,6 +62,10 @@ class _DepartmentInfoFormState extends State<DepartmentInfoForm> {
     _nameCtrl.dispose();
     _addressCtrl.dispose();
     _telCtrl.dispose();
+    _codeFocus.dispose();
+    _nameFocus.dispose();
+    _addressFocus.dispose();
+    _telFocus.dispose();
     super.dispose();
   }
 
@@ -130,11 +143,12 @@ class _DepartmentInfoFormState extends State<DepartmentInfoForm> {
           _sectionTitle(theme, '基本信息'),
           TextFormField(
             controller: _codeCtrl,
+            focusNode: _codeFocus,
             autofocus: creating,
             maxLength: _codeMaxLength,
             style: theme.textTheme.bodyMedium,
             textInputAction: TextInputAction.next, // 回车键显示"下一项"
-            onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(), // 回车跳下一个
+            onFieldSubmitted: (_) => _nameFocus.requestFocus(), // 回车跳下一个
             decoration: glassDecoration(theme, '科室代码', required: true),
             validator: (v) => (v == null || v.trim().isEmpty) ? '请输入科室代码' : null,
           ),
@@ -142,10 +156,11 @@ class _DepartmentInfoFormState extends State<DepartmentInfoForm> {
 
           TextFormField(
             controller: _nameCtrl,
+            focusNode: _nameFocus,
             maxLength: _nameMaxLength,
             style: theme.textTheme.bodyMedium,
             textInputAction: TextInputAction.next,
-            onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(),
+            onFieldSubmitted: (_) => _addressFocus.requestFocus(),
             decoration: glassDecoration(theme, '科室名称', required: true),
             validator: (v) => (v == null || v.trim().isEmpty) ? '请输入科室名称' : null,
           ),
@@ -155,16 +170,18 @@ class _DepartmentInfoFormState extends State<DepartmentInfoForm> {
           _sectionTitle(theme, '联系与地址'),
           TextFormField(
             controller: _addressCtrl,
+            focusNode: _addressFocus,
             maxLength: _addressMaxLength,
             style: theme.textTheme.bodyMedium,
             textInputAction: TextInputAction.next,
-            onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(),
+            onFieldSubmitted: (_) => _telFocus.requestFocus(),
             decoration: glassDecoration(theme, '地址'),
           ),
           const SizedBox(height: 12),
 
           TextFormField(
             controller: _telCtrl,
+            focusNode: _telFocus,
             maxLength: _telMaxLength,
             keyboardType: TextInputType.phone,
             style: theme.textTheme.bodyMedium,
@@ -215,11 +232,7 @@ class _DepartmentInfoFormState extends State<DepartmentInfoForm> {
   );
 
   // 统一的毛玻璃输入框装饰
-  InputDecoration glassDecoration(
-    ThemeData theme,
-    String label, {
-    bool required = false,
-  }) {
+  InputDecoration glassDecoration(ThemeData theme, String label, {bool required = false}) {
     return InputDecoration(
       label: required
           ? Text.rich(

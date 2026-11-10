@@ -269,12 +269,7 @@ class DepartmentManagementViewModel extends ChangeNotifier {
 
   /// 新增科室到挂载目标下（目标类型决定 parentId/campusId 传参），
   /// 成功后整表重拉、选中新科室并退出新增模式。
-  Future<bool> createDepartment({
-    required String code,
-    required String name,
-    String? address,
-    String? tel,
-  }) async {
+  Future<bool> createDepartment({required String code, required String name, String? address, String? tel}) async {
     final hospId = _hospId;
     final parent = _createParent;
     if (hospId == null || hospId.isEmpty || parent == null) return false;

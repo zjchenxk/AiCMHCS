@@ -12,11 +12,7 @@ import 'package:provider/provider.dart';
 /// 三态——未选中给提示、选中科室可编辑、新增时切换为新增表单
 /// （表单清空，挂载目标为发起新增的节点）。
 class DepartmentManagementPage extends BasePage {
-  const DepartmentManagementPage({
-    super.key,
-    required super.loginUser,
-    required super.child,
-  });
+  const DepartmentManagementPage({super.key, required super.loginUser, required super.child});
 
   @override
   State<DepartmentManagementPage> createState() => _DepartmentManagementPageState();
@@ -90,10 +86,7 @@ class _DepartmentManagementPageState extends State<DepartmentManagementPage> {
     return viewModel.loading ? const Center(child: CircularProgressIndicator()) : _buildBody(context, viewModel);
   }
 
-  Widget _buildBody(
-    BuildContext context,
-    DepartmentManagementViewModel viewModel,
-  ) {
+  Widget _buildBody(BuildContext context, DepartmentManagementViewModel viewModel) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -186,12 +179,7 @@ class _DepartmentManagementPageState extends State<DepartmentManagementPage> {
   }
 
   /// 面板抬头：primaryContainer 背景条（左右两栏同款）
-  Widget _buildPanelHeader({
-    required ThemeData theme,
-    required String title,
-    required IconData icon,
-    Widget? trailing,
-  }) {
+  Widget _buildPanelHeader({required ThemeData theme, required String title, required IconData icon, Widget? trailing}) {
     return Container(
       height: 60,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -218,12 +206,7 @@ class _DepartmentManagementPageState extends State<DepartmentManagementPage> {
 
   /// 递归构建树节点：医院根（无院区时可新增科室）、院区（可新增科室）、
   /// 科室（可新增下级科室/删除，点击选中右侧编辑）。
-  Widget _buildTreeTile(
-    BuildContext context,
-    DepartmentManagementViewModel viewModel,
-    DepartmentTreeNode node,
-    int depth,
-  ) {
+  Widget _buildTreeTile(BuildContext context, DepartmentManagementViewModel viewModel, DepartmentTreeNode node, int depth) {
     final theme = Theme.of(context);
     final selected = viewModel.selectedNode?.key == node.key && viewModel.formMode != DepartmentFormMode.create;
     final icon = switch (node.type) {
@@ -276,16 +259,15 @@ class _DepartmentManagementPageState extends State<DepartmentManagementPage> {
   /// 医院根仅在未设置院区时提供「新增科室」（已设置院区时顶级科室
   /// 必须挂院区下）；院区提供「新增科室」；科室提供「新增下级科室」
   /// 与「删除」。
-  Widget _buildNodeTrailing(
-    BuildContext context,
-    DepartmentManagementViewModel viewModel,
-    DepartmentTreeNode node,
-  ) {
+  Widget _buildNodeTrailing(BuildContext context, DepartmentManagementViewModel viewModel, DepartmentTreeNode node) {
     final theme = Theme.of(context);
     final isHospitalRoot = node.type == DepartmentTreeNodeType.hospital;
-    final hospitalAddable = isHospitalRoot && !viewModel.hasCampuses;
+    //允许在医院结点下新增科室，不管是否有院区。chenxk，2026-11-10
+    //final hospitalAddable = isHospitalRoot && !viewModel.hasCampuses;
+    final hospitalAddable = isHospitalRoot;
     final menuAddable = !isHospitalRoot && (node.type == DepartmentTreeNodeType.campus || node.type == DepartmentTreeNodeType.department);
     final deletable = node.type == DepartmentTreeNodeType.department;
+
     if (!hospitalAddable && !menuAddable) {
       return !node.isLeaf
           ? InkWell(
@@ -371,11 +353,7 @@ class _DepartmentManagementPageState extends State<DepartmentManagementPage> {
 
   /// 删除确认对话框（毛玻璃）；存在下级科室时后端阻止，提示由
   /// errorMsg 监听统一弹出。
-  void _confirmDelete(
-    BuildContext context,
-    DepartmentManagementViewModel viewModel,
-    DepartmentTreeNode node,
-  ) {
+  void _confirmDelete(BuildContext context, DepartmentManagementViewModel viewModel, DepartmentTreeNode node) {
     final theme = Theme.of(context);
     showDialog(
       context: context,
