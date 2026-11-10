@@ -18,10 +18,7 @@ import 'package:provider/provider.dart';
 class MenuInfoForm extends StatefulWidget {
   final MenuManagementViewModel viewModel;
 
-  const MenuInfoForm({
-    super.key,
-    required this.viewModel,
-  });
+  const MenuInfoForm({super.key, required this.viewModel});
 
   @override
   State<MenuInfoForm> createState() => _MenuInfoFormState();
@@ -38,11 +35,18 @@ class _MenuInfoFormState extends State<MenuInfoForm> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _routeCtrl;
 
+  late final FocusNode _codeFocus;
+  late final FocusNode _nameFocus;
+  late final FocusNode _routeFocus;
+
   /// 项目类型（'1'-模块、'2'-菜单、'3'-操作）。
   late String _itemType;
 
   /// 选中的图标名（null 为不设置）。
   String? _iconName;
+
+  ///是否显示（'0'-隐藏、'1'-显示），默认显示
+  late String _visible;
 
   bool _saving = false;
 
@@ -54,8 +58,12 @@ class _MenuInfoFormState extends State<MenuInfoForm> {
     _codeCtrl = TextEditingController(text: menu?.itemCode);
     _nameCtrl = TextEditingController(text: menu?.itemName);
     _routeCtrl = TextEditingController(text: menu?.menuRoute);
+    _codeFocus = FocusNode();
+    _nameFocus = FocusNode();
+    _routeFocus = FocusNode();
     _itemType = menu?.itemType ?? '1';
     _iconName = menu?.menuIcon;
+    _visible = menu?.visible ?? '1';
   }
 
   @override
@@ -63,6 +71,9 @@ class _MenuInfoFormState extends State<MenuInfoForm> {
     _codeCtrl.dispose();
     _nameCtrl.dispose();
     _routeCtrl.dispose();
+    _codeFocus.dispose();
+    _nameFocus.dispose();
+    _routeFocus.dispose();
     super.dispose();
   }
 
@@ -96,7 +107,7 @@ class _MenuInfoFormState extends State<MenuInfoForm> {
             itemType: _itemType,
             menuRoute: menuRoute,
             menuIcon: menuIcon,
-            visible: '1',
+            visible: _visible,
           )
         : await viewModel.updateMenu(viewModel.selectedMenu!.id, {
             'itemCode': itemCode,
@@ -104,7 +115,7 @@ class _MenuInfoFormState extends State<MenuInfoForm> {
             'itemType': _itemType,
             'menuRoute': menuRoute,
             'menuIcon': menuIcon,
-            'visible': '1',
+            'visible': _visible,
           });
 
     if (!mounted) return;
@@ -155,11 +166,12 @@ class _MenuInfoFormState extends State<MenuInfoForm> {
           _sectionTitle(theme, '基本信息'),
           TextFormField(
             controller: _codeCtrl,
+            focusNode: _codeFocus,
             autofocus: creating,
             maxLength: _codeMaxLength,
             style: theme.textTheme.bodyMedium,
             textInputAction: TextInputAction.next, // 回车键显示"下一项"
-            onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(), // 回车跳下一个
+            onFieldSubmitted: (_) => _nameFocus.requestFocus(), // 回车跳下一个
             decoration: glassDecoration(theme, '项目编码', required: true),
             validator: (v) => (v == null || v.trim().isEmpty) ? '请输入项目编码' : null,
           ),
@@ -167,6 +179,7 @@ class _MenuInfoFormState extends State<MenuInfoForm> {
 
           TextFormField(
             controller: _nameCtrl,
+            focusNode: _nameFocus,
             maxLength: _nameMaxLength,
             style: theme.textTheme.bodyMedium,
             textInputAction: TextInputAction.next,
@@ -199,6 +212,7 @@ class _MenuInfoFormState extends State<MenuInfoForm> {
           if (_itemType == '2') ...[
             TextFormField(
               controller: _routeCtrl,
+              focusNode: _routeFocus,
               maxLength: _routeMaxLength,
               style: theme.textTheme.bodyMedium,
               textInputAction: TextInputAction.done, // 最后一个显示"完成"
@@ -239,6 +253,25 @@ class _MenuInfoFormState extends State<MenuInfoForm> {
                 ),
               ),
             ),
+          const SizedBox(height: 12),
+
+          // 是否显示（'0'-隐藏、'1'-显示）
+          DropdownButtonFormField<String>(
+            initialValue: menuItemVisibleLabels.containsKey(_visible) ? _visible : null,
+            isExpanded: true,
+            style: theme.textTheme.bodyMedium,
+            items: [
+              for (final entry in menuItemVisibleLabels.entries) DropdownMenuItem(value: entry.key, child: Text(entry.value)),
+            ],
+            onChanged: viewModel.busy || _saving
+                ? null
+                : (v) {
+                    if (v == null) return;
+                    setState(() => _visible = v);
+                  },
+            decoration: glassDecoration(theme, '是否显示', required: true),
+            validator: (v) => (v == null || v.isEmpty) ? '请选择是否显示' : null,
+          ),
           const SizedBox(height: 32),
 
           // 操作按钮：新增模式可取消，编辑模式仅保存
@@ -282,11 +315,7 @@ class _MenuInfoFormState extends State<MenuInfoForm> {
   );
 
   // 统一的毛玻璃输入框装饰
-  InputDecoration glassDecoration(
-    ThemeData theme,
-    String label, {
-    bool required = false,
-  }) {
+  InputDecoration glassDecoration(ThemeData theme, String label, {bool required = false}) {
     return InputDecoration(
       label: required
           ? Text.rich(

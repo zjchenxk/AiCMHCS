@@ -17,6 +17,11 @@ const Map<String, String> menuItemTypeLabels = {
   '3': '操作',
 };
 
+const Map<String, String> menuItemVisibleLabels = {
+  '0': '隐藏',
+  '1': '显示',
+};
+
 /// 项目类型标签（未知类型回退原值展示）。
 String menuItemTypeLabel(String itemType) => menuItemTypeLabels[itemType] ?? itemType;
 
