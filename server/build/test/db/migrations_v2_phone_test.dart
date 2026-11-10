@@ -47,7 +47,7 @@ void main() {
     await insertUser('legacy', '13800000001');
 
     final applied = await SchemaMigrator(db, fieldCipher: cipher).migrate();
-    expect(applied.map((m) => m.version), [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    expect(applied.map((m) => m.version), [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
 
     final row = (await db.query(
       'SELECT PHONE, PHONE_HMAC FROM SYS_USER WHERE USER_CODE = ?',

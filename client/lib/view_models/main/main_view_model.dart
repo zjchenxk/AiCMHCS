@@ -160,7 +160,12 @@ class MainViewModel extends ChangeNotifier {
           icon: Icons.group_outlined,
           route: '/system/role',
         ),
-        MenuItem(id: 'staff', title: '人员管理', icon: Icons.people_outline),
+        MenuItem(
+          id: 'staff',
+          title: '用户管理',
+          icon: Icons.people_outline,
+          route: '/system/user',
+        ),
       ],
     ),
   ];

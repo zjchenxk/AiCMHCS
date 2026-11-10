@@ -167,10 +167,11 @@ Future<void> main() async {
     final deptIds = <String, int>{};
     for (final (code, campusCode, parentCode, name, address, tel) in demoDepartments) {
       final exists = await db.query(
-        'SELECT COUNT(*) AS CNT FROM SYS_DEPARTMENT WHERE CODE = ?',
+        'SELECT ID FROM SYS_DEPARTMENT WHERE CODE = ?',
         [code],
       );
-      if (int.parse(exists.rowsAsMaps.first['CNT'] ?? '0') > 0) {
+      if (exists.rows.isNotEmpty) {
+        deptIds[code] = int.parse(exists.rows.first[0]!);
         print('  科室 $code 已存在，跳过');
         continue;
       }
@@ -223,6 +224,26 @@ Future<void> main() async {
         'UPDATE SYS_USER SET HOSP_ID = ? WHERE USER_CODE IN ($placeholders) '
         'AND HOSP_ID IS NULL',
         [demoHospId, ...userCodes],
+      );
+    }
+    // 演示账号挂载科室：未设置时按账号补挂到示例人民医院的演示科室，
+    // 供用户管理页「科室→下级科室→用户」树演示（幂等，只补空值）
+    const demoDeptOfUser = {
+      'admin': 'DDEMO001',
+      'doctor01': 'DDEMO002',
+      'teacher01': 'DDEMO003',
+      'parent01': 'DDEMO004',
+    };
+    for (final entry in demoDeptOfUser.entries) {
+      final deptId = deptIds[entry.value];
+      if (deptId == null) {
+        print('  演示科室 ${entry.value} 不存在，${entry.key} 跳过挂载');
+        continue;
+      }
+      await db.execute(
+        'UPDATE SYS_USER SET DEPT_ID = ? WHERE USER_CODE = ? '
+        'AND DEPT_ID IS NULL',
+        [deptId, entry.key],
       );
     }
     print('完成。');

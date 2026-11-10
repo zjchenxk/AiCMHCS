@@ -9,6 +9,9 @@ import '../main.dart' as entrypoint;
 import '../routes/index.dart' as index;
 import '../routes/health.dart' as health;
 import '../routes/api/index.dart' as api_index;
+import '../routes/api/user/update.dart' as api_user_update;
+import '../routes/api/user/query.dart' as api_user_query;
+import '../routes/api/user/add.dart' as api_user_add;
 import '../routes/api/role/update.dart' as api_role_update;
 import '../routes/api/role/query.dart' as api_role_query;
 import '../routes/api/role/permissionSave.dart' as api_role_permission_save;
@@ -40,6 +43,7 @@ import '../routes/api/adminDivision/delete.dart' as api_admin_division_delete;
 import '../routes/api/adminDivision/add.dart' as api_admin_division_add;
 
 import '../routes/_middleware.dart' as middleware;
+import '../routes/api/user/_middleware.dart' as api_user_middleware;
 import '../routes/api/role/_middleware.dart' as api_role_middleware;
 import '../routes/api/menu/_middleware.dart' as api_menu_middleware;
 import '../routes/api/logs/_middleware.dart' as api_logs_middleware;
@@ -67,6 +71,7 @@ Handler buildRootHandler() {
   final router = Router()
     ..mount('/', (context) => buildHandler()(context))
     ..mount('/api', (context) => buildApiHandler()(context))
+    ..mount('/api/user', (context) => buildApiUserHandler()(context))
     ..mount('/api/role', (context) => buildApiRoleHandler()(context))
     ..mount('/api/menu', (context) => buildApiMenuHandler()(context))
     ..mount('/api/logs', (context) => buildApiLogsHandler()(context))
@@ -81,70 +86,275 @@ Handler buildRootHandler() {
 Handler buildHandler() {
   final pipeline = const Pipeline();
   final router = Router()
-    ..all('/health', (context) => health.onRequest(context,))..all('/', (context) => index.onRequest(context,));
+    ..all(
+      '/health',
+      (context) => health.onRequest(
+        context,
+      ),
+    )
+    ..all(
+      '/',
+      (context) => index.onRequest(
+        context,
+      ),
+    );
   return pipeline.addHandler(router);
 }
 
 Handler buildApiHandler() {
   final pipeline = const Pipeline();
   final router = Router()
-    ..all('/', (context) => api_index.onRequest(context,));
+    ..all(
+      '/',
+      (context) => api_index.onRequest(
+        context,
+      ),
+    );
+  return pipeline.addHandler(router);
+}
+
+Handler buildApiUserHandler() {
+  final pipeline = const Pipeline().addMiddleware(api_user_middleware.middleware);
+  final router = Router()
+    ..all(
+      '/add',
+      (context) => api_user_add.onRequest(
+        context,
+      ),
+    )
+    ..all(
+      '/query',
+      (context) => api_user_query.onRequest(
+        context,
+      ),
+    )
+    ..all(
+      '/update',
+      (context) => api_user_update.onRequest(
+        context,
+      ),
+    );
   return pipeline.addHandler(router);
 }
 
 Handler buildApiRoleHandler() {
   final pipeline = const Pipeline().addMiddleware(api_role_middleware.middleware);
   final router = Router()
-    ..all('/add', (context) => api_role_add.onRequest(context,))..all('/delete', (context) => api_role_delete.onRequest(context,))..all('/permissionQuery', (context) => api_role_permission_query.onRequest(context,))..all('/permissionSave', (context) => api_role_permission_save.onRequest(context,))..all('/query', (context) => api_role_query.onRequest(context,))..all('/update', (context) => api_role_update.onRequest(context,));
+    ..all(
+      '/add',
+      (context) => api_role_add.onRequest(
+        context,
+      ),
+    )
+    ..all(
+      '/delete',
+      (context) => api_role_delete.onRequest(
+        context,
+      ),
+    )
+    ..all(
+      '/permissionQuery',
+      (context) => api_role_permission_query.onRequest(
+        context,
+      ),
+    )
+    ..all(
+      '/permissionSave',
+      (context) => api_role_permission_save.onRequest(
+        context,
+      ),
+    )
+    ..all(
+      '/query',
+      (context) => api_role_query.onRequest(
+        context,
+      ),
+    )
+    ..all(
+      '/update',
+      (context) => api_role_update.onRequest(
+        context,
+      ),
+    );
   return pipeline.addHandler(router);
 }
 
 Handler buildApiMenuHandler() {
   final pipeline = const Pipeline().addMiddleware(api_menu_middleware.middleware);
   final router = Router()
-    ..all('/add', (context) => api_menu_add.onRequest(context,))..all('/delete', (context) => api_menu_delete.onRequest(context,))..all('/query', (context) => api_menu_query.onRequest(context,))..all('/update', (context) => api_menu_update.onRequest(context,));
+    ..all(
+      '/add',
+      (context) => api_menu_add.onRequest(
+        context,
+      ),
+    )
+    ..all(
+      '/delete',
+      (context) => api_menu_delete.onRequest(
+        context,
+      ),
+    )
+    ..all(
+      '/query',
+      (context) => api_menu_query.onRequest(
+        context,
+      ),
+    )
+    ..all(
+      '/update',
+      (context) => api_menu_update.onRequest(
+        context,
+      ),
+    );
   return pipeline.addHandler(router);
 }
 
 Handler buildApiLogsHandler() {
   final pipeline = const Pipeline().addMiddleware(api_logs_middleware.middleware);
   final router = Router()
-    ..all('/', (context) => api_logs_index.onRequest(context,));
+    ..all(
+      '/',
+      (context) => api_logs_index.onRequest(
+        context,
+      ),
+    );
   return pipeline.addHandler(router);
 }
 
 Handler buildApiHospitalHandler() {
   final pipeline = const Pipeline().addMiddleware(api_hospital_middleware.middleware);
   final router = Router()
-    ..all('/add', (context) => api_hospital_add.onRequest(context,))..all('/delete', (context) => api_hospital_delete.onRequest(context,))..all('/query', (context) => api_hospital_query.onRequest(context,))..all('/update', (context) => api_hospital_update.onRequest(context,));
+    ..all(
+      '/add',
+      (context) => api_hospital_add.onRequest(
+        context,
+      ),
+    )
+    ..all(
+      '/delete',
+      (context) => api_hospital_delete.onRequest(
+        context,
+      ),
+    )
+    ..all(
+      '/query',
+      (context) => api_hospital_query.onRequest(
+        context,
+      ),
+    )
+    ..all(
+      '/update',
+      (context) => api_hospital_update.onRequest(
+        context,
+      ),
+    );
   return pipeline.addHandler(router);
 }
 
 Handler buildApiDepartmentHandler() {
   final pipeline = const Pipeline().addMiddleware(api_department_middleware.middleware);
   final router = Router()
-    ..all('/add', (context) => api_department_add.onRequest(context,))..all('/delete', (context) => api_department_delete.onRequest(context,))..all('/query', (context) => api_department_query.onRequest(context,))..all('/update', (context) => api_department_update.onRequest(context,));
+    ..all(
+      '/add',
+      (context) => api_department_add.onRequest(
+        context,
+      ),
+    )
+    ..all(
+      '/delete',
+      (context) => api_department_delete.onRequest(
+        context,
+      ),
+    )
+    ..all(
+      '/query',
+      (context) => api_department_query.onRequest(
+        context,
+      ),
+    )
+    ..all(
+      '/update',
+      (context) => api_department_update.onRequest(
+        context,
+      ),
+    );
   return pipeline.addHandler(router);
 }
 
 Handler buildApiCampusHandler() {
   final pipeline = const Pipeline().addMiddleware(api_campus_middleware.middleware);
   final router = Router()
-    ..all('/add', (context) => api_campus_add.onRequest(context,))..all('/delete', (context) => api_campus_delete.onRequest(context,))..all('/query', (context) => api_campus_query.onRequest(context,))..all('/update', (context) => api_campus_update.onRequest(context,));
+    ..all(
+      '/add',
+      (context) => api_campus_add.onRequest(
+        context,
+      ),
+    )
+    ..all(
+      '/delete',
+      (context) => api_campus_delete.onRequest(
+        context,
+      ),
+    )
+    ..all(
+      '/query',
+      (context) => api_campus_query.onRequest(
+        context,
+      ),
+    )
+    ..all(
+      '/update',
+      (context) => api_campus_update.onRequest(
+        context,
+      ),
+    );
   return pipeline.addHandler(router);
 }
 
 Handler buildApiAuthHandler() {
   final pipeline = const Pipeline().addMiddleware(api_auth_middleware.middleware);
   final router = Router()
-    ..all('/login', (context) => api_auth_login.onRequest(context,))..all('/me', (context) => api_auth_me.onRequest(context,));
+    ..all(
+      '/login',
+      (context) => api_auth_login.onRequest(
+        context,
+      ),
+    )
+    ..all(
+      '/me',
+      (context) => api_auth_me.onRequest(
+        context,
+      ),
+    );
   return pipeline.addHandler(router);
 }
 
 Handler buildApiAdminDivisionHandler() {
   final pipeline = const Pipeline().addMiddleware(api_admin_division_middleware.middleware);
   final router = Router()
-    ..all('/add', (context) => api_admin_division_add.onRequest(context,))..all('/delete', (context) => api_admin_division_delete.onRequest(context,))..all('/query', (context) => api_admin_division_query.onRequest(context,))..all('/update', (context) => api_admin_division_update.onRequest(context,));
+    ..all(
+      '/add',
+      (context) => api_admin_division_add.onRequest(
+        context,
+      ),
+    )
+    ..all(
+      '/delete',
+      (context) => api_admin_division_delete.onRequest(
+        context,
+      ),
+    )
+    ..all(
+      '/query',
+      (context) => api_admin_division_query.onRequest(
+        context,
+      ),
+    )
+    ..all(
+      '/update',
+      (context) => api_admin_division_update.onRequest(
+        context,
+      ),
+    );
   return pipeline.addHandler(router);
 }
-
