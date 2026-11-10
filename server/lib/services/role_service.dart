@@ -72,12 +72,7 @@ class RoleService {
   ///
   /// 校验：所属医院必须存在、ROLE_CODE / ROLE_NAME 必填且同医院内
   /// 唯一（回读新行 ID 的自然键）、备注可选、各字段不超长。
-  Future<Role> create({
-    required String hospId,
-    required String roleCode,
-    required String roleName,
-    String? remark,
-  }) async {
+  Future<Role> create({required String hospId, required String roleCode, required String roleName, String? remark}) async {
     final code = _required(roleCode, '角色编码', _codeMaxLength);
     final name = _required(roleName, '角色名称', _nameMaxLength);
     final hospValue = await _ensureHospital(hospId);

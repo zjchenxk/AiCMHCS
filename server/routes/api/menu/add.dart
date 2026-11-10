@@ -16,6 +16,8 @@ Future<Response> onRequest(RequestContext context) async {
   final itemCode = body['itemCode'];
   final itemName = body['itemName'];
   final itemType = body['itemType'];
+  final visible = body['visible'];
+
   if (itemCode is! String || itemCode.trim().isEmpty) {
     return _error(400, 40001, '项目编码不能为空');
   }
@@ -24,6 +26,9 @@ Future<Response> onRequest(RequestContext context) async {
   }
   if (itemType is! String || itemType.trim().isEmpty) {
     return _error(400, 40001, '项目类型不能为空');
+  }
+  if (visible is! String || visible.trim().isEmpty) {
+    return _error(400, 40001, '是否显示不能为空');
   }
   final parentId = body['parentId'];
   if (parentId != null && parentId is! String) {
@@ -47,6 +52,7 @@ Future<Response> onRequest(RequestContext context) async {
       itemType: itemType,
       menuRoute: menuRoute as String?,
       menuIcon: menuIcon as String?,
+      visible: visible,
     );
     return Response.json(
       body: {

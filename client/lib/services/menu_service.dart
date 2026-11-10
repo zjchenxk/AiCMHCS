@@ -35,6 +35,7 @@ class MenuService {
     required String itemCode,
     required String itemName,
     required String itemType,
+    required String visible,
     String? parentId,
     String? menuRoute,
     String? menuIcon,
@@ -46,6 +47,7 @@ class MenuService {
       'parentId': parentId,
       'menuRoute': menuRoute,
       'menuIcon': menuIcon,
+      'visible': visible,
     });
     return Menu.fromJson(data['menu'] as Map<String, dynamic>);
   }

@@ -19,29 +19,22 @@ CREATE TABLE SYS_MENU (
   ITEM_NAME TEXT NOT NULL, -- 项目名称
   ITEM_TYPE TEXT NOT NULL, -- 项目类型：1-模块，2-菜单，3-操作
   MENU_ROUTE TEXT, -- 菜单路由
-  MENU_ICON TEXT -- 菜单图标
+  MENU_ICON TEXT, -- 菜单图标
+  VISIBLE TEXT NOT NULL -- 是否显示
 )''');
     // 菜单：1/4 为顶级模块，2 为 1 的下级菜单，3 为 2 的下级操作。
-    Future<void> seedMenu(
-      int id,
-      int? parentId,
-      String code,
-      String name,
-      String type,
-      String? route,
-      String? icon,
-    ) async {
+    Future<void> seedMenu(int id, int? parentId, String code, String name, String type, String? route, String? icon, String visible) async {
       await db.execute(
         'INSERT INTO SYS_MENU (ID, PARENT_ID, ITEM_CODE, ITEM_NAME, ITEM_TYPE, '
-        'MENU_ROUTE, MENU_ICON) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [id, parentId, code, name, type, route, icon],
+        'MENU_ROUTE, MENU_ICON, VISIBLE) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [id, parentId, code, name, type, route, icon, visible],
       );
     }
 
-    await seedMenu(1, null, 'M001', '系统管理', '1', null, 'settings_outlined');
-    await seedMenu(2, 1, 'M002', '医院管理', '2', '/system/hospital', 'local_hospital_outlined');
-    await seedMenu(3, 2, 'M003', '新增医院', '3', null, null);
-    await seedMenu(4, null, 'M004', '儿童管理', '1', null, 'child_care');
+    await seedMenu(1, null, 'M001', '系统管理', '1', null, 'settings_outlined', '1');
+    await seedMenu(2, 1, 'M002', '医院管理', '2', '/system/hospital', 'local_hospital_outlined', '1');
+    await seedMenu(3, 2, 'M003', '新增医院', '3', null, null, '1');
+    await seedMenu(4, null, 'M004', '儿童管理', '1', null, 'child_care', '1');
     service = MenuService(db);
   });
 
@@ -82,6 +75,7 @@ CREATE TABLE SYS_MENU (
       itemCode: 'M005',
       itemName: '智力测验',
       itemType: MenuService.itemTypeModule,
+      visible: '1',
     );
     expect(top.id, '5');
     expect(top.parentId, isNull);
@@ -94,6 +88,7 @@ CREATE TABLE SYS_MENU (
       itemType: MenuService.itemTypeMenu,
       menuRoute: '/intelligence/raven',
       menuIcon: 'grid_on_outlined',
+      visible: '1',
     );
     expect(child.id, '6');
     expect(child.parentId, '5');
@@ -107,6 +102,7 @@ CREATE TABLE SYS_MENU (
       itemCode: 'M0010',
       itemName: '占位菜单',
       itemType: MenuService.itemTypeMenu,
+      visible: '1',
     );
     expect(menu.menuRoute, isNull);
     final action = await service.create(
@@ -114,29 +110,30 @@ CREATE TABLE SYS_MENU (
       itemCode: 'M0011',
       itemName: '删除医院',
       itemType: MenuService.itemTypeAction,
+      visible: '1',
     );
     expect(action.menuRoute, isNull);
   });
 
   test('create：类型非法 / 编码重复 / 必填缺失 / 超长 / 上级不存在均报错', () async {
     await expectLater(
-      service.create(itemCode: 'M0021', itemName: '非法类型', itemType: '9'),
+      service.create(itemCode: 'M0021', itemName: '非法类型', itemType: '9', visible: '1'),
       throwsA(isA<MenuException>().having((e) => e.message, 'message', contains('项目类型应为'))),
     );
     await expectLater(
-      service.create(itemCode: 'M001', itemName: '重码项目', itemType: MenuService.itemTypeModule),
+      service.create(itemCode: 'M001', itemName: '重码项目', itemType: MenuService.itemTypeModule, visible: '1'),
       throwsA(isA<MenuException>().having((e) => e.message, 'message', contains('项目编码已存在'))),
     );
     await expectLater(
-      service.create(itemCode: '  ', itemName: '无编码', itemType: MenuService.itemTypeModule),
+      service.create(itemCode: '  ', itemName: '无编码', itemType: MenuService.itemTypeModule, visible: '1'),
       throwsA(isA<MenuException>().having((e) => e.message, 'message', contains('项目编码不能为空'))),
     );
     await expectLater(
-      service.create(itemCode: 'M0022', itemName: ' ', itemType: MenuService.itemTypeModule),
+      service.create(itemCode: 'M0022', itemName: ' ', itemType: MenuService.itemTypeModule, visible: '1'),
       throwsA(isA<MenuException>().having((e) => e.message, 'message', contains('项目名称不能为空'))),
     );
     await expectLater(
-      service.create(itemCode: 'M' * 11, itemName: '超长编码', itemType: MenuService.itemTypeModule),
+      service.create(itemCode: 'M' * 11, itemName: '超长编码', itemType: MenuService.itemTypeModule, visible: '1'),
       throwsA(isA<MenuException>().having((e) => e.message, 'message', contains('不能超过'))),
     );
     await expectLater(
@@ -146,6 +143,7 @@ CREATE TABLE SYS_MENU (
         itemName: '孤儿项目',
         itemType: MenuService.itemTypeMenu,
         menuRoute: '/x',
+        visible: '1',
       ),
       throwsA(isA<MenuException>().having((e) => e.message, 'message', contains('上级项目不存在'))),
     );
@@ -155,6 +153,7 @@ CREATE TABLE SYS_MENU (
         itemName: '非法上级',
         parentId: 'x',
         itemType: MenuService.itemTypeAction,
+        visible: '1',
       ),
       throwsA(isA<MenuException>().having((e) => e.message, 'message', contains('格式不正确'))),
     );

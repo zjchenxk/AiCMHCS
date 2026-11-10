@@ -8,6 +8,7 @@ class Menu {
     required this.itemCode,
     required this.itemName,
     required this.itemType,
+    required this.visible,
     this.parentId,
     this.menuRoute,
     this.menuIcon,
@@ -34,6 +35,9 @@ class Menu {
   /// 菜单图标名（Material 图标名的字符串形式）。
   final String? menuIcon;
 
+  /// 是否显示：'1'-是、'0'-否。
+  final String visible;
+
   factory Menu.fromJson(Map<String, dynamic> json) {
     return Menu(
       id: json['id'] as String,
@@ -43,6 +47,7 @@ class Menu {
       itemType: json['itemType'] as String,
       menuRoute: json['menuRoute'] as String?,
       menuIcon: json['menuIcon'] as String?,
+      visible: json['visible'] as String,
     );
   }
 
@@ -55,6 +60,7 @@ class Menu {
       'itemType': itemType,
       'menuRoute': menuRoute,
       'menuIcon': menuIcon,
+      'visible': visible,
     };
   }
 }

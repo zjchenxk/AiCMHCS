@@ -55,13 +55,13 @@ class MenuService {
   static const int _iconMaxLength = 100;
 
   /// 可经 update 修改的字段（parentId 不可改，树形结构调整走增删）。
-  static const Set<String> _editableFields = {'itemCode', 'itemName', 'itemType', 'menuRoute', 'menuIcon'};
+  static const Set<String> _editableFields = {'itemCode', 'itemName', 'itemType', 'menuRoute', 'menuIcon', 'visible'};
 
   /// 查询全部菜单项目（按上级项目、创建顺序），供前端构建树。
   Future<List<Menu>> listAll() async {
     final result = await _db.query(
       'SELECT ID, PARENT_ID, ITEM_CODE, ITEM_NAME, ITEM_TYPE, MENU_ROUTE, '
-      'MENU_ICON FROM SYS_MENU ORDER BY PARENT_ID, ID',
+      'MENU_ICON, VISIBLE FROM SYS_MENU ORDER BY PARENT_ID, ID',
     );
     return result.rowsAsMaps.map(_fromRow).toList(growable: false);
   }
@@ -70,7 +70,7 @@ class MenuService {
   Future<Menu> getById(String id) async {
     final result = await _db.query(
       'SELECT ID, PARENT_ID, ITEM_CODE, ITEM_NAME, ITEM_TYPE, MENU_ROUTE, '
-      'MENU_ICON FROM SYS_MENU WHERE ID = ?',
+      'MENU_ICON, VISIBLE FROM SYS_MENU WHERE ID = ?',
       [_toInt(id, '菜单ID')],
     );
     if (result.rows.isEmpty) {
@@ -84,14 +84,7 @@ class MenuService {
   /// parentId 非空时挂上级项目下（上级必须存在），空为顶级项目；
   /// 校验：ITEM_CODE 必填且全表唯一（回读新行 ID 的自然键）、名称必填、
   /// 类型限 1-模块/2-菜单/3-操作、路由与图标可选、各字段不超长。
-  Future<Menu> create({
-    required String itemCode,
-    required String itemName,
-    required String itemType,
-    String? parentId,
-    String? menuRoute,
-    String? menuIcon,
-  }) async {
+  Future<Menu> create({required String itemCode, required String itemName, required String itemType, required String visible, String? parentId, String? menuRoute, String? menuIcon}) async {
     final code = _required(itemCode, '项目编码', _codeMaxLength);
     final name = _required(itemName, '项目名称', _nameMaxLength);
     final type = _itemType(itemType);
@@ -105,8 +98,8 @@ class MenuService {
 
     await _db.execute(
       'INSERT INTO SYS_MENU (PARENT_ID, ITEM_CODE, ITEM_NAME, ITEM_TYPE, '
-      'MENU_ROUTE, MENU_ICON) VALUES (?, ?, ?, ?, ?, ?)',
-      [parentValue, code, name, type, route, icon],
+      'MENU_ROUTE, MENU_ICON, VISIBLE) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [parentValue, code, name, type, route, icon, visible],
     );
     // 自增 ID 经唯一 ITEM_CODE 回读（网关无 last-insert-id 通道）
     final row = await _db.query(
@@ -139,6 +132,7 @@ class MenuService {
     final name = changes.containsKey('itemName') ? _required(changes['itemName']?.toString(), '项目名称', _nameMaxLength) : null;
     final type = changes.containsKey('itemType') ? _itemType(changes['itemType']?.toString()) : null;
     final route = changes.containsKey('menuRoute') ? _optional(changes['menuRoute']?.toString(), '菜单路由', _routeMaxLength) : null;
+    final visible = changes.containsKey('visible') ? _required(changes['visible']?.toString(), '是否显示', 1) : null;
 
     // 构建更新语句（键序即 changes 传入序）
     final setters = <String>[];
@@ -160,6 +154,9 @@ class MenuService {
         case 'menuIcon':
           setters.add('MENU_ICON = ?');
           params.add(_optional(entry.value?.toString(), '菜单图标', _iconMaxLength));
+        case 'visible':
+          setters.add('VISIBLE = ?');
+          params.add(visible);
       }
     }
 
@@ -199,6 +196,7 @@ class MenuService {
     itemType: row['ITEM_TYPE'] ?? '',
     menuRoute: row['MENU_ROUTE'],
     menuIcon: row['MENU_ICON'],
+    visible: row['VISIBLE'] ?? '1',
   );
 
   /// 校验上级项目存在，返回其 int 形式 ID。

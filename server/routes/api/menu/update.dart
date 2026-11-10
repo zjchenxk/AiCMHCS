@@ -20,7 +20,7 @@ Future<Response> onRequest(RequestContext context) async {
   }
 
   // 只把已知业务字段透传给服务层，其余键（含 id）一律拒绝
-  const allowed = <String>{'itemCode', 'itemName', 'itemType', 'menuRoute', 'menuIcon'};
+  const allowed = <String>{'itemCode', 'itemName', 'itemType', 'menuRoute', 'menuIcon', 'visible'};
   final changes = <String, Object?>{
     for (final entry in body.entries)
       if (allowed.contains(entry.key)) entry.key: entry.value,

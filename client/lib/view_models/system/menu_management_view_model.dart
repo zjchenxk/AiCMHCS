@@ -200,6 +200,7 @@ class MenuManagementViewModel extends ChangeNotifier {
     required String itemCode,
     required String itemName,
     required String itemType,
+    required String visible,
     String? menuRoute,
     String? menuIcon,
   }) async {
@@ -215,6 +216,7 @@ class MenuManagementViewModel extends ChangeNotifier {
         parentId: parent?.id,
         menuRoute: menuRoute,
         menuIcon: menuIcon,
+        visible: visible,
       );
       await _refreshTree();
       _selectedNode = _findByKey(_roots, 'menu:${created.id}');

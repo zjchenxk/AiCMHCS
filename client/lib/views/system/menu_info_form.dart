@@ -96,6 +96,7 @@ class _MenuInfoFormState extends State<MenuInfoForm> {
             itemType: _itemType,
             menuRoute: menuRoute,
             menuIcon: menuIcon,
+            visible: '1',
           )
         : await viewModel.updateMenu(viewModel.selectedMenu!.id, {
             'itemCode': itemCode,
@@ -103,6 +104,7 @@ class _MenuInfoFormState extends State<MenuInfoForm> {
             'itemType': _itemType,
             'menuRoute': menuRoute,
             'menuIcon': menuIcon,
+            'visible': '1',
           });
 
     if (!mounted) return;

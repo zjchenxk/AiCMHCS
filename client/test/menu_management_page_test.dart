@@ -33,6 +33,7 @@ class _FakeMenuService extends MenuService {
       itemType: itemType,
       menuRoute: menuRoute,
       menuIcon: menuIcon,
+      visible: '1',
     );
     final n = int.parse(id);
     if (n >= nextId) nextId = n + 1;
@@ -49,6 +50,7 @@ class _FakeMenuService extends MenuService {
     required String itemCode,
     required String itemName,
     required String itemType,
+    required String visible,
     String? parentId,
     String? menuRoute,
     String? menuIcon,
@@ -65,6 +67,7 @@ class _FakeMenuService extends MenuService {
       itemType: itemType,
       menuRoute: menuRoute,
       menuIcon: menuIcon,
+      visible: visible,
     );
     store[id] = m;
     return m;
@@ -81,6 +84,7 @@ class _FakeMenuService extends MenuService {
       itemType: changes['itemType'] as String? ?? m.itemType,
       menuRoute: changes.containsKey('menuRoute') ? changes['menuRoute'] as String? : m.menuRoute,
       menuIcon: changes.containsKey('menuIcon') ? changes['menuIcon'] as String? : m.menuIcon,
+      visible: changes['visible'] as String? ?? m.visible,
     );
     store[id] = updated;
     return updated;

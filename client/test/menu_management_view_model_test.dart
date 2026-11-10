@@ -37,6 +37,7 @@ class FakeMenuService extends MenuService {
       itemType: itemType,
       menuRoute: menuRoute,
       menuIcon: menuIcon,
+      visible: '1',
     );
     final n = int.parse(id);
     if (n >= nextId) nextId = n + 1;
@@ -54,6 +55,7 @@ class FakeMenuService extends MenuService {
     required String itemCode,
     required String itemName,
     required String itemType,
+    required String visible,
     String? parentId,
     String? menuRoute,
     String? menuIcon,
@@ -73,6 +75,7 @@ class FakeMenuService extends MenuService {
       itemType: itemType,
       menuRoute: menuRoute,
       menuIcon: menuIcon,
+      visible: visible,
     );
     store[id] = m;
     return m;
@@ -92,6 +95,7 @@ class FakeMenuService extends MenuService {
       itemType: changes['itemType'] as String? ?? m.itemType,
       menuRoute: changes.containsKey('menuRoute') ? changes['menuRoute'] as String? : m.menuRoute,
       menuIcon: changes.containsKey('menuIcon') ? changes['menuIcon'] as String? : m.menuIcon,
+      visible: changes['visible'] as String? ?? m.visible,
     );
     store[id] = updated;
     return updated;
@@ -194,6 +198,7 @@ void main() {
       itemCode: 'M010',
       itemName: '智力测验',
       itemType: '1',
+      visible: '1',
     );
     expect(ok, isTrue);
     expect(viewModel.formMode, MenuFormMode.edit);
@@ -214,6 +219,7 @@ void main() {
         itemCode: 'M011',
         itemName: '删除医院',
         itemType: '3',
+        visible: '1',
       ),
       isTrue,
     );
@@ -230,7 +236,12 @@ void main() {
     menuService.onCreate = () => Exception('项目编码已存在：M001');
 
     expect(
-      await viewModel.createMenu(itemCode: 'M001', itemName: '重码项目', itemType: '1'),
+      await viewModel.createMenu(
+        itemCode: 'M001',
+        itemName: '重码项目',
+        itemType: '1',
+        visible: '1',
+      ),
       isFalse,
     );
     expect(viewModel.formMode, MenuFormMode.create);
