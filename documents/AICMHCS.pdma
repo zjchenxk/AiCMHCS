@@ -4236,6 +4236,11 @@
             "orderValue": 7
           },
           {
+            "refObjectId": "CA84BBD6-21BB-4AD8-A3E1-B040BBA773B0",
+            "refObjectType": "L",
+            "orderValue": 8
+          },
+          {
             "refObjectId": "1A2EF51E-F538-4CE0-983A-8065E2463B60",
             "refObjectType": "E",
             "orderValue": 1
@@ -4269,6 +4274,11 @@
             "refObjectId": "8DE6044F-826E-4EDA-AD26-7BFB17FEEACC",
             "refObjectType": "E",
             "orderValue": 7
+          },
+          {
+            "refObjectId": "707C54C6-7446-4655-8BBA-E5A3C515816E",
+            "refObjectType": "P",
+            "orderValue": 8
           }
         ],
         "diagramRefs": [],
@@ -4328,6 +4338,11 @@
           "orderValue": 10
         },
         {
+          "refObjectId": "CA84BBD6-21BB-4AD8-A3E1-B040BBA773B0",
+          "refObjectType": "L",
+          "orderValue": 11
+        },
+        {
           "refObjectId": "F37929AA-1878-4A94-8863-F480120DEF8C",
           "refObjectType": "P",
           "orderValue": 1
@@ -4376,6 +4391,11 @@
           "refObjectId": "3917D398-9536-44C9-A8FA-14B31E73B192",
           "refObjectType": "P",
           "orderValue": 10
+        },
+        {
+          "refObjectId": "707C54C6-7446-4655-8BBA-E5A3C515816E",
+          "refObjectType": "P",
+          "orderValue": 11
         }
       ],
       "diagramRefs": []
@@ -7635,7 +7655,53 @@
         "type": "P",
         "intro": "密文列 = 明文最大字节数 × 1.5 + 64 取整；盲索引列 = 恒定 64 字符",
         "parentId": "88D8393B-4813-425F-B082-ACB133F1A09F",
-        "indexes": []
+        "indexes": [
+          {
+            "id": "75AF4163-36D0-4822-97DC-FC15BEB08C74",
+            "type": "UNIQUE",
+            "defKey": "index_USER_CODE",
+            "defName": "",
+            "intro": "",
+            "fields": [
+              {
+                "id": "F8A99CA2-F85D-4E27-BD9F-97C411A84309",
+                "fieldId": "AED7C67E-CD92-47BF-8C66-0592B432E4FA",
+                "fieldDefKey": "USER_CODE",
+                "sortType": "ASC"
+              }
+            ]
+          },
+          {
+            "id": "E831B72C-11A5-4A16-B859-89A87A01B8FB",
+            "type": "NORMAL",
+            "defKey": "index_PHONE_HMAC",
+            "defName": "",
+            "intro": "",
+            "fields": [
+              {
+                "id": "6FD6A424-8238-43B7-A4E6-CC35A605553D",
+                "fieldId": "4F6F591C-BE0C-4B34-B51A-9EBE8E18BA74",
+                "fieldDefKey": "PHONE_HMAC",
+                "sortType": "ASC"
+              }
+            ]
+          },
+          {
+            "id": "6AFF6FFF-F91C-456A-9FDB-ACE2D10BA7AD",
+            "type": "NORMAL",
+            "defKey": "index_ID_CARD_NO_HMAC",
+            "defName": "",
+            "intro": "",
+            "fields": [
+              {
+                "id": "C5BC1F8C-7834-47C5-A0DE-6E4D62C9152B",
+                "fieldId": "6CF417ED-D908-40DA-9F4F-3ED4A7FDE9C1",
+                "fieldDefKey": "ID_CARD_NO_HMAC",
+                "sortType": "ASC"
+              }
+            ]
+          }
+        ]
       },
       {
         "id": "A8A6201A-33B9-4917-A57F-6C20170AA366",
@@ -8380,7 +8446,8 @@
         ],
         "defName": "医院表",
         "defKey": "HOSPITAL",
-        "type": "L"
+        "type": "L",
+        "indexes": []
       },
       {
         "id": "7C1FC501-C2E2-4600-B98C-A6E178F48FE5",
@@ -9504,7 +9571,8 @@
         ],
         "defName": "院区表",
         "defKey": "CAMPUS",
-        "type": "L"
+        "type": "L",
+        "indexes": []
       },
       {
         "id": "4D19B474-0579-4698-967A-D191CBF6A257",
@@ -10352,7 +10420,8 @@
         ],
         "defName": "科室表",
         "defKey": "DEPARTMENT",
-        "type": "L"
+        "type": "L",
+        "indexes": []
       },
       {
         "id": "7D541CC6-EB4B-44C0-9E69-EF47466AA3D2",
@@ -11154,7 +11223,8 @@
         ],
         "defName": "菜单表",
         "defKey": "MENU",
-        "type": "L"
+        "type": "L",
+        "indexes": []
       },
       {
         "id": "1A2EF51E-F538-4CE0-983A-8065E2463B60",
@@ -11818,7 +11888,8 @@
         ],
         "defName": "角色表",
         "defKey": "ROLE",
-        "type": "L"
+        "type": "L",
+        "indexes": []
       },
       {
         "id": "B49DEA7E-A28D-4E36-82AC-35686505D0BB",
@@ -11919,7 +11990,8 @@
         ],
         "defName": "角色权限表",
         "defKey": "ROLE_PERMISSION",
-        "type": "L"
+        "type": "L",
+        "indexes": []
       },
       {
         "id": "989DA6D1-1648-405C-AF93-EBEAB62E1EE9",
@@ -12356,12 +12428,217 @@
         "type": "P",
         "parentId": "88D8393B-4813-425F-B082-ACB133F1A09F",
         "indexes": []
+      },
+      {
+        "id": "CA84BBD6-21BB-4AD8-A3E1-B040BBA773B0",
+        "schemaName": null,
+        "fields": [
+          {
+            "id": "6A2B6181-DF48-4F0A-AA7C-EB8485EBD201",
+            "defKey": "USER_ID",
+            "defName": "用户ID",
+            "intro": "",
+            "baseDataType": "BIGINT",
+            "bizDomainType": "",
+            "dbDataType": "",
+            "dataLen": "",
+            "numScale": "",
+            "primaryKey": 1,
+            "notNull": 1,
+            "autoIncrement": 0,
+            "defaultValue": "",
+            "stndDictId": "",
+            "stndFieldId": "",
+            "stndDictKey": "",
+            "stndFieldKey": "",
+            "stndComplianceLevel": "",
+            "stndComplianceType": "",
+            "dictFrom": "",
+            "dictItems": null,
+            "fieldTier": "",
+            "mark": null,
+            "attr1": "",
+            "attr2": "",
+            "attr3": "",
+            "attr4": "",
+            "attr5": "",
+            "attr6": "",
+            "attr7": "",
+            "attr8": "",
+            "attr9": "",
+            "attr10": "",
+            "attr11": "",
+            "attr12": "",
+            "attr13": "",
+            "attr14": "",
+            "attr15": "",
+            "attr16": "",
+            "attr17": "",
+            "attr18": "",
+            "attr19": "",
+            "attr20": "",
+            "origin": "UI"
+          },
+          {
+            "id": "1534A61B-59BB-429C-8114-8B164B93003F",
+            "defKey": "ROLE_ID",
+            "defName": "角色ID",
+            "intro": "",
+            "baseDataType": "BIGINT",
+            "bizDomainType": "",
+            "dbDataType": "",
+            "dataLen": "",
+            "numScale": "",
+            "primaryKey": 1,
+            "notNull": 1,
+            "autoIncrement": 0,
+            "defaultValue": "",
+            "stndDictId": "",
+            "stndFieldId": "",
+            "stndDictKey": "",
+            "stndFieldKey": "",
+            "stndComplianceLevel": "",
+            "stndComplianceType": "",
+            "dictFrom": "",
+            "dictItems": null,
+            "fieldTier": "",
+            "mark": null,
+            "attr1": "",
+            "attr2": "",
+            "attr3": "",
+            "attr4": "",
+            "attr5": "",
+            "attr6": "",
+            "attr7": "",
+            "attr8": "",
+            "attr9": "",
+            "attr10": "",
+            "attr11": "",
+            "attr12": "",
+            "attr13": "",
+            "attr14": "",
+            "attr15": "",
+            "attr16": "",
+            "attr17": "",
+            "attr18": "",
+            "attr19": "",
+            "attr20": "",
+            "origin": "UI"
+          }
+        ],
+        "defName": "用户角色表",
+        "defKey": "USER_ROLE",
+        "type": "L",
+        "indexes": []
+      },
+      {
+        "id": "707C54C6-7446-4655-8BBA-E5A3C515816E",
+        "schemaName": null,
+        "fields": [
+          {
+            "id": "A5C887CC-F02F-417C-A419-AD8C9AF20A6E",
+            "defKey": "USER_ID",
+            "defName": "用户ID",
+            "intro": "",
+            "baseDataType": "BIGINT",
+            "bizDomainType": "",
+            "dbDataType": "BIGINT",
+            "dataLen": "",
+            "numScale": "",
+            "primaryKey": 1,
+            "notNull": 1,
+            "autoIncrement": 0,
+            "defaultValue": "",
+            "stndDictId": "",
+            "stndFieldId": "",
+            "stndDictKey": "",
+            "stndFieldKey": "",
+            "stndComplianceLevel": "",
+            "stndComplianceType": "",
+            "dictFrom": "",
+            "dictItems": null,
+            "fieldTier": "",
+            "mark": null,
+            "attr1": "",
+            "attr2": "",
+            "attr3": "",
+            "attr4": "",
+            "attr5": "",
+            "attr6": "",
+            "attr7": "",
+            "attr8": "",
+            "attr9": "",
+            "attr10": "",
+            "attr11": "",
+            "attr12": "",
+            "attr13": "",
+            "attr14": "",
+            "attr15": "",
+            "attr16": "",
+            "attr17": "",
+            "attr18": "",
+            "attr19": "",
+            "attr20": "",
+            "origin": "UI"
+          },
+          {
+            "id": "8A5B8756-78BF-4B88-89B2-ECE6104AD321",
+            "defKey": "ROLE_ID",
+            "defName": "角色ID",
+            "intro": "",
+            "baseDataType": "BIGINT",
+            "bizDomainType": "",
+            "dbDataType": "BIGINT",
+            "dataLen": "",
+            "numScale": "",
+            "primaryKey": 1,
+            "notNull": 1,
+            "autoIncrement": 0,
+            "defaultValue": "",
+            "stndDictId": "",
+            "stndFieldId": "",
+            "stndDictKey": "",
+            "stndFieldKey": "",
+            "stndComplianceLevel": "",
+            "stndComplianceType": "",
+            "dictFrom": "",
+            "dictItems": null,
+            "fieldTier": "",
+            "mark": null,
+            "attr1": "",
+            "attr2": "",
+            "attr3": "",
+            "attr4": "",
+            "attr5": "",
+            "attr6": "",
+            "attr7": "",
+            "attr8": "",
+            "attr9": "",
+            "attr10": "",
+            "attr11": "",
+            "attr12": "",
+            "attr13": "",
+            "attr14": "",
+            "attr15": "",
+            "attr16": "",
+            "attr17": "",
+            "attr18": "",
+            "attr19": "",
+            "attr20": "",
+            "origin": "UI"
+          }
+        ],
+        "defName": "用户角色表",
+        "defKey": "SYS_USER_ROLE",
+        "type": "P",
+        "parentId": "88D8393B-4813-425F-B082-ACB133F1A09F",
+        "indexes": []
       }
     ],
     "diagrams": [],
     "readonly": false,
     "allowWs": false
   },
-  "updateTime": 1794140301833,
-  "signature": "c6eff41698963bc19bfac580f0636c72"
+  "updateTime": 1794290869889,
+  "signature": "3a69463ef58f0a7a35ab00575c500b5c"
 }

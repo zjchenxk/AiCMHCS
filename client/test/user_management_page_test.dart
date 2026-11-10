@@ -62,12 +62,16 @@ class _FakeUserService extends UserService {
     String userCode,
     String userName, {
     List<String> roleIds = const [],
+    String? userType,
+    String? permissionLevel,
   }) {
     store[id] = User(
       id: id,
       userCode: userCode,
       userName: userName,
       hospId: hospId,
+      userType: userType,
+      permissionLevel: permissionLevel,
       deptId: deptId,
       status: '1',
       roleIds: roleIds,
@@ -183,12 +187,13 @@ void main() {
       ..seed('1', '1', null, '儿童保健科')
       ..seed('2', '1', null, '儿童心理科')
       ..seed('3', '1', '2', '儿童心理门诊');
+    // 角色名避开用户类别下拉菜单项（医生/护士），防 find.text 撞名
     final roleService = _FakeRoleService()
-      ..seed('101', '1', 'R001', '医生')
-      ..seed('102', '1', 'R002', '护士');
+      ..seed('101', '1', 'R001', '医师')
+      ..seed('102', '1', 'R002', '护师');
     final userService = _FakeUserService()
-      ..seed('1', '1', '1', 'admin', '系统管理员')
-      ..seed('2', '1', '2', 'doctor01', '王心怡', roleIds: ['101'])
+      ..seed('1', '1', '1', 'admin', '系统管理员', userType: 'ADMIN', permissionLevel: '2')
+      ..seed('2', '1', '2', 'doctor01', '王心怡', roleIds: ['101'], userType: 'DOCTOR', permissionLevel: '1')
       ..seed('4', '1', null, 'teacher01', '李晓芳');
     final viewModel = UserManagementViewModel(
       userService: userService,
@@ -222,9 +227,9 @@ void main() {
       (tester.widget<TextFormField>(fields.at(1)).controller as TextEditingController).text,
       '王心怡',
     );
-    final doctorChip = tester.widget<FilterChip>(find.widgetWithText(FilterChip, '医生'));
+    final doctorChip = tester.widget<FilterChip>(find.widgetWithText(FilterChip, '医师'));
     expect(doctorChip.selected, isTrue);
-    final nurseChip = tester.widget<FilterChip>(find.widgetWithText(FilterChip, '护士'));
+    final nurseChip = tester.widget<FilterChip>(find.widgetWithText(FilterChip, '护师'));
     expect(nurseChip.selected, isFalse);
   });
 
@@ -234,9 +239,10 @@ void main() {
     addTearDown(tester.view.reset);
 
     final departmentService = _FakeDepartmentService()..seed('2', '1', null, '儿童心理科');
+    // 角色名避开用户类别下拉菜单项（医生/护士），防 find.text 撞名
     final roleService = _FakeRoleService()
-      ..seed('101', '1', 'R001', '医生')
-      ..seed('102', '1', 'R002', '护士');
+      ..seed('101', '1', 'R001', '医师')
+      ..seed('102', '1', 'R002', '护师');
     final userService = _FakeUserService();
     final viewModel = UserManagementViewModel(
       userService: userService,
@@ -254,17 +260,33 @@ void main() {
     expect(viewModel.createParent?.name, '儿童心理科');
     expect(find.text('新增用户 - 儿童心理科'), findsOneWidget);
 
-    // 必填校验
+    // 必填校验（首个失败字段为登录账号）
     await tester.tap(find.widgetWithText(FilledButton, '添加'));
     await tester.pump();
     expect(find.text('请输入登录账号'), findsOneWidget);
 
-    // 录入必填项并勾选一个角色
+    // 录入必填项（用户类别/权限级别必选）并勾选一个角色
     final fields = find.byType(TextFormField);
     await tester.enterText(fields.at(0), 'doctor02');
+    // 回车定向跳格：登录账号 → 姓名（不外漏到左侧树的焦点节点）
+    await tester.testTextInput.receiveAction(TextInputAction.next);
+    await tester.pump();
+    final nameEditable = tester.widget<EditableText>(
+      find.descendant(of: fields.at(1), matching: find.byType(EditableText)).first,
+    );
+    expect(nameEditable.focusNode.hasFocus, isTrue);
     await tester.enterText(fields.at(1), '林静');
     await tester.enterText(fields.at(2), 'Doctor@123');
-    await tester.tap(find.text('护士'));
+    // 首次校验已带出错误文本，hint 与错误同名——hint 在树前部，取 .first
+    await tester.tap(find.text('请选择用户类别').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('医生').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('请选择权限级别').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('机构级').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('护师'));
     await tester.pump();
     await tester.tap(find.widgetWithText(FilledButton, '添加'));
     await tester.pump(const Duration(milliseconds: 100));
@@ -284,8 +306,8 @@ void main() {
     addTearDown(tester.view.reset);
 
     final departmentService = _FakeDepartmentService()..seed('1', '1', null, '儿童保健科');
-    final roleService = _FakeRoleService()..seed('101', '1', 'R001', '医生');
-    final userService = _FakeUserService()..seed('2', '1', '1', 'doctor01', '王心怡', roleIds: ['101']);
+    final roleService = _FakeRoleService()..seed('101', '1', 'R001', '医师');
+    final userService = _FakeUserService()..seed('2', '1', '1', 'doctor01', '王心怡', roleIds: ['101'], userType: 'DOCTOR', permissionLevel: '1');
     final viewModel = UserManagementViewModel(
       userService: userService,
       departmentService: departmentService,
@@ -307,6 +329,40 @@ void main() {
 
     expect(find.text('王心怡医生'), findsWidgets);
     expect(viewModel.selectedUser?.userName, '王心怡医生');
+  });
+
+  testWidgets('保存校验失败：滚动定位并聚焦首个报错字段（弱密码场景）', (tester) async {
+    tester.view.physicalSize = const Size(1400, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final departmentService = _FakeDepartmentService()..seed('2', '1', null, '儿童心理科');
+    final viewModel = UserManagementViewModel(
+      userService: _FakeUserService(),
+      departmentService: departmentService,
+      roleService: _FakeRoleService(),
+    );
+
+    await tester.pumpWidget(_wrapWidget(viewModel));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('新增用户'));
+    await tester.pumpAndSettle();
+
+    // 账号/姓名合规、密码为纯数字（等保复杂度不足）
+    final fields = find.byType(TextFormField);
+    await tester.enterText(fields.at(0), 'doctor02');
+    await tester.enterText(fields.at(1), '林静');
+    await tester.enterText(fields.at(2), '12345678');
+    await tester.tap(find.widgetWithText(FilledButton, '添加'));
+    await tester.pumpAndSettle();
+
+    // 密码报错展示，且密码框被滚动定位后聚焦（可直接修改）
+    expect(find.text('密码复杂度不足：须包含大写字母、小写字母、数字、特殊字符中的至少三类'), findsOneWidget);
+    final passwordEditable = tester.widget<EditableText>(
+      find.descendant(of: fields.at(2), matching: find.byType(EditableText)).first,
+    );
+    expect(passwordEditable.focusNode.hasFocus, isTrue);
+    expect(viewModel.formMode, UserFormMode.create, reason: '校验失败不应提交');
   });
 
   testWidgets('医院未设科室：左侧给「未添加科室，不能新增用户」引导', (tester) async {

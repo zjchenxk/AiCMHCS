@@ -49,7 +49,7 @@ class UserService {
   static const int _phoneMaxLength = 20;
   static const int _idCardNoMaxLength = 20;
   static const int _extCodeMaxLength = 20;
-  static const int _passwordMinLength = 6;
+  static const int _passwordMinLength = 8;
   static const int _passwordMaxLength = 32;
   static const int _signatureMaxLength = 1024 * 1024;
 
@@ -91,9 +91,10 @@ class UserService {
   /// 新增用户，返回新增后的对象。
   ///
   /// 校验：所属医院必须存在、挂载科室必须存在且属于该医院、登录账号
-  /// 必填且全局唯一（回读新行 ID 的自然键）、姓名必填、口令必填且
-  /// 6-32 位、角色必须存在且属于该医院；手机号 / 身份证号经 FieldCipher
-  /// 加密并同步盲索引列。角色关联可为空。
+  /// 必填且全局唯一（回读新行 ID 的自然键）、姓名必填、用户类别与权限
+  /// 级别必填、口令须满足等保三级复杂度（8-32 位、不含与账号相同的
+  /// 口令、至少三类字符）、角色必须存在且属于该医院；手机号 / 身份证号
+  /// 经 FieldCipher 加密并同步盲索引列。角色关联可为空。
   Future<User> create({
     required String hospId,
     required String deptId,
@@ -116,9 +117,9 @@ class UserService {
     final code = _required(userCode, '登录账号', _codeMaxLength);
     await _ensureUserCodeUnique(code);
     final name = _required(userName, '姓名', _nameMaxLength);
-    final pwd = _requiredPassword(password);
-    final type = _optional(userType, '用户类别', _typeMaxLength);
-    final level = _parseLevel(permissionLevel);
+    final pwd = _requiredPassword(password, userCode: code);
+    final type = _required(userType, '用户类别', _typeMaxLength);
+    final level = _requiredLevel(permissionLevel);
     final phonePlain = _optional(phone, '手机号', _phoneMaxLength);
     final idCardPlain = _optional(idCardNo, '身份证号', _idCardNoMaxLength);
     final his = _optional(hisUserCode, 'HIS用户代码', _extCodeMaxLength);
@@ -171,7 +172,8 @@ class UserService {
   ///
   /// 可更新：userName / userType / permissionLevel / phone / idCardNo /
   /// status / hisUserCode / mchisUserCode / certId / signatureImage；值为
-  /// null 表示清空该列（仅可空列，userName / status 除外）。登录账号
+  /// null 表示清空该列（仅可空列，userName / status / userType /
+  /// permissionLevel 为必填不可清空）。登录账号
   /// （userCode）、归属医院、挂载科室（deptId）不可改；CREATE_TIME 不可
   /// 改，UPDATE_TIME 由本方法统一写入。password 非空时重置口令；roleIds
   /// 非 null 时全量覆盖角色关联（null 表示本次不动角色）。
@@ -203,8 +205,9 @@ class UserService {
 
     // 先解析目标值（含敏感字段重算密文与盲索引）
     final name = changes.containsKey('userName') ? _required(changes['userName']?.toString(), '姓名', _nameMaxLength) : null;
-    final type = changes.containsKey('userType') ? _optional(changes['userType']?.toString(), '用户类别', _typeMaxLength) : null;
-    final level = changes.containsKey('permissionLevel') ? _parseLevel(changes['permissionLevel']?.toString()) : null;
+    // 用户类别 / 权限级别为必填项：传入 null（清空语义）直接拒绝
+    final type = changes.containsKey('userType') ? _required(changes['userType']?.toString(), '用户类别', _typeMaxLength) : null;
+    final level = changes.containsKey('permissionLevel') ? _requiredLevel(changes['permissionLevel']?.toString()) : null;
     final phonePlain = changes.containsKey('phone') ? _optional(changes['phone']?.toString(), '手机号', _phoneMaxLength) : null;
     final idCardPlain = changes.containsKey('idCardNo') ? _optional(changes['idCardNo']?.toString(), '身份证号', _idCardNoMaxLength) : null;
     final his = changes.containsKey('hisUserCode') ? _optional(changes['hisUserCode']?.toString(), 'HIS用户代码', _extCodeMaxLength) : null;
@@ -224,7 +227,7 @@ class UserService {
           )
         : null;
     final statusValue = changes.containsKey('status') ? _parseStatus(changes['status']?.toString() ?? '') : null;
-    final pwd = password == null || password.trim().isEmpty ? null : _requiredPassword(password);
+    final pwd = password == null || password.trim().isEmpty ? null : _requiredPassword(password, userCode: current.userCode);
     final roleValues = roleIds == null ? null : await _ensureRolesExist(_toInt(current.hospId, '医院ID'), roleIds);
 
     // 构建更新语句（键序即 changes 传入序）
@@ -410,8 +413,11 @@ class UserService {
     }
   }
 
-  /// 口令校验：去空格、非空、6-32 位。
-  String _requiredPassword(String password) {
+  /// 口令校验（等保三级复杂度要求）：去空格、非空、8-32 位、不得与
+  /// 登录账号相同、须包含大写字母 / 小写字母 / 数字 / 特殊字符中的
+  /// 至少三类。前端表单有同规则即时提示，本方法为服务端兜底（防绕过
+  /// 前端直调接口），两处规则须保持一致。
+  String _requiredPassword(String password, {required String userCode}) {
     final v = password.trim();
     if (v.isEmpty) {
       throw const UserException(400, 40002, '密码不能为空');
@@ -423,13 +429,30 @@ class UserService {
         '密码长度须在 $_passwordMinLength-$_passwordMaxLength 位之间',
       );
     }
+    if (userCode.trim().isNotEmpty && v == userCode.trim()) {
+      throw const UserException(400, 40002, '密码不能与登录账号相同');
+    }
+    var kinds = 0;
+    if (RegExp(r'[A-Z]').hasMatch(v)) kinds++;
+    if (RegExp(r'[a-z]').hasMatch(v)) kinds++;
+    if (RegExp(r'[0-9]').hasMatch(v)) kinds++;
+    if (RegExp(r'[^A-Za-z0-9]').hasMatch(v)) kinds++;
+    if (kinds < 3) {
+      throw const UserException(
+        400,
+        40002,
+        '密码复杂度不足：须包含大写字母、小写字母、数字、特殊字符中的至少三类',
+      );
+    }
     return v;
   }
 
-  /// 权限级别校验：空归一 null，否则须为 0 / 1 / 2，返回 int 形式。
-  int? _parseLevel(String? value) {
+  /// 权限级别校验（必填）：非空且须为 0 / 1 / 2，返回 int 形式。
+  int _requiredLevel(String? value) {
     final v = value?.trim() ?? '';
-    if (v.isEmpty) return null;
+    if (v.isEmpty) {
+      throw const UserException(400, 40002, '权限级别不能为空');
+    }
     if (v != '0' && v != '1' && v != '2') {
       throw const UserException(400, 40002, '权限级别须为 0、1 或 2');
     }

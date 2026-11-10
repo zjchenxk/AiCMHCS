@@ -35,7 +35,7 @@ class _UserInfoFormState extends State<UserInfoForm> {
   static const int _idCardNoMaxLength = 20;
   static const int _extCodeMaxLength = 20;
   static const int _passwordMaxLength = 32;
-  static const int _passwordMinLength = 6;
+  static const int _passwordMinLength = 8;
 
   /// 用户类别标准值域（显示标签）；编辑存量 TEACHER/PARENT 等非标准
   /// 值时动态补入选项原样显示，保存不强制订正。
@@ -59,9 +59,10 @@ class _UserInfoFormState extends State<UserInfoForm> {
     '0': '停用',
   };
 
-  /// 签名图片分辨率上限（横幅比例，base64 后远小于服务端 1MB 上限）。
-  static const int _signatureMaxWidth = 640;
-  static const int _signatureMaxHeight = 320;
+  /// 签名图片分辨率上限（宽x高 200x100 横幅比例，base64 后远小于服务端
+  /// 1MB 上限）。
+  static const int _signatureMaxWidth = 200;
+  static const int _signatureMaxHeight = 100;
 
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _userCodeCtrl;
@@ -80,6 +81,36 @@ class _UserInfoFormState extends State<UserInfoForm> {
   bool _obscurePassword = true;
   bool _saving = false;
 
+  // 显式焦点链（回车定向跳格，模式同 role_form_dialog）：nextFocus 按
+  // 整页焦点树找下一个可聚焦节点，会把焦点漏到左侧树的用户节点上；
+  // 显式 FocusNode 逐框定向，且可跳过下拉选择框（回车链不经过）。
+  // 顺序：登录账号→姓名→密码→手机号码→身份证号码→（跳过三个下拉）
+  // →HIS用户代码→妇幼保健系统用户代码→CA证书ID（回车提交）。
+  late final FocusNode _userCodeFocus;
+  late final FocusNode _userNameFocus;
+  late final FocusNode _passwordFocus;
+  late final FocusNode _phoneFocus;
+  late final FocusNode _idCardNoFocus;
+  late final FocusNode _hisFocus;
+  late final FocusNode _mchisFocus;
+  late final FocusNode _certFocus;
+
+  // 参与校验的字段 key（输入框与下拉框，按表单顺序）：保存校验失败时
+  // 滚动定位到首个报错字段（Scrollable.ensureVisible），输入框再附
+  // requestFocus（键盘跟随、可直接修改），下拉框无焦点链仅滚动定位。
+  final Map<GlobalKey<FormFieldState<String>>, FocusNode?> _fields = {};
+  final GlobalKey<FormFieldState<String>> _userCodeKey = GlobalKey<FormFieldState<String>>();
+  final GlobalKey<FormFieldState<String>> _userNameKey = GlobalKey<FormFieldState<String>>();
+  final GlobalKey<FormFieldState<String>> _passwordKey = GlobalKey<FormFieldState<String>>();
+  final GlobalKey<FormFieldState<String>> _phoneKey = GlobalKey<FormFieldState<String>>();
+  final GlobalKey<FormFieldState<String>> _idCardNoKey = GlobalKey<FormFieldState<String>>();
+  final GlobalKey<FormFieldState<String>> _userTypeKey = GlobalKey<FormFieldState<String>>();
+  final GlobalKey<FormFieldState<String>> _permissionLevelKey = GlobalKey<FormFieldState<String>>();
+  final GlobalKey<FormFieldState<String>> _statusKey = GlobalKey<FormFieldState<String>>();
+  final GlobalKey<FormFieldState<String>> _hisKey = GlobalKey<FormFieldState<String>>();
+  final GlobalKey<FormFieldState<String>> _mchisKey = GlobalKey<FormFieldState<String>>();
+  final GlobalKey<FormFieldState<String>> _certKey = GlobalKey<FormFieldState<String>>();
+
   @override
   void initState() {
     super.initState();
@@ -93,10 +124,37 @@ class _UserInfoFormState extends State<UserInfoForm> {
     _hisUserCodeCtrl = TextEditingController(text: user?.hisUserCode);
     _mchisUserCodeCtrl = TextEditingController(text: user?.mchisUserCode);
     _certIdCtrl = TextEditingController(text: user?.certId);
+    _userCodeFocus = FocusNode();
+    _userNameFocus = FocusNode();
+    _passwordFocus = FocusNode();
+    _phoneFocus = FocusNode();
+    _idCardNoFocus = FocusNode();
+    _hisFocus = FocusNode();
+    _mchisFocus = FocusNode();
+    _certFocus = FocusNode();
+    // 字段注册顺序 = 表单顺序 = 校验失败滚动定位顺序
+    _registerFields();
     _userType = user?.userType;
     _permissionLevel = user?.permissionLevel;
     _status = user?.status ?? '1';
     _signatureBase64 = user?.signatureImage;
+  }
+
+  /// 按表单顺序登记参与校验的字段（key → 焦点链节点，下拉框为 null）。
+  void _registerFields() {
+    void reg(GlobalKey<FormFieldState<String>> key, FocusNode? focus) => _fields[key] = focus;
+
+    reg(_userCodeKey, _userCodeFocus);
+    reg(_userNameKey, _userNameFocus);
+    reg(_passwordKey, _passwordFocus);
+    reg(_phoneKey, _phoneFocus);
+    reg(_idCardNoKey, _idCardNoFocus);
+    reg(_userTypeKey, null);
+    reg(_permissionLevelKey, null);
+    reg(_statusKey, null);
+    reg(_hisKey, _hisFocus);
+    reg(_mchisKey, _mchisFocus);
+    reg(_certKey, _certFocus);
   }
 
   @override
@@ -109,7 +167,35 @@ class _UserInfoFormState extends State<UserInfoForm> {
     _hisUserCodeCtrl.dispose();
     _mchisUserCodeCtrl.dispose();
     _certIdCtrl.dispose();
+    _userCodeFocus.dispose();
+    _userNameFocus.dispose();
+    _passwordFocus.dispose();
+    _phoneFocus.dispose();
+    _idCardNoFocus.dispose();
+    _hisFocus.dispose();
+    _mchisFocus.dispose();
+    _certFocus.dispose();
     super.dispose();
+  }
+
+  /// 校验失败后滚动定位到首个报错字段（报错框可能在长表单视野外，
+  /// 用户看不到错误提示）：Scrollable.ensureVisible 滚入视野，输入框
+  /// 再附 requestFocus（键盘跟随、可直接修改）；下拉框无焦点链仅滚动。
+  void _scrollToFirstError() {
+    for (final entry in _fields.entries) {
+      final state = entry.key.currentState;
+      if (state == null || state.errorText == null) continue;
+      final fieldContext = entry.key.currentContext;
+      if (fieldContext != null) {
+        Scrollable.ensureVisible(
+          fieldContext,
+          duration: const Duration(milliseconds: 300),
+          alignment: 0.15, // 报错字段落在视口上部约 15% 处，错误提示一并可见
+        );
+      }
+      entry.value?.requestFocus();
+      return;
+    }
   }
 
   /// 空白字符串归一为 null（与后端「值 null 表示清空该列」契约一致）。
@@ -119,7 +205,10 @@ class _UserInfoFormState extends State<UserInfoForm> {
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      _scrollToFirstError();
+      return;
+    }
 
     setState(() => _saving = true);
 
@@ -189,37 +278,43 @@ class _UserInfoFormState extends State<UserInfoForm> {
           // 基本信息
           _sectionTitle(theme, '基本信息'),
           TextFormField(
+            key: _userCodeKey,
             controller: _userCodeCtrl,
+            focusNode: _userCodeFocus,
             autofocus: creating,
             maxLength: _codeMaxLength,
             // 登录账号全局唯一且为回读自然键，创建后不可改
             readOnly: !creating,
             style: theme.textTheme.bodyMedium,
             textInputAction: TextInputAction.next, // 回车键显示"下一项"
-            onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(), // 回车跳下一个
+            onFieldSubmitted: (_) => _userNameFocus.requestFocus(), // 回车定向跳姓名
             decoration: glassDecoration(theme, '登录账号', required: creating),
             validator: creating ? (v) => (v == null || v.trim().isEmpty) ? '请输入登录账号' : null : null,
           ),
           const SizedBox(height: 12),
 
           TextFormField(
+            key: _userNameKey,
             controller: _userNameCtrl,
+            focusNode: _userNameFocus,
             maxLength: _nameMaxLength,
             style: theme.textTheme.bodyMedium,
             textInputAction: TextInputAction.next,
-            onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(),
+            onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
             decoration: glassDecoration(theme, '姓名', required: true),
             validator: (v) => (v == null || v.trim().isEmpty) ? '请输入姓名' : null,
           ),
           const SizedBox(height: 12),
 
           TextFormField(
+            key: _passwordKey,
             controller: _passwordCtrl,
+            focusNode: _passwordFocus,
             maxLength: _passwordMaxLength,
             obscureText: _obscurePassword,
             style: theme.textTheme.bodyMedium,
             textInputAction: TextInputAction.next,
-            onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(),
+            onFieldSubmitted: (_) => _phoneFocus.requestFocus(),
             decoration:
                 glassDecoration(
                   theme,
@@ -235,102 +330,101 @@ class _UserInfoFormState extends State<UserInfoForm> {
                     onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                   ),
                 ),
-            validator: creating
-                ? (v) {
-                    final t = v ?? '';
-                    if (t.isEmpty) return '请输入密码';
-                    if (t.length < _passwordMinLength) return '密码长度不能少于 $_passwordMinLength 位';
-                    return null;
-                  }
-                : null,
+            validator: (v) => _validatePassword(v, creating: creating),
           ),
           const SizedBox(height: 12),
 
-          _buildDropdown(
-            theme: theme,
-            label: '用户类别',
-            value: _userType,
-            entries: _userTypeEntries(),
-            onChanged: (v) => setState(() => _userType = v),
-          ),
-          const SizedBox(height: 12),
-
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: _buildDropdown(
-                  theme: theme,
-                  label: '权限级别',
-                  value: _permissionLevel,
-                  entries: _permissionLevels,
-                  onChanged: (v) => setState(() => _permissionLevel = v),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildDropdown(
-                  theme: theme,
-                  label: '状态',
-                  value: _status,
-                  entries: _statusValues,
-                  required: true,
-                  onChanged: (v) {
-                    if (v != null) setState(() => _status = v);
-                  },
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-
-          // 联系与身份
-          _sectionTitle(theme, '联系与身份'),
           TextFormField(
+            key: _phoneKey,
             controller: _phoneCtrl,
+            focusNode: _phoneFocus,
             maxLength: _phoneMaxLength,
             keyboardType: TextInputType.phone,
             style: theme.textTheme.bodyMedium,
             textInputAction: TextInputAction.next,
-            onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(),
-            decoration: glassDecoration(theme, '手机号'),
+            onFieldSubmitted: (_) => _idCardNoFocus.requestFocus(),
+            decoration: glassDecoration(theme, '手机号码'),
           ),
           const SizedBox(height: 12),
 
           TextFormField(
+            key: _idCardNoKey,
             controller: _idCardNoCtrl,
+            focusNode: _idCardNoFocus,
             maxLength: _idCardNoMaxLength,
             style: theme.textTheme.bodyMedium,
             textInputAction: TextInputAction.next,
-            onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(),
-            decoration: glassDecoration(theme, '身份证号'),
+            // 回车链跳过下方三个下拉框，直达扩展信息首项
+            onFieldSubmitted: (_) => _hisFocus.requestFocus(),
+            decoration: glassDecoration(theme, '身份证号码'),
+          ),
+          const SizedBox(height: 12),
+
+          _buildDropdown(
+            fieldKey: _userTypeKey,
+            theme: theme,
+            label: '用户类别',
+            value: _userType,
+            entries: _userTypeEntries(),
+            required: true,
+            onChanged: (v) => setState(() => _userType = v),
+          ),
+          const SizedBox(height: 12),
+
+          _buildDropdown(
+            fieldKey: _permissionLevelKey,
+            theme: theme,
+            label: '权限级别',
+            value: _permissionLevel,
+            entries: _permissionLevels,
+            required: true,
+            onChanged: (v) => setState(() => _permissionLevel = v),
+          ),
+          const SizedBox(height: 12),
+
+          _buildDropdown(
+            fieldKey: _statusKey,
+            theme: theme,
+            label: '状态',
+            value: _status,
+            entries: _statusValues,
+            required: true,
+            onChanged: (v) {
+              if (v != null) setState(() => _status = v);
+            },
           ),
           const SizedBox(height: 24),
 
           // 扩展信息
           _sectionTitle(theme, '扩展信息'),
           TextFormField(
+            key: _hisKey,
             controller: _hisUserCodeCtrl,
+            focusNode: _hisFocus,
             maxLength: _extCodeMaxLength,
             style: theme.textTheme.bodyMedium,
             textInputAction: TextInputAction.next,
-            onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(),
+            onFieldSubmitted: (_) => _mchisFocus.requestFocus(),
             decoration: glassDecoration(theme, 'HIS用户代码'),
           ),
           const SizedBox(height: 12),
 
           TextFormField(
+            key: _mchisKey,
             controller: _mchisUserCodeCtrl,
+            focusNode: _mchisFocus,
             maxLength: _extCodeMaxLength,
             style: theme.textTheme.bodyMedium,
             textInputAction: TextInputAction.next,
-            onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(),
+            onFieldSubmitted: (_) => _certFocus.requestFocus(),
             decoration: glassDecoration(theme, '妇幼保健系统用户代码'),
           ),
           const SizedBox(height: 12),
 
           TextFormField(
+            key: _certKey,
             controller: _certIdCtrl,
+            focusNode: _certFocus,
             maxLength: _extCodeMaxLength,
             style: theme.textTheme.bodyMedium,
             textInputAction: TextInputAction.done, // 最后一个输入框显示"完成"
@@ -384,6 +478,31 @@ class _UserInfoFormState extends State<UserInfoForm> {
     );
   }
 
+  /// 密码校验（等保三级复杂度要求，与服务端 UserService._requiredPassword
+  /// 同规则同文案）：非空、8-32 位、不得与登录账号相同、须包含大写
+  /// 字母 / 小写字母 / 数字 / 特殊字符中的至少三类；编辑模式留空表示
+  /// 不修改，直接放行。
+  String? _validatePassword(String? v, {required bool creating}) {
+    final t = v ?? '';
+    if (t.isEmpty) return creating ? '请输入密码' : null;
+    if (t.length < _passwordMinLength || t.length > _passwordMaxLength) {
+      return '密码长度须在 $_passwordMinLength-$_passwordMaxLength 位之间';
+    }
+    final code = _userCodeCtrl.text.trim();
+    if (code.isNotEmpty && t == code) {
+      return '密码不能与登录账号相同';
+    }
+    var kinds = 0;
+    if (RegExp(r'[A-Z]').hasMatch(t)) kinds++;
+    if (RegExp(r'[a-z]').hasMatch(t)) kinds++;
+    if (RegExp(r'[0-9]').hasMatch(t)) kinds++;
+    if (RegExp(r'[^A-Za-z0-9]').hasMatch(t)) kinds++;
+    if (kinds < 3) {
+      return '密码复杂度不足：须包含大写字母、小写字母、数字、特殊字符中的至少三类';
+    }
+    return null;
+  }
+
   /// 用户类别下拉选项：标准值域 + 编辑存量非标准值动态补入（原样显示）。
   Map<String, String> _userTypeEntries() {
     final entries = Map<String, String>.of(_userTypes);
@@ -394,8 +513,10 @@ class _UserInfoFormState extends State<UserInfoForm> {
     return entries;
   }
 
-  /// 简单字符串下拉（值与显示标签经 entries 映射，可空值显示 hint）。
+  /// 简单字符串下拉（值与显示标签经 entries 映射，可空值显示 hint；
+  /// required 时校验必选）。
   Widget _buildDropdown({
+    GlobalKey<FormFieldState<String>>? fieldKey,
     required ThemeData theme,
     required String label,
     required String? value,
@@ -404,6 +525,7 @@ class _UserInfoFormState extends State<UserInfoForm> {
     bool required = false,
   }) {
     return DropdownButtonFormField<String>(
+      key: fieldKey,
       initialValue: value,
       isExpanded: true,
       items: entries.entries
@@ -417,15 +539,27 @@ class _UserInfoFormState extends State<UserInfoForm> {
       hint: Text('请选择$label', style: theme.textTheme.bodyMedium),
       decoration: glassDecoration(theme, label, required: required),
       style: theme.textTheme.bodyMedium,
+      validator: required ? (v) => (v == null || v.trim().isEmpty) ? '请选择$label' : null : null,
       onChanged: onChanged,
     );
   }
 
-  /// 手写签名字段：横幅预览框（点击重新选择）+ 选择/移除。
+  /// 手写签名字段（交互同医院管理的 Logo/印章图片）：横幅预览框——
+  /// 空图显示上传占位、有图显示预览，点击即选择/重选；上传成功后图片
+  /// 下方显示「移除」按钮。
   Widget _buildSignatureField(ThemeData theme, UserManagementViewModel viewModel) {
     final bytes = _safeDecode(_signatureBase64);
-    return Row(
+    return Column(
+      // 提示与移除按钮均与签名图片框水平居中对齐
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
+        Text(
+          '不超过 ${_signatureMaxWidth}x$_signatureMaxHeight',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
+        ),
+        const SizedBox(height: 6),
         Container(
           width: 240,
           height: 120,
@@ -460,25 +594,14 @@ class _UserInfoFormState extends State<UserInfoForm> {
                   ),
                 ),
         ),
-        const SizedBox(width: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            OutlinedButton.icon(
-              onPressed: viewModel.busy || _saving ? null : _pickSignature,
-              icon: const Icon(Icons.upload_file_outlined, size: 18),
-              label: const Text('选择图片'),
-            ),
-            if (_signatureBase64 != null) ...[
-              const SizedBox(height: 8),
-              TextButton.icon(
-                icon: const Icon(Icons.delete_outline, size: 16),
-                label: const Text('移除'),
-                onPressed: viewModel.busy || _saving ? null : () => setState(() => _signatureBase64 = null),
-              ),
-            ],
-          ],
-        ),
+        if (_signatureBase64 != null) ...[
+          const SizedBox(height: 4),
+          TextButton.icon(
+            icon: const Icon(Icons.delete_outline, size: 16),
+            label: Text('移除', style: theme.textTheme.bodyMedium),
+            onPressed: viewModel.busy || _saving ? null : () => setState(() => _signatureBase64 = null),
+          ),
+        ],
       ],
     );
   }

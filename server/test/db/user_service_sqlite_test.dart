@@ -110,6 +110,8 @@ void main() {
       userCode: 'doctor01',
       userName: '王心怡',
       password: 'Doctor@123',
+      userType: 'DOCTOR',
+      permissionLevel: '1',
       phone: '13900000111',
       roleIds: ['101'],
     );
@@ -119,6 +121,8 @@ void main() {
       userCode: 'nurse01',
       userName: '陈晓',
       password: 'Nurse@123',
+      userType: 'NURSE',
+      permissionLevel: '0',
     );
     await service.create(
       hospId: '2',
@@ -126,6 +130,8 @@ void main() {
       userCode: 'doctor99',
       userName: '分院医生',
       password: 'Doctor@123',
+      userType: 'DOCTOR',
+      permissionLevel: '1',
     );
 
     final users = await service.listByHospital('1');
@@ -147,6 +153,8 @@ void main() {
       String password,
       String fragment, {
       List<String> roleIds = const [],
+      String? userType = 'DOCTOR',
+      String? permissionLevel = '1',
     }) async {
       await expectLater(
         service.create(
@@ -155,6 +163,8 @@ void main() {
           userCode: userCode,
           userName: '张三',
           password: password,
+          userType: userType,
+          permissionLevel: permissionLevel,
           roleIds: roleIds,
         ),
         throwsA(isA<UserException>().having((e) => e.message, 'message', contains(fragment))),
@@ -170,6 +180,8 @@ void main() {
       userCode: 'dup',
       userName: '张三',
       password: 'Pass@123',
+      userType: 'DOCTOR',
+      permissionLevel: '1',
     );
     await expectCreate('1', '11', 'dup', 'Pass@123', '登录账号已存在');
     await expectCreate('1', '11', 'a002', '123', '密码长度');
@@ -177,6 +189,46 @@ void main() {
     // 无效角色 / 跨医院角色
     await expectCreate('1', '11', 'a003', 'Pass@123', '无效的角色', roleIds: ['999']);
     await expectCreate('1', '11', 'a003', 'Pass@123', '无效的角色', roleIds: ['201']);
+    // 用户类别 / 权限级别必填
+    await expectCreate('1', '11', 'a004', 'Pass@123', '用户类别不能为空', userType: null);
+    await expectCreate('1', '11', 'a004', 'Pass@123', '权限级别不能为空', permissionLevel: null);
+  });
+
+  test('create：口令等保三级复杂度校验（8-32 位、至少三类字符、不与账号相同）', () async {
+    Future<void> expectPwd(String userCode, String password, String fragment) async {
+      await expectLater(
+        service.create(
+          hospId: '1',
+          deptId: '11',
+          userCode: userCode,
+          userName: '张三',
+          password: password,
+          userType: 'DOCTOR',
+          permissionLevel: '1',
+        ),
+        throwsA(isA<UserException>().having((e) => e.message, 'message', contains(fragment))),
+      );
+    }
+
+    // 长度不足（不足 8 位，四类字符也无济于事）
+    await expectPwd('a001', 'Ab@1x9', '密码长度');
+    // 复杂度不足：小写 + 数字仅两类
+    await expectPwd('a002', 'password1', '复杂度不足');
+    // 复杂度不足：纯字母（大小写各一类共两类）
+    await expectPwd('a003', 'PasswordAbc', '复杂度不足');
+    // 与登录账号相同
+    await expectPwd('Admin@123', 'Admin@123', '不能与登录账号相同');
+    // 三类字符（大写 + 小写 + 数字，无特殊字符）合规通过
+    final ok = await service.create(
+      hospId: '1',
+      deptId: '11',
+      userCode: 'a004',
+      userName: '张三',
+      password: 'Password123',
+      userType: 'DOCTOR',
+      permissionLevel: '1',
+    );
+    expect(ok.userCode, 'a004');
   });
 
   test('update：改姓名/手机号并重算密文盲索引、重置口令、清空可空字段', () async {
@@ -186,6 +238,8 @@ void main() {
       userCode: 'doctor01',
       userName: '王心怡',
       password: 'Doctor@123',
+      userType: 'DOCTOR',
+      permissionLevel: '1',
       phone: '13900000111',
       roleIds: ['101'],
     );
@@ -225,6 +279,8 @@ void main() {
       userCode: 'doctor01',
       userName: '王心怡',
       password: 'Doctor@123',
+      userType: 'DOCTOR',
+      permissionLevel: '1',
       roleIds: ['101', '102'],
     );
 
@@ -250,6 +306,8 @@ void main() {
       userCode: 'doctor01',
       userName: '王心怡',
       password: 'Doctor@123',
+      userType: 'DOCTOR',
+      permissionLevel: '1',
     );
     for (final key in ['userCode', 'hospId', 'deptId', 'id', 'foo']) {
       await expectLater(
@@ -263,13 +321,15 @@ void main() {
     );
   });
 
-  test('update：permissionLevel / status 取值校验', () async {
+  test('update：permissionLevel / status 取值校验；必填字段不可清空、口令复杂度兜底', () async {
     final created = await service.create(
       hospId: '1',
       deptId: '11',
       userCode: 'doctor01',
       userName: '王心怡',
       password: 'Doctor@123',
+      userType: 'DOCTOR',
+      permissionLevel: '1',
     );
     final updated = await service.update(created.id, {'permissionLevel': '2', 'status': '0'});
     expect(updated.permissionLevel, '2');
@@ -281,6 +341,28 @@ void main() {
     await expectLater(
       service.update(created.id, {'status': '9'}),
       throwsA(isA<UserException>().having((e) => e.message, 'message', contains('状态'))),
+    );
+    // 用户类别 / 权限级别必填：传 null（清空语义）直接拒绝
+    await expectLater(
+      service.update(created.id, {'userType': null}),
+      throwsA(isA<UserException>().having((e) => e.message, 'message', contains('用户类别不能为空'))),
+    );
+    await expectLater(
+      service.update(created.id, {'permissionLevel': null}),
+      throwsA(isA<UserException>().having((e) => e.message, 'message', contains('权限级别不能为空'))),
+    );
+    // 口令重置同样走等保三级校验（长度 / 与账号相同 / 复杂度不足）
+    await expectLater(
+      service.update(created.id, {}, password: 'Ab@1x9'),
+      throwsA(isA<UserException>().having((e) => e.message, 'message', contains('密码长度'))),
+    );
+    await expectLater(
+      service.update(created.id, {}, password: 'doctor01'),
+      throwsA(isA<UserException>().having((e) => e.message, 'message', contains('不能与登录账号相同'))),
+    );
+    await expectLater(
+      service.update(created.id, {}, password: 'doctor012345'),
+      throwsA(isA<UserException>().having((e) => e.message, 'message', contains('复杂度不足'))),
     );
   });
 }
