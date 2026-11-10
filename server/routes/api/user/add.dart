@@ -37,6 +37,7 @@ Future<Response> onRequest(RequestContext context) async {
     'hisUserCode',
     'mchisUserCode',
     'certId',
+    'avatarImage',
     'signatureImage',
     'status',
   ]) {
@@ -65,6 +66,7 @@ Future<Response> onRequest(RequestContext context) async {
       hisUserCode: body['hisUserCode'] as String?,
       mchisUserCode: body['mchisUserCode'] as String?,
       certId: body['certId'] as String?,
+      avatarImage: body['avatarImage'] as String?,
       signatureImage: body['signatureImage'] as String?,
       status: body['status'] as String?,
       roleIds: (roleIds as List?)?.cast<String>() ?? const [],

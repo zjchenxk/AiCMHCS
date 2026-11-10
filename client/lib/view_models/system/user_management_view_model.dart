@@ -311,6 +311,7 @@ class UserManagementViewModel extends ChangeNotifier {
     String? hisUserCode,
     String? mchisUserCode,
     String? certId,
+    String? avatarImage,
     String? signatureImage,
     String? status,
   }) async {
@@ -334,6 +335,7 @@ class UserManagementViewModel extends ChangeNotifier {
         hisUserCode: hisUserCode,
         mchisUserCode: mchisUserCode,
         certId: certId,
+        avatarImage: avatarImage,
         signatureImage: signatureImage,
         status: status,
         roleIds: _orderedCheckedRoleIds(),

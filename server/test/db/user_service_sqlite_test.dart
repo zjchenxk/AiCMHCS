@@ -76,6 +76,7 @@ void main() {
       permissionLevel: '1',
       phone: '13900000111',
       idCardNo: '110101199001011234',
+      avatarImage: 'aV1oYXZhX2Jhc2U2NA==',
       roleIds: ['101', '102'],
     );
     expect(user.id, isNotEmpty);
@@ -83,6 +84,7 @@ void main() {
     expect(user.hospId, '1');
     expect(user.deptId, '11');
     expect(user.roleIds, ['101', '102']);
+    expect(user.avatarImage, 'aV1oYXZhX2Jhc2U2NA==');
 
     // 库中为密文（非明文）、盲索引等值查询可命中
     final row = await db.query(
@@ -245,12 +247,13 @@ void main() {
     );
     final updated = await service.update(
       created.id,
-      {'userName': '王心怡医生', 'phone': '13900000222', 'hisUserCode': null},
+      {'userName': '王心怡医生', 'phone': '13900000222', 'hisUserCode': null, 'avatarImage': 'YXZhdGFyX25ldw=='},
       password: 'NewPass@123',
     );
     expect(updated.userName, '王心怡医生');
     expect(updated.phone, '13900000222');
     expect(updated.hisUserCode, isNull);
+    expect(updated.avatarImage, 'YXZhdGFyX25ldw==');
 
     final row = await db.query(
       'SELECT PASSWORD, PHONE, PHONE_HMAC FROM SYS_USER WHERE ID = ?',

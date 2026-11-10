@@ -64,6 +64,9 @@ class _UserInfoFormState extends State<UserInfoForm> {
   static const int _signatureMaxWidth = 200;
   static const int _signatureMaxHeight = 100;
 
+  /// 头像图片分辨率上限（正方形 200x200，与医院管理 Logo 同限）。
+  static const int _avatarMaxSize = 200;
+
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _userCodeCtrl;
   late final TextEditingController _userNameCtrl;
@@ -77,6 +80,7 @@ class _UserInfoFormState extends State<UserInfoForm> {
   String? _userType;
   String? _permissionLevel;
   late String _status;
+  String? _avatarBase64;
   String? _signatureBase64;
   bool _obscurePassword = true;
   bool _saving = false;
@@ -137,6 +141,7 @@ class _UserInfoFormState extends State<UserInfoForm> {
     _userType = user?.userType;
     _permissionLevel = user?.permissionLevel;
     _status = user?.status ?? '1';
+    _avatarBase64 = user?.avatarImage;
     _signatureBase64 = user?.signatureImage;
   }
 
@@ -227,6 +232,7 @@ class _UserInfoFormState extends State<UserInfoForm> {
             hisUserCode: _nullIfEmpty(_hisUserCodeCtrl.text),
             mchisUserCode: _nullIfEmpty(_mchisUserCodeCtrl.text),
             certId: _nullIfEmpty(_certIdCtrl.text),
+            avatarImage: _avatarBase64,
             signatureImage: _signatureBase64,
             status: _status,
           )
@@ -239,6 +245,7 @@ class _UserInfoFormState extends State<UserInfoForm> {
             'hisUserCode': _nullIfEmpty(_hisUserCodeCtrl.text),
             'mchisUserCode': _nullIfEmpty(_mchisUserCodeCtrl.text),
             'certId': _nullIfEmpty(_certIdCtrl.text),
+            'avatarImage': _avatarBase64,
             'signatureImage': _signatureBase64,
             'status': _status,
           }, password: _passwordCtrl.text);
@@ -277,6 +284,8 @@ class _UserInfoFormState extends State<UserInfoForm> {
         children: [
           // 基本信息
           _sectionTitle(theme, '基本信息'),
+          _buildAvatarField(theme, viewModel),
+          const SizedBox(height: 12),
           TextFormField(
             key: _userCodeKey,
             controller: _userCodeCtrl,
@@ -542,6 +551,80 @@ class _UserInfoFormState extends State<UserInfoForm> {
       validator: required ? (v) => (v == null || v.trim().isEmpty) ? '请选择$label' : null : null,
       onChanged: onChanged,
     );
+  }
+
+  /// 用户头像字段（交互同手写签名/医院管理 Logo）：正方形预览框——空图
+  /// 显示上传占位、有图显示预览，点击即选择/重选；上传成功后图片下方
+  /// 显示「移除」按钮，提示与按钮均与图片框居中对齐。
+  Widget _buildAvatarField(ThemeData theme, UserManagementViewModel viewModel) {
+    final bytes = _safeDecode(_avatarBase64);
+    return Center(
+      child: Column(
+        children: [
+          Text(
+            '头像（不超过 $_avatarMaxSize x$_avatarMaxSize）',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            width: 120,
+            height: 120,
+            decoration: BoxDecoration(
+              border: Border.all(color: theme.colorScheme.outlineVariant),
+              borderRadius: BorderRadius.circular(12),
+              color: theme.colorScheme.surface,
+            ),
+            clipBehavior: Clip.antiAlias,
+            // 解码失败（存量脏数据等）退回上传占位，不让整块表单红屏
+            child: bytes == null
+                ? IconButton(
+                    tooltip: '选择头像图片',
+                    icon: Icon(
+                      Icons.account_circle_outlined,
+                      size: 32,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    onPressed: viewModel.busy || _saving ? null : _pickAvatar,
+                  )
+                : GestureDetector(
+                    onTap: viewModel.busy || _saving ? null : _pickAvatar,
+                    child: Image.memory(
+                      bytes,
+                      fit: BoxFit.cover,
+                      // 字节合法但不是有效图片时显示占位图标
+                      errorBuilder: (_, _, _) => Icon(
+                        Icons.broken_image_outlined,
+                        size: 32,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+          ),
+          if (_avatarBase64 != null) ...[
+            const SizedBox(height: 4),
+            TextButton.icon(
+              icon: const Icon(Icons.delete_outline, size: 16),
+              label: Text('移除', style: theme.textTheme.bodyMedium),
+              onPressed: viewModel.busy || _saving ? null : () => setState(() => _avatarBase64 = null),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// 选择头像图片（分辨率校验后 base64 存入待保存状态）。
+  Future<void> _pickAvatar() async {
+    final base64Str = await ImageHelper.pickAndConvert(
+      maxWidth: _avatarMaxSize,
+      maxHeight: _avatarMaxSize,
+      onError: _showError,
+    );
+    if (base64Str != null) {
+      setState(() => _avatarBase64 = base64Str);
+    }
   }
 
   /// 手写签名字段（交互同医院管理的 Logo/印章图片）：横幅预览框——

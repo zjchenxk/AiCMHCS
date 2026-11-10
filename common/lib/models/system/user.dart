@@ -18,6 +18,7 @@ class User {
     this.hisUserCode,
     this.mchisUserCode,
     this.certId,
+    this.avatarImage,
     this.signatureImage,
     this.deptId,
     this.status,
@@ -55,6 +56,9 @@ class User {
   /// CA 证书 ID。
   final String? certId;
 
+  /// 用户头像（base64 图片）。
+  final String? avatarImage;
+
   /// 手写签名（base64 图片）。
   final String? signatureImage;
 
@@ -82,13 +86,12 @@ class User {
       hisUserCode: json['hisUserCode'] as String?,
       mchisUserCode: json['mchisUserCode'] as String?,
       certId: json['certId'] as String?,
+      avatarImage: json['avatarImage'] as String?,
       signatureImage: json['signatureImage'] as String?,
       deptId: json['deptId'] as String?,
       hospId: json['hospId'] as String,
       status: json['status'] as String?,
-      roleIds: (json['roleIds'] as List<dynamic>? ?? const [])
-          .whereType<String>()
-          .toList(growable: false),
+      roleIds: (json['roleIds'] as List<dynamic>? ?? const []).whereType<String>().toList(growable: false),
     );
   }
 
@@ -104,6 +107,7 @@ class User {
       'hisUserCode': hisUserCode,
       'mchisUserCode': mchisUserCode,
       'certId': certId,
+      'avatarImage': avatarImage,
       'signatureImage': signatureImage,
       'deptId': deptId,
       'hospId': hospId,

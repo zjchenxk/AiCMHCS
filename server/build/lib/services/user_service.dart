@@ -52,12 +52,13 @@ class UserService {
   static const int _passwordMinLength = 8;
   static const int _passwordMaxLength = 32;
   static const int _signatureMaxLength = 1024 * 1024;
+  static const int _avatarMaxLength = 1024 * 1024;
 
   /// 用户列表查询列（不含 PASSWORD——口令散列不出服务层）。
   static const String _columns =
       'ID, USER_CODE, USER_NAME, USER_TYPE, PERMISSION_LEVEL, PHONE, '
       'ID_CARD_NO, HIS_USER_CODE, MCHIS_USER_CODE, CERT_ID, '
-      'SIGNATURE_IMAGE, DEPT_ID, HOSP_ID, STATUS';
+      'AVATAR_IMAGE, SIGNATURE_IMAGE, DEPT_ID, HOSP_ID, STATUS';
 
   /// 查询指定医院下的全部用户（按创建顺序），携带各自拥有的角色 ID。
   Future<List<User>> listByHospital(String hospId) async {
@@ -108,6 +109,7 @@ class UserService {
     String? hisUserCode,
     String? mchisUserCode,
     String? certId,
+    String? avatarImage,
     String? signatureImage,
     String? status,
     List<String> roleIds = const [],
@@ -125,6 +127,7 @@ class UserService {
     final his = _optional(hisUserCode, 'HIS用户代码', _extCodeMaxLength);
     final mchis = _optional(mchisUserCode, '妇幼保健系统用户代码', _extCodeMaxLength);
     final cert = _optional(certId, 'CA证书ID', _extCodeMaxLength);
+    final avatar = _optional(avatarImage, '用户头像', _avatarMaxLength);
     final signature = _optional(signatureImage, '手写签名', _signatureMaxLength);
     final statusValue = _parseStatus(status ?? '1');
     final roleValues = await _ensureRolesExist(hospValue, roleIds);
@@ -132,9 +135,9 @@ class UserService {
     await _db.execute(
       'INSERT INTO SYS_USER (USER_CODE, PASSWORD, USER_NAME, USER_TYPE, '
       'PERMISSION_LEVEL, PHONE, PHONE_HMAC, ID_CARD_NO, ID_CARD_NO_HMAC, '
-      'HIS_USER_CODE, MCHIS_USER_CODE, CERT_ID, SIGNATURE_IMAGE, DEPT_ID, '
-      'HOSP_ID, STATUS, CREATE_TIME) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'HIS_USER_CODE, MCHIS_USER_CODE, CERT_ID, AVATAR_IMAGE, '
+      'SIGNATURE_IMAGE, DEPT_ID, HOSP_ID, STATUS, CREATE_TIME) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         code,
         AuthService.makeStoredPassword(pwd),
@@ -148,6 +151,7 @@ class UserService {
         his,
         mchis,
         cert,
+        avatar,
         signature,
         deptValue,
         hospValue,
@@ -171,9 +175,9 @@ class UserService {
   /// 修改用户（changes 为本次要更新的字段集合，键与 JSON 契约一致）。
   ///
   /// 可更新：userName / userType / permissionLevel / phone / idCardNo /
-  /// status / hisUserCode / mchisUserCode / certId / signatureImage；值为
-  /// null 表示清空该列（仅可空列，userName / status / userType /
-  /// permissionLevel 为必填不可清空）。登录账号
+  /// status / hisUserCode / mchisUserCode / certId / avatarImage /
+  /// signatureImage；值为 null 表示清空该列（仅可空列，userName /
+  /// status / userType / permissionLevel 为必填不可清空）。登录账号
   /// （userCode）、归属医院、挂载科室（deptId）不可改；CREATE_TIME 不可
   /// 改，UPDATE_TIME 由本方法统一写入。password 非空时重置口令；roleIds
   /// 非 null 时全量覆盖角色关联（null 表示本次不动角色）。
@@ -193,6 +197,7 @@ class UserService {
       'hisUserCode',
       'mchisUserCode',
       'certId',
+      'avatarImage',
       'signatureImage',
     };
     for (final key in changes.keys) {
@@ -219,6 +224,7 @@ class UserService {
           )
         : null;
     final cert = changes.containsKey('certId') ? _optional(changes['certId']?.toString(), 'CA证书ID', _extCodeMaxLength) : null;
+    final avatar = changes.containsKey('avatarImage') ? _optional(changes['avatarImage']?.toString(), '用户头像', _avatarMaxLength) : null;
     final signature = changes.containsKey('signatureImage')
         ? _optional(
             changes['signatureImage']?.toString(),
@@ -270,6 +276,9 @@ class UserService {
         case 'certId':
           setters.add('CERT_ID = ?');
           params.add(cert);
+        case 'avatarImage':
+          setters.add('AVATAR_IMAGE = ?');
+          params.add(avatar);
         case 'signatureImage':
           setters.add('SIGNATURE_IMAGE = ?');
           params.add(signature);
@@ -309,6 +318,7 @@ class UserService {
     hisUserCode: row['HIS_USER_CODE'],
     mchisUserCode: row['MCHIS_USER_CODE'],
     certId: row['CERT_ID'],
+    avatarImage: row['AVATAR_IMAGE'],
     signatureImage: row['SIGNATURE_IMAGE'],
     deptId: row['DEPT_ID'],
     hospId: row['HOSP_ID'] ?? '',

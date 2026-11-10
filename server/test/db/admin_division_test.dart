@@ -33,7 +33,7 @@ void main() {
       db,
       fieldCipher: cipher,
     ).migrate();
-    expect(applied.map((m) => m.version), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    expect(applied.map((m) => m.version), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
 
     final count = await db.query(
       'SELECT COUNT(*) AS CNT FROM BASE_ADMIN_DIVISIONS',

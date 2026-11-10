@@ -5,8 +5,9 @@ import 'package:server/services/user_service.dart';
 /// POST /api/user/update
 /// 请求体：{id, ...要修改的字段, password?, roleIds?}——可修改字段为
 /// userName/userType/permissionLevel/phone/idCardNo/status/hisUserCode/
-/// mchisUserCode/certId/signatureImage，值 null 表示清空该列（仅可空
-/// 列，userName/status 除外）；登录账号、归属医院、挂载科室不可改。
+/// mchisUserCode/certId/avatarImage/signatureImage，值 null 表示清空该列
+/// （仅可空列，userName/status 除外）；登录账号、归属医院、挂载科室
+/// 不可改。
 /// password 非空时重置口令（留空不改）；roleIds 非 null 时全量覆盖角色
 /// 关联（null 不动角色，空列表即清空）。
 Future<Response> onRequest(RequestContext context) async {
@@ -40,6 +41,7 @@ Future<Response> onRequest(RequestContext context) async {
     'hisUserCode',
     'mchisUserCode',
     'certId',
+    'avatarImage',
     'signatureImage',
   };
   final changes = <String, Object?>{
