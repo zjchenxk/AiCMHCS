@@ -47,7 +47,7 @@ void main() {
   });
 
   test('登录成功：返回会话（手机号已解密）、写审计', () async {
-    final session = await auth.login('admin', 'Admin@123', ip: '127.0.0.1');
+    final session = await auth.login('superadmin', 'Admin@123', '1', ip: '127.0.0.1');
     expect(session.user.id, greaterThan(0));
     expect(session.user.userCode, 'admin');
     expect(session.user.userName, '系统管理员');
@@ -92,7 +92,7 @@ void main() {
       ['doctor09', AuthService.makeStoredPassword('Doctor@123'), '关联用户', 'DOCTOR', 9, 7],
     );
 
-    final session = await auth.login('doctor09', 'Doctor@123');
+    final session = await auth.login('doctor09', 'Doctor@123', '2');
     expect(session.user.hospId, '9');
     expect(session.user.hospName, '测试三级医院');
     expect(session.user.deptId, '7');
@@ -102,7 +102,7 @@ void main() {
     expect(session.user.campusName, '城南院区');
 
     // 未设置归属的用户名称字段为 null（LEFT JOIN 不命中）
-    final bare = await auth.login('admin', 'Admin@123');
+    final bare = await auth.login('superadmin', 'Admin@123', '1');
     expect(bare.user.hospName, isNull);
     expect(bare.user.deptName, isNull);
   });
@@ -114,13 +114,13 @@ void main() {
       "VALUES ('legacy', ?, '存量用户', 'DOCTOR', '13900000000', 1)",
       [AuthService.makeStoredPassword('Legacy@123')],
     );
-    final session = await auth.login('legacy', 'Legacy@123');
+    final session = await auth.login('legacy', 'Legacy@123', '2');
     expect(session.user.phone, '13900000000');
   });
 
   test('口令错误：统一提示 40101 并写失败审计', () async {
     await expectLater(
-      auth.login('admin', 'wrong'),
+      auth.login('admin', 'wrong', '6'),
       throwsA(
         isA<AuthException>().having((e) => e.code, 'code', 40101),
       ),
@@ -140,7 +140,7 @@ void main() {
       ['disabled', AuthService.makeStoredPassword('X@123'), '停用账号', 'DOCTOR'],
     );
     await expectLater(
-      auth.login('disabled', 'X@123'),
+      auth.login('disabled', 'X@123', '2'),
       throwsA(
         isA<AuthException>().having((e) => e.code, 'code', 40301),
       ),
@@ -148,7 +148,7 @@ void main() {
   });
 
   test('会话校验、续期与登出', () async {
-    final session = await auth.login('admin', 'Admin@123');
+    final session = await auth.login('superadmin', 'Admin@123', '1');
 
     final verified = await auth.verify(session.token);
     expect(verified.userCode, 'admin');

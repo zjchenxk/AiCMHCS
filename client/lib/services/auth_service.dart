@@ -16,12 +16,13 @@ class AuthService {
 
   ///param userCode: 用户名
   ///param password: 明文口令
+  ///param role: 角色ID
   ///returns: 登录结果 Map（token / expiresIn / user），失败抛带 message 的异常
-  Future<Map<String, dynamic>> login(String userCode, String password) async {
+  Future<Map<String, dynamic>> login(String userCode, String password, String role) async {
     final response = await client.post(
       Uri.parse('$apiUrl/api/auth/login'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'usercode': userCode, 'password': password}),
+      body: jsonEncode({'usercode': userCode, 'password': password, 'role': role}),
     );
 
     final jsonResponse = jsonDecode(response.body) as Map<String, dynamic>;

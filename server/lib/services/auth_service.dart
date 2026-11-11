@@ -47,11 +47,7 @@ final class LoginSession {
 /// 达梦网关自动内联，业务层直接写参数化 SQL）。
 class AuthService {
   /// 构造函数：注入数据库网关、字段加密器、会话过期时长。
-  AuthService(
-    this._db,
-    this._cipher, {
-    this.sessionTtl = const Duration(hours: 2),
-  });
+  AuthService(this._db, this._cipher, {this.sessionTtl = const Duration(hours: 2)});
 
   final DatabaseGateway _db;
 
@@ -112,10 +108,10 @@ class AuthService {
   }
 
   /// 登录：校验用户名口令、写审计日志、签发令牌（登录时间由 SYS_LOGIN_LOG 审计）。
-  Future<LoginSession> login(String userCode, String password, {String? ip}) async {
+  Future<LoginSession> login(String userCode, String password, String role, {String? ip}) async {
     final uCode = userCode.trim();
-    if (uCode.isEmpty || password.isEmpty) {
-      throw const AuthException(400, 40001, '用户名和密码不能为空');
+    if (uCode.isEmpty || password.isEmpty || role.isEmpty) {
+      throw const AuthException(400, 40001, '用户名、密码和角色不能为空');
     }
 
     final result = await _db.query(

@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:dart_frog/dart_frog.dart';
 import 'package:server/services/auth_service.dart';
+import 'package:server/utils/log_helper.dart';
 
 /// POST /api/auth/login
-/// 请求体：{"username": "...", "password": "..."}
+/// 请求体：{"username": "...", "password": "...", "role": "..."}
 Future<Response> onRequest(RequestContext context) async {
   if (context.request.method != HttpMethod.post) {
     return Response.json(
@@ -27,15 +30,20 @@ Future<Response> onRequest(RequestContext context) async {
 
   final userCode = body['usercode'];
   final password = body['password'];
-  if (userCode is! String || password is! String || userCode.trim().isEmpty || password.isEmpty) {
-    return _error(400, 40001, '用户名和密码不能为空');
+  final role = body['role'];
+  if (userCode is! String || password is! String || role is! String || userCode.trim().isEmpty || password.isEmpty || role.trim().isEmpty) {
+    return _error(400, 40001, '用户名、密码和角色不能为空');
   }
 
   final ip = context.request.headers['x-forwarded-for']?.split(',').first.trim();
 
+  unawaited(
+    LogHelper.info('server:routes/api/auth/login', content: '用户 $userCode 尝试登录，角色 $role，IP $ip'),
+  );
+
   final auth = context.read<AuthService>();
   try {
-    final session = await auth.login(userCode, password, ip: ip);
+    final session = await auth.login(userCode, password, role, ip: ip);
     return Response.json(
       body: {
         'code': 0,

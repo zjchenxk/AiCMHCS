@@ -27,28 +27,28 @@ class LoginViewModel extends ChangeNotifier {
   final _userCodeController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  String? _selectedDept;
+  String? _selectedRole;
 
   final FocusNode _userCodeFocusNode = FocusNode();
   final FocusNode _passwordFocusNode = FocusNode();
 
   String? _userCodeError;
   String? _passwordError;
-  String? _deptError;
+  String? _roleError;
 
   GlobalKey<FormState> get formKey => _formKey;
 
   TextEditingController get userCodeController => _userCodeController;
   TextEditingController get passwordController => _passwordController;
 
-  String? get selectedDept => _selectedDept;
+  String? get selectedRole => _selectedRole;
 
   FocusNode get userCodeFocusNode => _userCodeFocusNode;
   FocusNode get passwordFocusNode => _passwordFocusNode;
 
   String? get userCodeError => _userCodeError;
   String? get passwordError => _passwordError;
-  String? get deptError => _deptError;
+  String? get roleError => _roleError;
 
   bool _isLoading = false;
   String? _errorMessage;
@@ -56,9 +56,9 @@ class LoginViewModel extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
-  void selectDept(String? dept) {
-    _selectedDept = dept;
-    _validateDept(); //选择后立即重新验证
+  void selectRole(String? role) {
+    _selectedRole = role;
+    _validateRole(); //选择后立即重新验证
   }
 
   @override
@@ -90,11 +90,11 @@ class LoginViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _validateDept() {
-    if (_selectedDept == null || _selectedDept!.isEmpty) {
-      _deptError = "科室不能为空！";
+  void _validateRole() {
+    if (_selectedRole == null || _selectedRole!.isEmpty) {
+      _roleError = "角色不能为空！";
     } else {
-      _deptError = null;
+      _roleError = null;
     }
     notifyListeners();
   }
@@ -110,16 +110,16 @@ class LoginViewModel extends ChangeNotifier {
       if (_formKey.currentState?.validate() ?? false) {
         _validateUserCode();
         _validatePassword();
-        _validateDept();
+        _validateRole();
 
-        if (_userCodeError == null && _passwordError == null && _deptError == null) {
+        if (_userCodeError == null && _passwordError == null && _roleError == null) {
           final userCode = _userCodeController.text;
           final password = _passwordController.text;
-          //final dept = _selectedDept;
+          final role = _selectedRole;
 
           //登录系统
           final service = _authService ?? getIt<AuthService>();
-          final data = await service.login(userCode, password);
+          final data = await service.login(userCode, password, role!);
 
           token = data['token'] as String;
           sessionKey = data['sessionKey'] as String;
@@ -156,10 +156,10 @@ class LoginViewModel extends ChangeNotifier {
   void reset() {
     _userCodeController.clear();
     _passwordController.clear();
-    _selectedDept = null;
+    _selectedRole = null;
     _userCodeError = null;
     _passwordError = null;
-    _deptError = null;
+    _roleError = null;
     _isLoading = false;
     _errorMessage = null;
     notifyListeners();

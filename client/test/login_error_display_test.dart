@@ -11,7 +11,7 @@ import 'package:provider/provider.dart';
 /// 始终抛“用户名或密码错误”的伪认证服务。
 class FakeAuthService extends AuthService {
   @override
-  Future<Map<String, dynamic>> login(String username, String password) async {
+  Future<Map<String, dynamic>> login(String username, String password, String role) async {
     throw Exception('登录失败！用户名或密码错误');
   }
 }
@@ -59,8 +59,8 @@ void main() {
     await tester.enterText(textFields.at(1), 'Doctor@123');
     await tester.pump();
 
-    // 直接经 ViewModel 设置科室（下拉 overlay 的 tap 命中不稳定，与本测试目标无关）
-    viewModel.selectDept('产科');
+    // 直接经 ViewModel 设置角色（下拉 overlay 的 tap 命中不稳定，与本测试目标无关）
+    viewModel.selectRole('医生');
     await tester.pump();
 
     // 点击登录按钮

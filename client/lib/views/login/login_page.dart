@@ -17,12 +17,19 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   bool _isPasswordVisible = false;
 
+  /// 角色值域。
+  static const Map<String, String> _roles = {
+    '1': '超级管理员',
+    '2': '儿童保健科医生',
+    '3': '儿童保健科护士',
+    '4': '儿童保健科评估师',
+    '6': '系统管理员',
+  };
+
   @override
   Widget build(BuildContext context) {
     //获取当前主题
     final ThemeData theme = Theme.of(context);
-
-    final List<String> depts = ['产科', '新生儿科', '儿保科', '妇科'];
 
     return Consumer<LoginViewModel>(
       builder: (context, loginViewModel, child) {
@@ -73,18 +80,11 @@ class _LoginPageState extends State<LoginPage> {
                         ), //毛玻璃效果
                         child: Container(
                           width: 500,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 40,
-                            vertical: 50,
-                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 50),
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(
-                              alpha: 0.7,
-                            ), //半透明白色背景
+                            color: Colors.white.withValues(alpha: 0.7), //半透明白色背景
                             borderRadius: BorderRadius.circular(24.0),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.5),
-                            ),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.5)),
                             boxShadow: [
                               // 添加柔和阴影
                               BoxShadow(
@@ -126,22 +126,14 @@ class _LoginPageState extends State<LoginPage> {
                                   focusNode: loginViewModel.userCodeFocusNode, //失去焦点事件
                                   decoration: InputDecoration(
                                     labelText: '用户名',
-                                    prefixIcon: Icon(
-                                      Icons.person_outline,
-                                    ), //添加图标
+                                    prefixIcon: Icon(Icons.person_outline), //添加图标
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(
-                                        12,
-                                      ), //增大圆角
-                                      borderSide: BorderSide(
-                                        color: Colors.grey.shade300,
-                                      ),
+                                      borderRadius: BorderRadius.circular(12), //增大圆角
+                                      borderSide: BorderSide(color: Colors.grey.shade300),
                                     ),
                                     enabledBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: Colors.grey.shade300,
-                                      ),
+                                      borderSide: BorderSide(color: Colors.grey.shade300),
                                     ),
                                     focusedBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
@@ -156,9 +148,7 @@ class _LoginPageState extends State<LoginPage> {
                                   textInputAction: TextInputAction.next, //设置回车为“下一步”
                                   onFieldSubmitted: (value) {
                                     //按下回车键后，焦点移到密码输入框
-                                    FocusScope.of(context).requestFocus(
-                                      loginViewModel.passwordFocusNode,
-                                    );
+                                    FocusScope.of(context).requestFocus(loginViewModel.passwordFocusNode);
                                   },
                                 ),
                                 SizedBox(height: 20),
@@ -174,22 +164,15 @@ class _LoginPageState extends State<LoginPage> {
                                     suffixIcon: _buildPasswordToggleIcon(),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: Colors.grey.shade300,
-                                      ),
+                                      borderSide: BorderSide(color: Colors.grey.shade300),
                                     ),
                                     enabledBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: Colors.grey.shade300,
-                                      ),
+                                      borderSide: BorderSide(color: Colors.grey.shade300),
                                     ),
                                     focusedBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: theme.primaryColor,
-                                        width: 1.5,
-                                      ),
+                                      borderSide: BorderSide(color: theme.primaryColor, width: 1.5),
                                     ),
                                     errorText: loginViewModel.passwordError,
                                   ),
@@ -198,45 +181,37 @@ class _LoginPageState extends State<LoginPage> {
                                 ),
                                 SizedBox(height: 20),
 
-                                //登录科室
+                                //角色
                                 DropdownButtonFormField<String>(
-                                  initialValue: loginViewModel.selectedDept,
+                                  initialValue: loginViewModel.selectedRole,
+                                  isExpanded: true,
                                   decoration: InputDecoration(
-                                    labelText: '科室',
+                                    labelText: '角色',
                                     prefixIcon: Icon(Icons.home_outlined),
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(
-                                        12,
-                                      ), // 增大圆角
-                                      borderSide: BorderSide(
-                                        color: Colors.grey.shade300,
-                                      ),
+                                      borderRadius: BorderRadius.circular(12), // 增大圆角
+                                      borderSide: BorderSide(color: Colors.grey.shade300),
                                     ),
                                     enabledBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: Colors.grey.shade300,
-                                      ),
+                                      borderSide: BorderSide(color: Colors.grey.shade300),
                                     ),
                                     focusedBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: theme.primaryColor,
-                                        width: 1.5,
-                                      ),
+                                      borderSide: BorderSide(color: theme.primaryColor, width: 1.5),
                                     ),
-                                    errorText: loginViewModel.deptError,
+                                    errorText: loginViewModel.roleError,
                                   ),
-                                  items: depts.map<DropdownMenuItem<String>>((
-                                    String dept,
-                                  ) {
-                                    return DropdownMenuItem<String>(
-                                      value: dept,
-                                      child: Text(dept),
-                                    );
-                                  }).toList(),
+                                  items: _roles.entries
+                                      .map(
+                                        (e) => DropdownMenuItem(
+                                          value: e.key,
+                                          child: Text(e.value, style: theme.textTheme.bodyMedium),
+                                        ),
+                                      )
+                                      .toList(),
                                   style: theme.textTheme.bodyMedium,
-                                  onChanged: loginViewModel.selectDept,
+                                  onChanged: loginViewModel.selectRole,
                                 ),
                                 SizedBox(height: 20),
 

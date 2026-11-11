@@ -20,7 +20,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 返回成功登录数据（doctor01 身份）的伪认证服务。
 class FakeAuthService extends AuthService {
   @override
-  Future<Map<String, dynamic>> login(String username, String password) async {
+  Future<Map<String, dynamic>> login(String username, String password, String role) async {
     return {
       'token': 'test-token',
       'sessionKey': 'MDEyMzQ1Njc4OWFiY2RlZmdoaWprbG1ub3BxcnN0dXY=',
@@ -98,7 +98,7 @@ void main() {
     final textFields = find.byType(TextFormField);
     await tester.enterText(textFields.at(0), 'doctor01');
     await tester.enterText(textFields.at(1), 'Doctor@123');
-    loginViewModel.selectDept('产科');
+    loginViewModel.selectRole('医生');
     await tester.pump();
 
     // 点击登录，等待异步登录与路由跳转完成
