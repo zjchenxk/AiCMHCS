@@ -72,7 +72,17 @@ String? _clientIp(RequestContext context) {
     return forwarded;
   }
   try {
-    return context.request.connectionInfo.remoteAddress.address;
+    final address = context.request.connectionInfo.remoteAddress.address;
+    // IPv4 连接经 IPv6 双栈套接字会呈现为 ::ffff:a.b.c.d（IPv4 映射地址），
+    // 还原为纯 IPv4 形式，便于审计阅读与按网段统计
+    const mappedPrefix = '::ffff:';
+    if (address.startsWith(mappedPrefix)) {
+      final v4 = address.substring(mappedPrefix.length);
+      if (RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(v4)) {
+        return v4;
+      }
+    }
+    return address;
   } catch (_) {
     return null;
   }
