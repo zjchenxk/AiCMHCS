@@ -165,7 +165,11 @@ class _MainPageState extends State<MainPage> {
     return Selector<MainViewModel, LoginUser>(
       selector: (context, mainViewModel) => mainViewModel.loginUser,
       builder: (context, loginUser, _) {
+        // 角色名称按当前角色 ID 从角色列表实时解析（不建立订阅：
+        // loginUser 引用变化时本 Selector 已重建）
+        final roleName = context.read<MainViewModel>().roleName;
         final items = <(String, String?)>[
+          ('当前角色', roleName),
           ('当前医院', loginUser.hospName),
           ('当前院区', loginUser.campusName),
           ('当前科室', loginUser.deptName),

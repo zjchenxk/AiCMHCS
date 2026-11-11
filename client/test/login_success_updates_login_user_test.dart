@@ -168,6 +168,9 @@ void main() {
     // 顶栏用户菜单数据源使用真实姓名
     expect(mainViewModel.userName, '李医生');
 
+    // 顶栏信息栏按当前角色 ID 从角色列表解析角色名称
+    expect(mainViewModel.roleName, '儿童心理医生');
+
     // 侧边栏菜单按登录响应下发的角色菜单构建（模块→菜单树，含路由）
     expect(mainViewModel.menus, hasLength(1));
     expect(mainViewModel.menus.first.title, '系统管理');

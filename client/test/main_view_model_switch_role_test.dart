@@ -98,11 +98,20 @@ void main() {
     hospName: '测试三级医院',
   );
 
+  /// 该用户拥有的角色列表（登录页角色下拉同源，roleName 按当前 roleId 从此解析）。
+  List<Map<String, String>> userRoles() => const [
+    {'id': '2', 'roleName': '儿童心理医生'},
+    {'id': '6', 'roleName': '系统管理员'},
+  ];
+
   test('切换成功：全局与工作副本刷新为新角色身份，菜单按新角色重建', () async {
     loginUser = loginAsRole2();
     final vm = MainViewModel(accountService: FakeAccountService());
+    vm.setRoles(userRoles());
     vm.syncLoginUser();
     vm.setRoleMenus(_oldRoleMenus());
+    // 顶栏信息栏按当前角色 ID 解析角色名称
+    expect(vm.roleName, '儿童心理医生');
     // 造一个选中态，验证切换后被清空
     vm.selectMenu(vm.menus.first.children.first, ['系统管理', '医院管理']);
     expect(vm.selectedMenuId, '2');
@@ -112,6 +121,8 @@ void main() {
     expect(ok, isTrue);
     expect(vm.errorMsg, isNull);
     expect(vm.switchingRole, isFalse);
+    // 切换后随新角色 ID 解析新角色名称
+    expect(vm.roleName, '系统管理员');
     // 全局 loginUser 已替换为响应下发的新角色身份
     expect(loginUser!.roleId, '6');
     // 工作副本同步（引用替换，Selector 可感知）

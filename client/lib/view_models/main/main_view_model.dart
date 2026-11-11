@@ -136,6 +136,18 @@ class MainViewModel extends ChangeNotifier {
 
   String get userName => loginUser.userName;
 
+  /// 当前登录角色名称（从该用户拥有的角色列表按当前角色 ID 解析；
+  /// 列表未加载、角色 ID 为空或不在列表中时为 null，界面按需隐藏。
+  /// 切换角色后 loginUser 已整体替换，本 getter 随新 roleId 解析新名称）
+  String? get roleName {
+    final roleId = loginUser.roleId;
+    if (roleId.isEmpty) return null;
+    for (final role in _roles) {
+      if (role['id'] == roleId) return role['roleName'];
+    }
+    return null;
+  }
+
   // 方法
   void selectMenu(MenuItem menu, List<String> path) {
     _selectedMenuId = menu.id;
