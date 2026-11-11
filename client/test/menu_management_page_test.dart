@@ -117,6 +117,7 @@ const _testLoginUser = LoginUser(
   userCode: 'admin',
   userName: '系统管理员',
   userType: 'ADMIN',
+  roleId: '',
   hospId: '1',
   hospName: '示例人民医院',
 );

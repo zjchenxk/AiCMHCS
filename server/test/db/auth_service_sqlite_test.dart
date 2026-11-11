@@ -245,4 +245,49 @@ void main() {
       ),
     );
   });
+
+  test('切换角色：校验归属后更新会话角色，未分配/非法参数被拒绝', () async {
+    // 种子：admin 追加分配角色 10（已在「查询用户角色列表」用例种子化），
+    // 验证从角色 1 切到角色 10
+    await db.execute(
+      'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID) '
+      "SELECT U.ID, 10 FROM SYS_USER U WHERE U.USER_CODE = 'admin'",
+    );
+
+    final session = await auth.login('admin', 'Admin@123', '1');
+    expect(session.roleId, '1');
+
+    // 切到已分配的角色：会话角色更新、令牌不变（同一会话内切换）
+    final switched = await auth.switchRole(session.token, '10');
+    expect(identical(switched, session), isTrue);
+    expect(session.roleId, '10');
+    final verified = await auth.verify(session.token);
+    expect(verified, same(session.user));
+
+    // 切到未分配给该用户的角色：40301（角色 2 属于 doctor09/legacy）
+    await expectLater(
+      auth.switchRole(session.token, '2'),
+      throwsA(
+        isA<AuthException>().having((e) => e.code, 'code', 40301),
+      ),
+    );
+    // 被拒绝的切换不改动会话角色
+    expect(session.roleId, '10');
+
+    // 角色参数非数字：40001
+    await expectLater(
+      auth.switchRole(session.token, 'abc'),
+      throwsA(
+        isA<AuthException>().having((e) => e.code, 'code', 40001),
+      ),
+    );
+
+    // 无效令牌：40102
+    await expectLater(
+      auth.switchRole('nonexistent-token', '10'),
+      throwsA(
+        isA<AuthException>().having((e) => e.code, 'code', 40102),
+      ),
+    );
+  });
 }

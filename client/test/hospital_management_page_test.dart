@@ -183,6 +183,7 @@ Widget _wrapWidget(HospitalManagementViewModel viewModel) {
             id: 1,
             userCode: 'admin',
             userName: '管理员',
+            roleId: '',
             userType: 'ADMIN',
             phone: '',
           ),

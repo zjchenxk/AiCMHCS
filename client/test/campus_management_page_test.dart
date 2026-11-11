@@ -84,6 +84,7 @@ const _testLoginUser = LoginUser(
   id: 1,
   userCode: 'doctor01',
   userName: '王心怡',
+  roleId: '',
   userType: 'DOCTOR',
   hospId: '1',
 );
@@ -239,7 +240,13 @@ void main() {
     await tester.pumpWidget(
       _wrapWidget(
         viewModel,
-        loginUser: const LoginUser(id: 2, userCode: 'x', userName: 'x', userType: 'DOCTOR'),
+        loginUser: const LoginUser(
+          id: 2,
+          userCode: 'x',
+          userName: 'x',
+          userType: 'DOCTOR',
+          roleId: '',
+        ),
       ),
     );
     await tester.pumpAndSettle();

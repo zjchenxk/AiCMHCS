@@ -1,24 +1,36 @@
 import 'package:client/main.dart' as app;
 import 'package:client/models/child_info.dart';
 import 'package:client/models/menu_item.dart';
+import 'package:client/services/account_service.dart';
+import 'package:client/utils/log_helper.dart';
 import 'package:client/utils/menu_icons.dart';
 import 'package:common/model.dart';
 import 'package:material_ui/material_ui.dart';
 
 class MainViewModel extends ChangeNotifier {
-  // 科室（示例数据，实际从接口获取）
-  final List<(String, String)> availableDepts = const [
-    ('D001', '儿童保健科'),
-    ('D002', '儿童心理科'),
-    ('D003', '康复科'),
-    ('D004', '新生儿科'),
-    ('D005', '产科'),
-  ];
+  /// 可选注入账户服务（便于测试替换）；为空时运行期经 getIt 解析。
+  MainViewModel({AccountService? accountService}) : _accountService = accountService;
+
+  final AccountService? _accountService;
+  // 登录用户角色
+  List<Map<String, String>> _roles = const [];
+  List<Map<String, String>> get roles => _roles;
+
+  void setRoles(List<Map<String, String>> roles) {
+    _roles = roles;
+    notifyListeners();
+  }
 
   // 登录用户信息（登录前为空占位，登录成功后经 syncLoginUser 刷新为真实身份；
   // 医院/院区/科室均为登录接口关联下发的真实数据，未设置的字段保持 null，
   // 由界面按需隐藏对应展示项）
-  LoginUser loginUser = const LoginUser(id: 0, userCode: '', userName: '', userType: '');
+  LoginUser loginUser = const LoginUser(
+    id: 0,
+    userCode: '',
+    userName: '',
+    userType: '',
+    roleId: '',
+  );
 
   /// 登录成功后以全局 loginUser 刷新工作副本
   void syncLoginUser() {
@@ -202,11 +214,46 @@ class MainViewModel extends ChangeNotifier {
     return find(menus);
   }
 
-  /// 切换科室替换整个 loginUser 实例（而非改字段），
-  /// 否则 Selector&lt;MainViewModel, LoginUser&gt; 因引用未变不会刷新顶部科室显示
-  void switchDepartment(String deptId, String deptName) {
-    loginUser = loginUser.copyWith(deptId: deptId, deptName: deptName);
+  // 切换角色
+  bool _switchingRole = false;
+  bool get switchingRole => _switchingRole;
+
+  String? _errorMsg;
+  String? get errorMsg => _errorMsg;
+
+  /// 切换角色：调后端校验目标角色归属并更新会话角色，成功后以响应下发
+  /// 的用户信息与角色权限菜单刷新全局登录用户与侧边栏（菜单集整体更换，
+  /// 选中/展开/搜索态由 setRoleMenus 清空）。
+  ///param roleId: 目标角色 ID
+  ///returns: 是否切换成功（失败时 errorMsg 带提示，原会话与菜单不变）
+  Future<bool> switchRole(String roleId) async {
+    if (_switchingRole) return false;
+    _switchingRole = true;
+    _errorMsg = null;
     notifyListeners();
+
+    try {
+      final service = _accountService ?? app.getIt<AccountService>();
+      final result = await service.switchRole(roleId);
+
+      // 更新全局登录用户（携带新角色 ID，供主界面信息栏与各业务页取用）
+      app.loginUser = result.user;
+      // 以全局值同步工作副本——替换整个实例而非改字段，否则
+      // Selector<MainViewModel, LoginUser> 因引用未变不会刷新顶部显示
+      loginUser = result.user;
+
+      // 以新角色下发的菜单重建侧边栏
+      setRoleMenus(result.menus);
+
+      return true;
+    } catch (e, st) {
+      LogHelper.error('client:MainViewModel.switchRole', e, st);
+      _errorMsg = e.toString().replaceFirst(RegExp(r'^\w*(Exception|Error):\s*'), '');
+      return false;
+    } finally {
+      _switchingRole = false;
+      notifyListeners();
+    }
   }
 
   /// 重新登录前的状态清理

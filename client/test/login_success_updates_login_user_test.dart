@@ -42,6 +42,7 @@ class FakeAuthService extends AuthService {
         'id': 2,
         'userCode': 'doctor01',
         'userName': '李医生',
+        'roleId': '2',
         'userType': 'DOCTOR',
         'userTypeName': '儿童心理医生',
         'phone': '13800000001',
@@ -180,6 +181,7 @@ void main() {
       userCode: 'teacher01',
       userName: '李老师',
       userType: 'TEACHER',
+      roleId: '',
     );
     final vm = MainViewModel();
     vm.syncLoginUser();

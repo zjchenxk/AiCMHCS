@@ -77,9 +77,7 @@ class _MainPageState extends State<MainPage> {
             color: color,
             borderRadius: radius,
             border: Border.all(
-              color: Theme.of(
-                context,
-              ).colorScheme.outlineVariant.withValues(alpha: 0.3),
+              color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.3),
               width: 0.5,
             ),
           ),
@@ -179,11 +177,7 @@ class _MainPageState extends State<MainPage> {
             children: [
               Text(
                 '欢迎回来！',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onPrimaryContainer.withValues(
-                    alpha: 0.7,
-                  ),
-                ),
+                style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.7)),
               ),
               for (final (label, value) in items)
                 if (value != null && value.isNotEmpty)
@@ -278,9 +272,9 @@ class _MainPageState extends State<MainPage> {
             minimumSize: const Size.fromHeight(44),
             padding: const EdgeInsets.symmetric(horizontal: 16),
           ),
-          onPressed: () => _showSwitchDeptDialog(context, theme),
+          onPressed: () => _showSwitchRoleDialog(context, theme),
           child: Text(
-            '切换科室',
+            '切换角色',
             style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
           ),
         ),
@@ -782,11 +776,7 @@ class _MainPageState extends State<MainPage> {
               child: Icon(
                 menu.icon,
                 size: 20,
-                color: selected
-                    ? theme.colorScheme.onPrimary
-                    : theme.colorScheme.onPrimaryContainer.withValues(
-                        alpha: 0.7,
-                      ),
+                color: selected ? theme.colorScheme.onPrimary : theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
               ),
             ),
           ),
@@ -800,15 +790,9 @@ class _MainPageState extends State<MainPage> {
         InkWell(
           borderRadius: BorderRadius.circular(10),
           // 显式三态高亮色
-          hoverColor: theme.colorScheme.onPrimaryContainer.withValues(
-            alpha: 0.15,
-          ),
-          highlightColor: theme.colorScheme.onPrimaryContainer.withValues(
-            alpha: 0.28,
-          ),
-          splashColor: theme.colorScheme.onPrimaryContainer.withValues(
-            alpha: 0.20,
-          ),
+          hoverColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.15),
+          highlightColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.28),
+          splashColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.20),
           onTap: () {
             hasChildren ? mainViewModel.toggleExpand(menu.id) : mainViewModel.selectMenu(menu, path);
           },
@@ -824,11 +808,7 @@ class _MainPageState extends State<MainPage> {
                 Icon(
                   menu.icon,
                   size: 18,
-                  color: selected
-                      ? theme.colorScheme.onPrimary
-                      : theme.colorScheme.onPrimaryContainer.withValues(
-                          alpha: 0.7,
-                        ),
+                  color: selected ? theme.colorScheme.onPrimary : theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -847,9 +827,7 @@ class _MainPageState extends State<MainPage> {
                     duration: const Duration(milliseconds: 200),
                     child: Icon(
                       Icons.keyboard_arrow_down,
-                      color: theme.colorScheme.onPrimaryContainer.withValues(
-                        alpha: 0.6,
-                      ),
+                      color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.6),
                       size: 18,
                     ),
                   ),
@@ -959,9 +937,7 @@ class _MainPageState extends State<MainPage> {
                 const SizedBox(height: 16),
                 Text(
                   selectedMenuId == null ? '请从左侧选择功能菜单' : '当前功能：${mainViewModel.selectedMenuTitle ?? ''}',
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                  ),
+                  style: theme.textTheme.bodyLarge?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
                 ),
               ],
             ),
@@ -1004,14 +980,14 @@ class _MainPageState extends State<MainPage> {
     }
   }
 
-  // 切换科室
-  Future<void> _showSwitchDeptDialog(BuildContext context, ThemeData theme) async {
+  // 切换角色
+  Future<void> _showSwitchRoleDialog(BuildContext context, ThemeData theme) async {
     final mainViewModel = context.read<MainViewModel>();
 
     final selected = await showDialog<(String, String)>(
       context: context,
       builder: (dialogContext) {
-        String currentDeptId = mainViewModel.loginUser.deptId ?? ''; // 弹窗内的局部选中态
+        String currentRoleId = mainViewModel.loginUser.roleId; // 弹窗内的局部选中态
 
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) => Dialog(
@@ -1040,7 +1016,7 @@ class _MainPageState extends State<MainPage> {
                           ),
                           const SizedBox(width: 10),
                           Text(
-                            '切换科室',
+                            '切换角色',
                             style: theme.textTheme.titleMedium?.copyWith(
                               color: theme.colorScheme.onSurface,
                               fontWeight: FontWeight.bold,
@@ -1053,25 +1029,23 @@ class _MainPageState extends State<MainPage> {
                       // 单选列表
                       Flexible(
                         child: RadioGroup<String>(
-                          groupValue: currentDeptId,
+                          groupValue: currentRoleId,
                           onChanged: (value) {
                             if (value != null) {
-                              setDialogState(() => currentDeptId = value);
+                              setDialogState(() => currentRoleId = value);
                             }
                           },
                           child: ListView(
                             shrinkWrap: true,
                             children: [
-                              for (final (deptId, deptName) in mainViewModel.availableDepts)
+                              for (final role in mainViewModel.roles)
                                 RadioListTile<String>(
-                                  value: deptId,
+                                  value: role['id'] ?? '',
                                   dense: true,
                                   activeColor: theme.colorScheme.primary,
                                   title: Text(
-                                    deptName,
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: theme.colorScheme.onPrimaryContainer,
-                                    ),
+                                    role['roleName'] ?? '',
+                                    style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer),
                                   ),
                                 ),
                             ],
@@ -1088,27 +1062,23 @@ class _MainPageState extends State<MainPage> {
                             onPressed: () => Navigator.of(dialogContext).pop(),
                             child: Text(
                               '取消',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: theme.colorScheme.onSurface,
-                              ),
+                              style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
                             ),
                           ),
                           const SizedBox(width: 12),
                           FilledButton(
                             onPressed: () {
-                              final dept = mainViewModel.availableDepts.firstWhere(
-                                (d) => d.$1 == currentDeptId,
-                                orElse: () => ('', ''),
+                              final role = mainViewModel.roles.firstWhere(
+                                (d) => d['id'] == currentRoleId,
+                                orElse: () => {'id': '', 'roleName': ''},
                               );
-                              if (dept.$1.isNotEmpty) {
-                                Navigator.of(dialogContext).pop(dept);
+                              if (role['id']!.isNotEmpty) {
+                                Navigator.of(dialogContext).pop(role);
                               }
                             },
                             child: Text(
                               '确定',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: theme.colorScheme.onPrimary,
-                              ),
+                              style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimary),
                             ),
                           ),
                         ],
@@ -1123,8 +1093,25 @@ class _MainPageState extends State<MainPage> {
       },
     );
 
-    if (selected != null && selected.$1 != mainViewModel.loginUser.deptId) {
-      mainViewModel.switchDepartment(selected.$1, selected.$2);
+    if (selected != null) {
+      final selectedRole = selected as Map<String, String>;
+      if (selectedRole['id'] != mainViewModel.loginUser.roleId) {
+        // 调后端切换会话角色并刷新菜单权限，按结果给出提示
+        final ok = await mainViewModel.switchRole(selectedRole['id'] ?? '');
+        if (!context.mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              ok ? '已切换到角色：${selectedRole['roleName']}' : (mainViewModel.errorMsg ?? '切换角色失败，请稍后重试'),
+            ),
+            backgroundColor: ok ? theme.colorScheme.primary : theme.colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
     }
   }
 

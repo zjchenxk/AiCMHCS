@@ -45,9 +45,11 @@ Future<Response> onRequest(RequestContext context) async {
   final auth = context.read<AuthService>();
   try {
     final session = await auth.login(userCode, password, role, ip: ip);
+
     // 角色已在登录时校验归属，随响应下发该角色已授权的模块/菜单
     // （ITEM_TYPE 1/2，操作类不下发），主界面侧边栏据此构建。
     final menus = await context.read<MenuService>().listRoleAll(role);
+
     return Response.json(
       body: {
         'code': 0,
@@ -57,7 +59,7 @@ Future<Response> onRequest(RequestContext context) async {
           'sessionKey': session.sessionKey,
           'tokenType': 'Bearer',
           'expiresIn': auth.sessionTtl.inSeconds,
-          'user': session.user.toJson(),
+          'user': session.user.copyWith(roleId: role).toJson(),
           'menus': menus.map((m) => m.toJson()).toList(),
         },
       },

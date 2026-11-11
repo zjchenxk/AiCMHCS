@@ -41,8 +41,9 @@ final class LoginSession {
   /// 会话过期时间（滑动续期）。
   DateTime expiresAt;
 
-  /// 登录时所选角色 ID（字符串形式；已校验属于该用户，供按角色取菜单）。
-  final String roleId;
+  /// 当前角色 ID（字符串形式；已校验属于该用户，供按角色取菜单。
+  /// 主界面切换角色时经 AuthService.switchRole 在会话内更新）。
+  String roleId;
 }
 
 /// 登录认证服务：口令校验（盐 + SHA-256）、令牌签发与校验、登录审计。
@@ -71,6 +72,7 @@ class AuthService {
     id: int.parse(row['ID'] ?? '0'),
     userCode: row['USER_CODE'] ?? '',
     userName: row['USER_NAME'] ?? '',
+    roleId: '',
     userType: row['USER_TYPE'] ?? '',
     permissionLevel: row['PERMISSION_LEVEL'],
     phone: await _cipher.open(FieldCipher.phonePurpose, row['PHONE']),
@@ -150,6 +152,7 @@ class AuthService {
       await _logLogin(null, uCode, ip, 'FAIL', '用户名或密码错误');
       throw const AuthException(401, 40101, '用户名或密码错误');
     }
+
     if (status != '1') {
       await _logLogin(user.id, uCode, ip, 'FAIL', '账号已停用');
       throw const AuthException(403, 40301, '账号已被停用，请联系管理员');
@@ -162,11 +165,13 @@ class AuthService {
       await _logLogin(user.id, uCode, ip, 'FAIL', '角色参数不正确');
       throw const AuthException(400, 40001, '所选角色参数不正确');
     }
+
     await _ensureUserRole(user.id, roleIdValue, uCode, ip);
 
     await _logLogin(user.id, uCode, ip, 'SUCCESS', null);
 
     _pruneExpired();
+
     final token = _randomHex(32);
     final session = LoginSession(
       token,
@@ -181,14 +186,19 @@ class AuthService {
 
   /// 校验角色已分配给用户（SYS_USER_ROLE），未分配时写失败审计并抛 403 业务异常。
   Future<void> _ensureUserRole(int userId, int roleId, String userCode, String? ip) async {
+    if (!await _hasUserRole(userId, roleId)) {
+      await _logLogin(userId, userCode, ip, 'FAIL', '所选角色未授权');
+      throw const AuthException(403, 40301, '所选角色无效或未授权，请重新选择');
+    }
+  }
+
+  /// 查询角色是否已分配给用户（SYS_USER_ROLE 精确匹配），登录与切换角色共用。
+  Future<bool> _hasUserRole(int userId, int roleId) async {
     final result = await _db.query(
       'SELECT COUNT(*) AS CNT FROM SYS_USER_ROLE WHERE USER_ID = ? AND ROLE_ID = ?',
       [userId, roleId],
     );
-    if (int.parse(result.rowsAsMaps.first['CNT'] ?? '0') == 0) {
-      await _logLogin(userId, userCode, ip, 'FAIL', '所选角色未授权');
-      throw const AuthException(403, 40301, '所选角色无效或未授权，请重新选择');
-    }
+    return int.parse(result.rowsAsMaps.first['CNT'] ?? '0') > 0;
   }
 
   /// 查询用户名拥有的角色列表（SYS_USER × SYS_USER_ROLE × SYS_ROLE 三表联查），
@@ -208,6 +218,29 @@ class AuthService {
     return [
       for (final row in result.rowsAsMaps) {'id': row['ID'] ?? '', 'roleName': row['ROLE_NAME'] ?? ''},
     ];
+  }
+
+  /// 切换会话角色（主界面「切换角色」）：校验目标角色已分配给当前登录
+  /// 用户后，更新会话内的角色 ID（后续请求按新角色取菜单/过滤数据）。
+  /// 不写登录审计（非登录动作）；请求留痕由加密中间件统一落 SYS_OPERATION_LOG。
+  ///param token: 登录令牌
+  ///param role: 目标角色 ID
+  ///returns: 更新角色后的会话
+  ///throws: AuthException 40102 会话无效 / 40001 角色参数不正确 / 40301 角色未授权
+  Future<LoginSession> switchRole(String token, String role) async {
+    final session = await verifySession(token);
+
+    final roleIdValue = int.tryParse(role.trim());
+    if (roleIdValue == null) {
+      throw const AuthException(400, 40001, '所选角色参数不正确');
+    }
+
+    if (!await _hasUserRole(session.user.id, roleIdValue)) {
+      throw const AuthException(403, 40301, '所选角色无效或未授权，请重新选择');
+    }
+
+    session.roleId = '$roleIdValue';
+    return session;
   }
 
   /// 校验令牌并滑动续期，返回完整会话（含会话加密密钥）。

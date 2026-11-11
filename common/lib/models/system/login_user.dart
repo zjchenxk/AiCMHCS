@@ -8,7 +8,8 @@ final class LoginUser {
     required this.id,
     required this.userCode,
     required this.userName,
-    required this.userType,
+    required this.roleId,
+    this.userType,
     this.permissionLevel,
     this.phone,
     this.idCardNo,
@@ -30,7 +31,8 @@ final class LoginUser {
     id: json['id'] as int,
     userCode: json['userCode'] as String,
     userName: json['userName'] as String,
-    userType: json['userType'] as String,
+    roleId: json['roleId'] as String,
+    userType: json['userType'] as String?,
     permissionLevel: json['permissionLevel'] as String?,
     phone: json['phone'] as String?,
     idCardNo: json['idCardNo'] as String?,
@@ -55,6 +57,9 @@ final class LoginUser {
 
   /// 用户姓名
   final String userName;
+
+  /// 登录角色ID
+  final String roleId;
 
   /// 用户类别（ADMIN/DOCTOR/NURSE/TECHNICIAN）
   final String? userType;
@@ -109,6 +114,7 @@ final class LoginUser {
     int? id,
     String? userCode,
     String? userName,
+    String? roleId,
     String? userType,
     String? permissionLevel,
     String? phone,
@@ -128,6 +134,7 @@ final class LoginUser {
     id: id ?? this.id,
     userCode: userCode ?? this.userCode,
     userName: userName ?? this.userName,
+    roleId: roleId ?? this.roleId,
     userType: userType ?? this.userType,
     permissionLevel: permissionLevel ?? this.permissionLevel,
     phone: phone ?? this.phone,
@@ -150,6 +157,7 @@ final class LoginUser {
     'id': id,
     'userCode': userCode,
     'userName': userName,
+    'roleId': roleId,
     'userType': userType,
     'permissionLevel': permissionLevel,
     'phone': phone,

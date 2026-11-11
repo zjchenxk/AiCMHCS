@@ -85,7 +85,7 @@ class MenuService {
       'M.MENU_ROUTE, M.MENU_ICON, M.VISIBLE '
       'FROM SYS_ROLE_PERMISSION P '
       'JOIN SYS_MENU M ON M.ID = P.MENU_ID '
-      'WHERE P.ROLE_ID = ? AND M.ITEM_TYPE IN (?, ?) '
+      'WHERE P.ROLE_ID = ? AND M.ITEM_TYPE IN (?, ?) ' /*允许下发隐藏项目*/
       'ORDER BY M.ITEM_CODE',
       [idValue, itemTypeModule, itemTypeMenu],
     );
