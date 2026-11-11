@@ -7,8 +7,9 @@
 # 单机版 SQLite 数据文件（本地生成，勿提交）
 server/data/
 
-# dart_frog build 产物内的运行数据目录（字段加密密钥、SQLite 数据文件，勿提交）
-server/build/data/
+# dart_frog build 产物目录（生成物，改动会被下次构建覆盖，勿提交；
+# 含产物内的运行数据——字段加密密钥、SQLite 数据文件）
+server/build/
 
 # PowerDesigner 本地工作区缓存与日志（建模文件 documents/AICMHCS.pdma 本体提交）
 documents/.AICMHCS/
