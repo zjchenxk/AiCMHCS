@@ -11,6 +11,13 @@ import 'package:provider/provider.dart';
 /// 始终抛“用户名或密码错误”的伪认证服务。
 class FakeAuthService extends AuthService {
   @override
+  Future<List<Map<String, String>>> fetchUserRoles(String userCode) async {
+    return [
+      {'id': '2', 'roleName': '儿童心理医生'},
+    ];
+  }
+
+  @override
   Future<Map<String, dynamic>> login(String username, String password, String role) async {
     throw Exception('登录失败！用户名或密码错误');
   }
@@ -52,15 +59,16 @@ void main() {
       authService: FakeAuthService(),
     );
 
-    // 填写用户名、密码
+    // 填写用户名、密码并选角色（角色值域来自 FakeAuthService.fetchUserRoles）
     final textFields = find.byType(TextFormField);
     expect(textFields, findsNWidgets(2));
     await tester.enterText(textFields.at(0), 'doctor01');
     await tester.enterText(textFields.at(1), 'Doctor@123');
+    await viewModel.loadRoles();
     await tester.pump();
 
     // 直接经 ViewModel 设置角色（下拉 overlay 的 tap 命中不稳定，与本测试目标无关）
-    viewModel.selectRole('医生');
+    viewModel.selectRole('2');
     await tester.pump();
 
     // 点击登录按钮
@@ -74,21 +82,25 @@ void main() {
     expect(find.textContaining('用户名或密码错误'), findsOneWidget);
   });
 
-  testWidgets('未选科室时点击登录不发请求、不弹提示（静默校验）', (tester) async {
-    final viewModel = await pumpLoginPage(tester);
+  testWidgets('未选角色时点击登录不发请求、不弹提示（静默校验）', (tester) async {
+    final viewModel = await pumpLoginPage(
+      tester,
+      authService: FakeAuthService(),
+    );
 
     final textFields = find.byType(TextFormField);
     await tester.enterText(textFields.at(0), 'doctor01');
     await tester.enterText(textFields.at(1), 'Doctor@123');
+    await viewModel.loadRoles();
     await tester.pump();
 
     await tester.tap(find.byType(FilledButton));
     await tester.pump();
     await tester.pumpAndSettle();
 
-    // 校验失败路径：科室错误显示在输入框下方，无 SnackBar
+    // 校验失败路径：角色错误显示在下拉框下方，无 SnackBar
     expect(viewModel.errorMessage, isNull);
     expect(find.byType(SnackBar), findsNothing);
-    expect(find.textContaining('科室不能为空'), findsOneWidget);
+    expect(find.textContaining('角色不能为空'), findsOneWidget);
   });
 }

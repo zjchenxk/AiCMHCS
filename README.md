@@ -138,18 +138,32 @@ cd client && flutter run -d chrome # 或 -d web-server --web-port 5173
 ### POST /api/auth/login
 
 ```json
-// 请求
-{"username": "doctor01", "password": "Doctor@123"}
+// 请求（usercode 为登录名，role 为登录页下拉所选角色 ID）
+{"usercode": "doctor01", "password": "Doctor@123", "role": "2"}
 
 // 响应 200
 {"code":0,"message":"登录成功","data":{
-  "token":"<64位十六进制>","tokenType":"Bearer","expiresIn":7200,
-  "user":{"id":2,"username":"doctor01","realName":"王心怡",
-           "roleCode":"DOCTOR","roleName":"儿童心理医生",
-           "phone":"13900000111","lastLoginAt":"2026-09-30 15:13:58"}}}
+  "token":"<64位十六进制>","sessionKey":"<base64 32字节>","tokenType":"Bearer","expiresIn":7200,
+  "user":{"id":2,"userCode":"doctor01","userName":"李医生","userType":"DOCTOR",
+           "hospId":"1","hospName":"…","deptId":"7","deptName":"…"}}}
 ```
 
 错误：40001 参数为空（400）；40101 用户名或密码错误（401）；40301 账号停用（403）。
+
+登录审计 `SYS_LOGIN_LOG.LOGIN_IP` 的解析规则：优先取反向代理透传的
+`X-Forwarded-For`（多级取第一段），无该头时回退 TCP 连接对端真实地址
+（浏览器与 http 客户端直连时不会自行携带 XFF）。
+
+- 生产走 nginx 时记得配置 `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`，
+  否则后端只能记录到代理地址（如 `127.0.0.1`）；
+- 直连客户端理论上可伪造 XFF 头，等保审计如需强校验，可后续演进为
+  「仅信任已知代理网段传来的 XFF」（实现见 `routes/api/auth/login.dart` 的 `_clientIp`）。
+
+### GET /api/auth/roles
+
+登录前按用户名查询其拥有的角色（SYS_USER × SYS_USER_ROLE × SYS_ROLE 三表联查）：
+`?usercode=doctor01` → `{"code":0,"message":"查询成功","data":{"roles":[{"id":"2","roleName":"儿童心理医生"}]}}`。
+用户不存在与未分配角色统一返回空列表（不区分，避免账号枚举）；与登录同为明文白名单接口。
 
 ### GET /api/auth/me
 

@@ -37,4 +37,28 @@ class AuthService {
     }
     return jsonResponse['data'] as Map<String, dynamic>;
   }
+
+  /// 按用户名查询其拥有的角色列表（登录页输入用户名回车后绑定角色下拉框）。
+  ///param userCode: 用户名
+  ///returns: 角色列表 [{id, roleName}]，失败抛带 message 的异常
+  Future<List<Map<String, String>>> fetchUserRoles(String userCode) async {
+    final uri = Uri.parse('$apiUrl/api/auth/roles').replace(queryParameters: {'usercode': userCode});
+    final response = await client.get(uri, headers: {'Content-Type': 'application/json'});
+
+    final jsonResponse = jsonDecode(response.body) as Map<String, dynamic>;
+    if (!jsonResponse.containsKey('code')) {
+      throw Exception('加载角色失败！响应中未包含: code');
+    }
+    if (jsonResponse['code'] != 0) {
+      throw Exception('加载角色失败！${jsonResponse['message'] ?? '未知错误'}');
+    }
+    if (!jsonResponse.containsKey('data')) {
+      throw Exception('加载角色失败！响应中未包含: data');
+    }
+    final data = jsonResponse['data'] as Map<String, dynamic>;
+    final roles = data['roles'] as List<dynamic>? ?? const [];
+    return roles.whereType<Map>().map((role) {
+      return {'id': role['id'] as String, 'roleName': role['roleName'] as String};
+    }).toList();
+  }
 }

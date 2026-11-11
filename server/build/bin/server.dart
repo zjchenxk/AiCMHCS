@@ -36,6 +36,7 @@ import '../routes/api/campus/update.dart' as api_campus_update;
 import '../routes/api/campus/query.dart' as api_campus_query;
 import '../routes/api/campus/delete.dart' as api_campus_delete;
 import '../routes/api/campus/add.dart' as api_campus_add;
+import '../routes/api/auth/roles.dart' as api_auth_roles;
 import '../routes/api/auth/me.dart' as api_auth_me;
 import '../routes/api/auth/login.dart' as api_auth_login;
 import '../routes/api/adminDivision/update.dart' as api_admin_division_update;
@@ -150,7 +151,7 @@ Handler buildApiCampusHandler() {
 Handler buildApiAuthHandler() {
   final pipeline = const Pipeline().addMiddleware(api_auth_middleware.middleware);
   final router = Router()
-    ..all('/login', (context) => api_auth_login.onRequest(context,))..all('/me', (context) => api_auth_me.onRequest(context,));
+    ..all('/login', (context) => api_auth_login.onRequest(context,))..all('/me', (context) => api_auth_me.onRequest(context,))..all('/roles', (context) => api_auth_roles.onRequest(context,));
   return pipeline.addHandler(router);
 }
 

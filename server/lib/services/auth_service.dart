@@ -164,6 +164,25 @@ class AuthService {
     return session;
   }
 
+  /// 查询用户名拥有的角色列表（SYS_USER × SYS_USER_ROLE × SYS_ROLE 三表联查），
+  /// 供登录页输入用户名后绑定角色下拉框；用户名不存在或未分配角色时返回空列表
+  /// （不区分两种情况，避免账号枚举）。
+  ///returns: 角色列表 [{id, roleName}]，ID 为字符串形式（网关所有列以字符串返回）
+  Future<List<Map<String, String>>> listUserRoles(String userCode) async {
+    final result = await _db.query(
+      'SELECT R.ID, R.ROLE_NAME '
+      'FROM SYS_USER U '
+      'JOIN SYS_USER_ROLE UR ON UR.USER_ID = U.ID '
+      'JOIN SYS_ROLE R ON R.ID = UR.ROLE_ID '
+      'WHERE U.USER_CODE = ? '
+      'ORDER BY R.ID',
+      [userCode.trim()],
+    );
+    return [
+      for (final row in result.rowsAsMaps) {'id': row['ID'] ?? '', 'roleName': row['ROLE_NAME'] ?? ''},
+    ];
+  }
+
   /// 校验令牌并滑动续期，返回完整会话（含会话加密密钥）。
   Future<LoginSession> verifySession(String token) async {
     _pruneExpired();

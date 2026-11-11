@@ -147,6 +147,38 @@ void main() {
     );
   });
 
+  test('查询用户角色列表：三表联查返回 ID 与名称、未知用户返回空', () async {
+    // 种子：专用用户 + 两个角色 + 角色关联（SYS_USER × SYS_USER_ROLE × SYS_ROLE），
+    // 不依赖其他用例的数据（用例需可独立运行）
+    await db.execute(
+      'INSERT INTO SYS_USER '
+      '(USER_CODE, PASSWORD, USER_NAME, USER_TYPE, STATUS) '
+      "VALUES ('roleuser09', ?, '角色用户', 'DOCTOR', 1)",
+      [AuthService.makeStoredPassword('Doctor@123')],
+    );
+    await db.execute(
+      'INSERT INTO SYS_ROLE (ID, ROLE_CODE, ROLE_NAME, CREATE_TIME) VALUES '
+      "(20, 'R0020', '儿童心理医生', '2026-11-08 09:00:00'), "
+      "(10, 'R0010', '系统管理员', '2026-11-08 09:00:00')",
+    );
+    await db.execute(
+      'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID) '
+      'SELECT U.ID, R.ID FROM SYS_USER U, SYS_ROLE R '
+      "WHERE U.USER_CODE = 'roleuser09' AND R.ID IN (10, 20)",
+    );
+
+    // 角色按 ID 升序返回，ID 为字符串形式（网关所有列以字符串返回）
+    final roles = await auth.listUserRoles('roleuser09');
+    expect(roles, [
+      {'id': '10', 'roleName': '系统管理员'},
+      {'id': '20', 'roleName': '儿童心理医生'},
+    ]);
+
+    // 未分配角色的用户与不存在的用户名统一返回空列表（避免账号枚举）
+    expect(await auth.listUserRoles('admin'), isEmpty);
+    expect(await auth.listUserRoles('nobody'), isEmpty);
+  });
+
   test('会话校验、续期与登出', () async {
     final session = await auth.login('superadmin', 'Admin@123', '1');
 

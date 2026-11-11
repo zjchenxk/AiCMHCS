@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:client/utils/theme_color_mapper.dart';
 import 'package:client/view_models/login/login_view_model.dart';
@@ -16,15 +17,6 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   bool _isPasswordVisible = false;
-
-  /// 角色值域。
-  static const Map<String, String> _roles = {
-    '1': '超级管理员',
-    '2': '儿童保健科医生',
-    '3': '儿童保健科护士',
-    '4': '儿童保健科评估师',
-    '6': '系统管理员',
-  };
 
   @override
   Widget build(BuildContext context) {
@@ -147,8 +139,10 @@ class _LoginPageState extends State<LoginPage> {
                                   style: theme.textTheme.bodyMedium,
                                   textInputAction: TextInputAction.next, //设置回车为“下一步”
                                   onFieldSubmitted: (value) {
-                                    //按下回车键后，焦点移到密码输入框
-                                    FocusScope.of(context).requestFocus(loginViewModel.passwordFocusNode);
+                                    //按下回车键后：加载该用户名拥有的角色绑定到角色下拉框，
+                                    //焦点移到密码输入框（同一用户名不重复请求）
+                                    unawaited(loginViewModel.loadRoles());
+                                    loginViewModel.passwordFocusNode.requestFocus();
                                   },
                                 ),
                                 SizedBox(height: 20),
@@ -181,8 +175,10 @@ class _LoginPageState extends State<LoginPage> {
                                 ),
                                 SizedBox(height: 20),
 
-                                //角色
+                                //角色（值域来自后端：输入用户名回车后加载该用户拥有的角色）
                                 DropdownButtonFormField<String>(
+                                  //绑定 VM 选中值：VM 侧清空/重置时经 key 重建同步显示
+                                  key: ValueKey(loginViewModel.selectedRole),
                                   initialValue: loginViewModel.selectedRole,
                                   isExpanded: true,
                                   decoration: InputDecoration(
@@ -200,13 +196,15 @@ class _LoginPageState extends State<LoginPage> {
                                       borderRadius: BorderRadius.circular(12),
                                       borderSide: BorderSide(color: theme.primaryColor, width: 1.5),
                                     ),
+                                    //尚未加载到角色时给出引导提示
+                                    hintText: loginViewModel.roles.isEmpty ? '请先输入用户名' : null,
                                     errorText: loginViewModel.roleError,
                                   ),
-                                  items: _roles.entries
+                                  items: loginViewModel.roles
                                       .map(
-                                        (e) => DropdownMenuItem(
-                                          value: e.key,
-                                          child: Text(e.value, style: theme.textTheme.bodyMedium),
+                                        (role) => DropdownMenuItem(
+                                          value: role['id'],
+                                          child: Text(role['roleName'] ?? '', style: theme.textTheme.bodyMedium),
                                         ),
                                       )
                                       .toList(),

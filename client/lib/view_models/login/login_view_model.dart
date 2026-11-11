@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:client/main.dart';
 import 'package:client/services/auth_service.dart';
 import 'package:client/utils/log_helper.dart';
@@ -10,6 +12,8 @@ class LoginViewModel extends ChangeNotifier {
     _userCodeFocusNode.addListener(() {
       if (!_userCodeFocusNode.hasFocus) {
         _validateUserCode();
+        //用户名框失焦（回车跳格/点击别处）即刷新该用户名拥有的角色列表
+        unawaited(loadRoles());
       }
     });
 
@@ -29,6 +33,13 @@ class LoginViewModel extends ChangeNotifier {
 
   String? _selectedRole;
 
+  ///该用户名拥有的角色列表（用户名回车/失焦后从后端加载，绑定角色下拉框）
+  List<Map<String, String>> _roles = const [];
+  bool _isLoadingRoles = false;
+
+  ///已成功加载角色列表对应的用户名（同一用户名不重复请求）
+  String? _rolesLoadedUser;
+
   final FocusNode _userCodeFocusNode = FocusNode();
   final FocusNode _passwordFocusNode = FocusNode();
 
@@ -42,6 +53,9 @@ class LoginViewModel extends ChangeNotifier {
   TextEditingController get passwordController => _passwordController;
 
   String? get selectedRole => _selectedRole;
+
+  List<Map<String, String>> get roles => _roles;
+  bool get isLoadingRoles => _isLoadingRoles;
 
   FocusNode get userCodeFocusNode => _userCodeFocusNode;
   FocusNode get passwordFocusNode => _passwordFocusNode;
@@ -59,6 +73,53 @@ class LoginViewModel extends ChangeNotifier {
   void selectRole(String? role) {
     _selectedRole = role;
     _validateRole(); //选择后立即重新验证
+  }
+
+  /// 按当前用户名从后端加载其拥有的角色列表并绑定角色下拉框。
+  /// 同一用户名不重复请求；用户名变更后原选中角色不在新列表中时清空选择。
+  ///return 加载后的角色列表是否可用（非空）
+  Future<bool> loadRoles() async {
+    final userCode = _userCodeController.text.trim();
+    if (userCode.isEmpty) {
+      //用户名为空时无可查角色，清空下拉框回到初始状态
+      _clearRoles();
+      notifyListeners();
+      return false;
+    }
+    if (_isLoadingRoles || _rolesLoadedUser == userCode) {
+      return _roles.isNotEmpty;
+    }
+
+    _isLoadingRoles = true;
+    notifyListeners();
+
+    try {
+      final service = _authService ?? getIt<AuthService>();
+      final roles = await service.fetchUserRoles(userCode);
+      _roles = roles;
+      _rolesLoadedUser = userCode;
+      if (_selectedRole != null && !_roles.any((r) => r['id'] == _selectedRole)) {
+        _selectedRole = null; //原选中角色不属于当前用户名，清空选择
+      }
+      _roleError = roles.isEmpty ? '该用户名暂无可选角色' : null;
+      return roles.isNotEmpty;
+    } catch (e, st) {
+      //加载失败时清空角色与选择，错误提示挂在角色下拉框下
+      LogHelper.error('client:LoginViewModel.loadRoles', e, st);
+      _clearRoles();
+      _roleError = '加载角色列表失败，请稍后重试';
+      return false;
+    } finally {
+      _isLoadingRoles = false;
+      notifyListeners();
+    }
+  }
+
+  /// 清空角色列表、加载标记与已选角色（不清理校验错误，由调用方决定）。
+  void _clearRoles() {
+    _roles = const [];
+    _rolesLoadedUser = null;
+    _selectedRole = null;
   }
 
   @override
@@ -110,27 +171,36 @@ class LoginViewModel extends ChangeNotifier {
       if (_formKey.currentState?.validate() ?? false) {
         _validateUserCode();
         _validatePassword();
-        _validateRole();
 
-        if (_userCodeError == null && _passwordError == null && _roleError == null) {
+        if (_userCodeError == null && _passwordError == null) {
           final userCode = _userCodeController.text;
-          final password = _passwordController.text;
-          final role = _selectedRole;
+          //用户名改动后未失焦直接点登录时，角色列表可能尚未刷新，登录前兜底补加载
+          if (_rolesLoadedUser != userCode.trim()) {
+            await loadRoles();
+          }
+          if (_roleError == null) {
+            _validateRole();
+          }
 
-          //登录系统
-          final service = _authService ?? getIt<AuthService>();
-          final data = await service.login(userCode, password, role!);
+          if (_userCodeError == null && _passwordError == null && _roleError == null) {
+            final password = _passwordController.text;
+            final role = _selectedRole;
 
-          token = data['token'] as String;
-          sessionKey = data['sessionKey'] as String;
+            //登录系统
+            final service = _authService ?? getIt<AuthService>();
+            final data = await service.login(userCode, password, role!);
 
-          //解析后端下发的用户信息写入全局（供主界面经 MainViewModel 同步展示）
-          loginUser = LoginUser.fromJson(data['user'] as Map<String, dynamic>);
+            token = data['token'] as String;
+            sessionKey = data['sessionKey'] as String;
 
-          _isLoading = false;
-          notifyListeners();
+            //解析后端下发的用户信息写入全局（供主界面经 MainViewModel 同步展示）
+            loginUser = LoginUser.fromJson(data['user'] as Map<String, dynamic>);
 
-          return true;
+            _isLoading = false;
+            notifyListeners();
+
+            return true;
+          }
         }
       }
 
@@ -156,7 +226,8 @@ class LoginViewModel extends ChangeNotifier {
   void reset() {
     _userCodeController.clear();
     _passwordController.clear();
-    _selectedRole = null;
+    _clearRoles();
+    _isLoadingRoles = false;
     _userCodeError = null;
     _passwordError = null;
     _roleError = null;

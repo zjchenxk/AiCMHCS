@@ -18,12 +18,12 @@ import 'package:server/utils/log_sanitizer.dart';
 /// 命中段再次执行时 body 已被消费（shelf 请求体只能读一次），非 GET
 /// 请求会全部报「请求体必须是合法的加密信封 JSON」。
 ///
-/// 白名单接口（登录、API 自描述索引）走明文；其余请求凭 Authorization
-/// 中的 token 找到会话密钥，先解开请求体信封、把明文经 provider 注入
+/// 白名单接口（登录、登录前拉取可选角色、API 自描述索引）走明文；其余请求凭
+/// Authorization 中的 token 找到会话密钥，先解开请求体信封、把明文经 provider 注入
 /// 管线交给下游路由（业务路由用 context.read<ApiBody>().json 取参），
 /// 再把路由响应整体封入信封返回。无有效会话或解密失败时返回明文错误
 /// （此时客户端没有可用密钥，无法解密错误响应）。
-const _plaintextPaths = {'/api/auth/login', '/api'};
+const _plaintextPaths = {'/api/auth/login', '/api/auth/roles', '/api'};
 
 /// 请求留痕跳过的路径：日志上报接口自身（否则每条客户端日志都会
 /// 再产生一条请求日志，形成放大）。

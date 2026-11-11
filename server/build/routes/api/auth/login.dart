@@ -35,7 +35,7 @@ Future<Response> onRequest(RequestContext context) async {
     return _error(400, 40001, '用户名、密码和角色不能为空');
   }
 
-  final ip = context.request.headers['x-forwarded-for']?.split(',').first.trim();
+  final ip = _clientIp(context);
 
   unawaited(
     LogHelper.info('server:routes/api/auth/login', content: '用户 $userCode 尝试登录，角色 $role，IP $ip'),
@@ -59,6 +59,22 @@ Future<Response> onRequest(RequestContext context) async {
     );
   } on AuthException catch (e) {
     return _error(e.httpStatus, e.code, e.message);
+  }
+}
+
+/// 解析客户端 IP：优先取反向代理透传的 X-Forwarded-For（多级取第一个），
+/// 无该头时回退 TCP 连接对端真实地址（本地/内网直连场景——浏览器与 http
+/// 客户端不会自行携带 X-Forwarded-For）。
+///returns: 客户端 IP，两者都取不到（如框架测试请求无连接信息）时为 null
+String? _clientIp(RequestContext context) {
+  final forwarded = context.request.headers['x-forwarded-for']?.split(',').first.trim();
+  if (forwarded != null && forwarded.isNotEmpty) {
+    return forwarded;
+  }
+  try {
+    return context.request.connectionInfo.remoteAddress.address;
+  } catch (_) {
+    return null;
   }
 }
 
