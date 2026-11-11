@@ -31,6 +31,7 @@ Response onRequest(RequestContext context) {
           {'method': 'POST', 'path': '/api/menu/add', 'desc': '新增菜单项目（itemCode 必填全表唯一；类型为菜单时路由必填）'},
           {'method': 'POST', 'path': '/api/menu/update', 'desc': '修改菜单项目（id 与上级不可改，树形结构调整走增删）'},
           {'method': 'POST', 'path': '/api/menu/delete', 'desc': '删除单个菜单项目（存在下级项目时须先删除下级）'},
+          {'method': 'POST', 'path': '/api/menu/queryVisible', 'desc': '查询可见菜单项目（前端构建模块→菜单→操作树）'},
           {'method': 'POST', 'path': '/api/role/query', 'desc': '角色查询（id 查详情；hospId 查指定医院下的角色列表）'},
           {'method': 'POST', 'path': '/api/role/add', 'desc': '新增角色（hospId 必填；编码/名称同医院内唯一）'},
           {'method': 'POST', 'path': '/api/role/update', 'desc': '修改角色（id 与所属医院不可改）'},

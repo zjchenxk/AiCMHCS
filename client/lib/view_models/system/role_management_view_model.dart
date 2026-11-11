@@ -139,10 +139,10 @@ class RoleManagementViewModel extends ChangeNotifier {
     }
   }
 
-  /// 重拉菜单全量列表并重建权限树（逐级按 ITEM_CODE 排序，展开状态
+  /// 重拉菜单可见列表并重建权限树（逐级按 ITEM_CODE 排序，展开状态
   /// 保留）；勾选集合过滤为仅现存菜单（菜单管理删项后防悬空勾选）。
   Future<void> _refreshMenus() async {
-    final menus = await _menuService.queryAll();
+    final menus = await _menuService.queryVisible();
     _menus
       ..clear()
       ..addAll(menus);
@@ -275,11 +275,7 @@ class RoleManagementViewModel extends ChangeNotifier {
 
   /// 新增角色到登录用户所属医院，成功后重拉列表并选中新角色（权限
   /// 为空，待右侧勾选保存）。
-  Future<bool> createRole({
-    required String roleCode,
-    required String roleName,
-    String? remark,
-  }) async {
+  Future<bool> createRole({required String roleCode, required String roleName, String? remark}) async {
     final hospId = _hospId;
     if (hospId == null || hospId.isEmpty) return false;
     _busy = true;

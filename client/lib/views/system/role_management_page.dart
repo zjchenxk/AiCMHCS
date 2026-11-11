@@ -14,11 +14,7 @@ import 'package:provider/provider.dart';
 /// 按 ITEM_CODE 逐级排序，复选框勾选级联，支持全选/取消全选与整体
 /// 保存（后端全量覆盖）。
 class RoleManagementPage extends BasePage {
-  const RoleManagementPage({
-    super.key,
-    required super.loginUser,
-    required super.child,
-  });
+  const RoleManagementPage({super.key, required super.loginUser, required super.child});
 
   @override
   State<RoleManagementPage> createState() => _RoleManagementPageState();
@@ -239,18 +235,10 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
   /// 递归构建权限树节点行：复选框（三态）+ 图标 + 名称 + 编码，
   /// 行尾展开/折叠箭头；点击复选框或行整棵子树级联勾选/取消。
   /// 图标优先取菜单设置的 MENU_ICON，未设置按类型回退。
-  Widget _buildPermTile(
-    BuildContext context,
-    RoleManagementViewModel viewModel,
-    MenuTreeNode node,
-    int depth,
-  ) {
+  Widget _buildPermTile(BuildContext context, RoleManagementViewModel viewModel, MenuTreeNode node, int depth) {
     final theme = Theme.of(context);
     final state = viewModel.nodeCheckState(node);
-    final icon = menuIconOrFallback(
-      node.menu.menuIcon,
-      fallback: menuItemTypeIcon(node.menu.itemType),
-    );
+    final icon = menuIconOrFallback(node.menu.menuIcon, fallback: menuItemTypeIcon(node.menu.itemType));
     return Column(
       children: [
         InkWell(

@@ -66,6 +66,15 @@ class MenuService {
     return result.rowsAsMaps.map(_fromRow).toList(growable: false);
   }
 
+  /// 查询可见菜单项目（按上级项目、创建顺序），供前端构建树。
+  Future<List<Menu>> listVisible() async {
+    final result = await _db.query(
+      'SELECT ID, PARENT_ID, ITEM_CODE, ITEM_NAME, ITEM_TYPE, MENU_ROUTE, '
+      "MENU_ICON, VISIBLE FROM SYS_MENU WHERE VISIBLE = '1' ORDER BY PARENT_ID, ID",
+    );
+    return result.rowsAsMaps.map(_fromRow).toList(growable: false);
+  }
+
   /// 按 ID 查询单个菜单项目，不存在时抛业务异常。
   Future<Menu> getById(String id) async {
     final result = await _db.query(

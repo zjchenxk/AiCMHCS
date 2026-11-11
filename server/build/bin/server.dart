@@ -19,6 +19,7 @@ import '../routes/api/role/permissionQuery.dart' as api_role_permission_query;
 import '../routes/api/role/delete.dart' as api_role_delete;
 import '../routes/api/role/add.dart' as api_role_add;
 import '../routes/api/menu/update.dart' as api_menu_update;
+import '../routes/api/menu/queryVisible.dart' as api_menu_query_visible;
 import '../routes/api/menu/query.dart' as api_menu_query;
 import '../routes/api/menu/delete.dart' as api_menu_delete;
 import '../routes/api/menu/add.dart' as api_menu_add;
@@ -114,7 +115,7 @@ Handler buildApiRoleHandler() {
 Handler buildApiMenuHandler() {
   final pipeline = const Pipeline().addMiddleware(api_menu_middleware.middleware);
   final router = Router()
-    ..all('/add', (context) => api_menu_add.onRequest(context,))..all('/delete', (context) => api_menu_delete.onRequest(context,))..all('/query', (context) => api_menu_query.onRequest(context,))..all('/update', (context) => api_menu_update.onRequest(context,));
+    ..all('/add', (context) => api_menu_add.onRequest(context,))..all('/delete', (context) => api_menu_delete.onRequest(context,))..all('/query', (context) => api_menu_query.onRequest(context,))..all('/queryVisible', (context) => api_menu_query_visible.onRequest(context,))..all('/update', (context) => api_menu_update.onRequest(context,));
   return pipeline.addHandler(router);
 }
 

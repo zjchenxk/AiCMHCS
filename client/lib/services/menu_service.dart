@@ -16,6 +16,13 @@ class MenuService {
     return list.map((e) => Menu.fromJson(e as Map<String, dynamic>)).toList();
   }
 
+  /// 获取可见菜单项目（扁平，按上级项目、创建顺序）。
+  Future<List<Menu>> queryVisible() async {
+    final data = await _base.post('/api/menu/queryVisible', const {});
+    final list = data['menus'] as List<dynamic>? ?? const [];
+    return list.map((e) => Menu.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
   /// 查询单个菜单项目。
   ///param id: 菜单项目 ID
   Future<Menu> getById(String id) async {
@@ -31,15 +38,7 @@ class MenuService {
   ///param menuRoute: 菜单路由（类型为菜单时必填）
   ///param menuIcon: 菜单图标名
   ///returns: 新增后的菜单项目（含生成的 ID）
-  Future<Menu> create({
-    required String itemCode,
-    required String itemName,
-    required String itemType,
-    required String visible,
-    String? parentId,
-    String? menuRoute,
-    String? menuIcon,
-  }) async {
+  Future<Menu> create({required String itemCode, required String itemName, required String itemType, required String visible, String? parentId, String? menuRoute, String? menuIcon}) async {
     final data = await _base.post('/api/menu/add', {
       'itemCode': itemCode,
       'itemName': itemName,
