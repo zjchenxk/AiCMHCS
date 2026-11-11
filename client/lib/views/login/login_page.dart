@@ -229,8 +229,11 @@ class _LoginPageState extends State<LoginPage> {
                                             if (!context.mounted) return;
 
                                             if (success) {
-                                              //登录成功，将全局 loginUser 同步进主界面工作副本
-                                              context.read<MainViewModel>().syncLoginUser();
+                                              //登录成功：所选角色的权限菜单转交主界面构建侧边栏，
+                                              //并将全局 loginUser 同步进主界面工作副本
+                                              context.read<MainViewModel>()
+                                                ..setRoleMenus(loginViewModel.roleMenus)
+                                                ..syncLoginUser();
 
                                               //登录成功，替换路由跳转到主页
                                               Navigator.pushReplacement(

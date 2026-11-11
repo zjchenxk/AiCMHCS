@@ -14,6 +14,7 @@ import 'package:client/view_models/main/main_view_model.dart';
 import 'package:client/views/login/login_page.dart';
 import 'package:client/views/main/change_password_dialog.dart';
 import 'package:flutter_svg/svg.dart';
+import 'dart:convert';
 import 'dart:ui';
 
 import 'package:provider/provider.dart';
@@ -216,12 +217,12 @@ class _MainPageState extends State<MainPage> {
   }
 
   Widget _buildHeaderActions(ThemeData theme) {
-    return Selector<MainViewModel, String>(
-      selector: (context, mainViewModel) => mainViewModel.userName,
-      builder: (context, userName, _) {
+    return Selector<MainViewModel, LoginUser>(
+      selector: (context, mainViewModel) => mainViewModel.loginUser,
+      builder: (context, loginUser, _) {
         return Row(
           children: [
-            _buildHeaderUserMenu(theme, userName),
+            _buildHeaderUserMenu(theme, loginUser),
             _buildHeaderSettingsMenu(theme),
             _buildHeaderHelpMenu(theme),
             const SizedBox(width: 8),
@@ -232,7 +233,8 @@ class _MainPageState extends State<MainPage> {
   }
 
   // 登录用户管理菜单
-  Widget _buildHeaderUserMenu(ThemeData theme, String userName) {
+  Widget _buildHeaderUserMenu(ThemeData theme, LoginUser loginUser) {
+    final userName = loginUser.userName;
     return MenuAnchor(
       controller: _userMenuController,
       // 菜单整体样式：白底、圆角、描边，与系统视觉一致
@@ -316,8 +318,10 @@ class _MainPageState extends State<MainPage> {
             CircleAvatar(
               radius: 16,
               backgroundColor: theme.colorScheme.primary,
+              // 设置了头像时显示真实头像（base64 解码失败回退姓名首字）
+              foregroundImage: _decodeAvatar(loginUser.avatarImage),
               child: Text(
-                userName.characters.first,
+                userName.isEmpty ? '?' : userName.characters.first,
                 style: TextStyle(
                   color: theme.colorScheme.onPrimary,
                   fontWeight: FontWeight.bold,
@@ -334,6 +338,18 @@ class _MainPageState extends State<MainPage> {
         ),
       ),
     );
+  }
+
+  /// 解析头像 base64（SYS_USER.AVATAR_IMAGE 为 ImageHelper 生成的裸
+  /// base64）；未设置或数据无效时返回 null，CircleAvatar 回退显示
+  /// foregroundImage 之下的姓名首字。
+  MemoryImage? _decodeAvatar(String? base64Str) {
+    if (base64Str == null || base64Str.isEmpty) return null;
+    try {
+      return MemoryImage(base64Decode(base64Str));
+    } catch (_) {
+      return null;
+    }
   }
 
   // 设置菜单
@@ -617,18 +633,19 @@ class _MainPageState extends State<MainPage> {
                 // 菜单列表
                 Expanded(
                   child: isWide
-                      // 展开态：给它完整的 223px 内部宽度，
-                      // 面板还没拉开时由 ClipRRect 裁掉，不会溢出
+                      // 展开态：固定 239px 内部宽度（240 − 左右边框各 0.5），
+                      // 与上方搜索框的 12px 水平内边距一致 → 菜单项与搜索框
+                      // 左右边缘对齐；面板未拉开时由 ClipRRect 裁掉溢出部分
                       ? OverflowBox(
                           alignment: AlignmentDirectional.centerStart,
                           minWidth: 0,
-                          maxWidth: 223, // 240 − margin16 − border1
+                          maxWidth: 239,
                           child: SizedBox(
-                            width: 223,
+                            width: 239,
                             child: ListView.builder(
                               padding: const EdgeInsets.symmetric(
                                 vertical: 4,
-                                horizontal: 8,
+                                horizontal: 12,
                               ),
                               itemCount: menus.length,
                               itemBuilder: (context, index) => _buildMenuItem(

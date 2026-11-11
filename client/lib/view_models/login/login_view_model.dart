@@ -40,6 +40,10 @@ class LoginViewModel extends ChangeNotifier {
   ///已成功加载角色列表对应的用户名（同一用户名不重复请求）
   String? _rolesLoadedUser;
 
+  ///本次登录所选角色下发的菜单项目（登录响应携带，登录页跳转前
+  ///交 MainViewModel 构建侧边栏；登录失败/重置时清空）
+  List<Menu> _roleMenus = const [];
+
   final FocusNode _userCodeFocusNode = FocusNode();
   final FocusNode _passwordFocusNode = FocusNode();
 
@@ -56,6 +60,9 @@ class LoginViewModel extends ChangeNotifier {
 
   List<Map<String, String>> get roles => _roles;
   bool get isLoadingRoles => _isLoadingRoles;
+
+  ///本次登录所选角色下发的菜单项目（登录成功后填充）
+  List<Menu> get roleMenus => _roleMenus;
 
   FocusNode get userCodeFocusNode => _userCodeFocusNode;
   FocusNode get passwordFocusNode => _passwordFocusNode;
@@ -196,6 +203,10 @@ class LoginViewModel extends ChangeNotifier {
             //解析后端下发的用户信息写入全局（供主界面经 MainViewModel 同步展示）
             loginUser = LoginUser.fromJson(data['user'] as Map<String, dynamic>);
 
+            //解析所选角色下发的菜单项目（主界面侧边栏数据源，登录页跳转前转交）
+            final menusJson = data['menus'] as List<dynamic>? ?? const [];
+            _roleMenus = menusJson.whereType<Map>().map((m) => Menu.fromJson(Map<String, dynamic>.from(m))).toList();
+
             _isLoading = false;
             notifyListeners();
 
@@ -228,6 +239,7 @@ class LoginViewModel extends ChangeNotifier {
     _passwordController.clear();
     _clearRoles();
     _isLoadingRoles = false;
+    _roleMenus = const [];
     _userCodeError = null;
     _passwordError = null;
     _roleError = null;

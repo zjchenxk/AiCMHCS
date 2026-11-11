@@ -181,14 +181,15 @@ CREATE TABLE SYS_DEPARTMENT (
     expect(underCampus.campusId, '3');
   });
 
-  test('create：医院已设置院区时禁止直挂医院下', () async {
-    await expectLater(
-      service.create(hospId: '2', code: 'D9999', name: '直挂科'),
-      throwsA(isA<DepartmentException>().having((e) => e.message, 'message', '该医院已设置院区，科室必须挂在院区下')),
-    );
+  test('create：医院已设置院区时也允许直挂医院下（2026-11-10 取消强制挂院区限制）', () async {
+    final direct = await service.create(hospId: '2', code: 'D9999', name: '直挂科');
+    expect(direct.id, '5');
+    expect(direct.hospId, '2');
+    expect(direct.campusId, isNull);
+    expect(direct.parentId, isNull);
     // 未设置院区的医院不受影响
     final ok = await service.create(hospId: '1', code: 'D0005', name: '发育行为科');
-    expect(ok.id, '5');
+    expect(ok.id, '6');
   });
 
   test('create：院区不存在或不属于该医院 / 上级科室不存在或跨医院均报错', () async {

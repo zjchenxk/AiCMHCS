@@ -1,8 +1,8 @@
 // 登录成功用户信息接线测试：
-// 表单校验通过 → AuthService 返回 token+user → LoginViewModel 写入全局 loginUser →
-// 登录页跳转前触发 MainViewModel.syncLoginUser() → 工作副本刷新为真实身份
-// （医院/院区/科室名称优先用登录接口关联下发的真实数据，
-// 未设置的字段保底本地默认示例）。
+// 表单校验通过 → AuthService 返回 token+user+menus → LoginViewModel 写入全局
+// loginUser 并暂存角色菜单 → 登录页跳转前触发 MainViewModel.setRoleMenus +
+// syncLoginUser() → 侧边栏菜单按角色权限构建、工作副本刷新为真实身份
+// （医院/院区/科室为登录接口关联下发的真实数据，未设置的字段保持 null）。
 import 'package:client/main.dart';
 import 'package:client/providers/font_provider.dart';
 import 'package:client/providers/theme_provider.dart';
@@ -52,6 +52,28 @@ class FakeAuthService extends AuthService {
         'deptId': '7',
         'deptName': '儿童心理科',
       },
+      'menus': [
+        {
+          'id': '1',
+          'parentId': null,
+          'itemCode': 'SYS01',
+          'itemName': '系统管理',
+          'itemType': '1',
+          'menuRoute': null,
+          'menuIcon': 'settings',
+          'visible': '1',
+        },
+        {
+          'id': '2',
+          'parentId': '1',
+          'itemCode': 'SYS0101',
+          'itemName': '医院管理',
+          'itemType': '2',
+          'menuRoute': '/system/hospital',
+          'menuIcon': 'domain',
+          'visible': '1',
+        },
+      ],
     };
   }
 }
@@ -144,9 +166,15 @@ void main() {
 
     // 顶栏用户菜单数据源使用真实姓名
     expect(mainViewModel.userName, '李医生');
+
+    // 侧边栏菜单按登录响应下发的角色菜单构建（模块→菜单树，含路由）
+    expect(mainViewModel.menus, hasLength(1));
+    expect(mainViewModel.menus.first.title, '系统管理');
+    expect(mainViewModel.menus.first.children.single.title, '医院管理');
+    expect(mainViewModel.menus.first.children.single.route, '/system/hospital');
   });
 
-  test('未设置归属的账号：工作副本名称字段保底本地默认示例', () {
+  test('未设置归属的账号：工作副本保持真实值，未设置字段为 null', () {
     loginUser = const LoginUser(
       id: 3,
       userCode: 'teacher01',
@@ -156,8 +184,11 @@ void main() {
     final vm = MainViewModel();
     vm.syncLoginUser();
     expect(vm.loginUser.userName, '李老师');
-    expect(vm.loginUser.hospName, '首都医科大学附属北京儿童医院');
-    expect(vm.loginUser.campusName, '顺义院区');
-    expect(vm.loginUser.deptName, '儿童保健科');
+    expect(vm.loginUser.hospId, isNull);
+    expect(vm.loginUser.hospName, isNull);
+    expect(vm.loginUser.campusId, isNull);
+    expect(vm.loginUser.campusName, isNull);
+    expect(vm.loginUser.deptId, isNull);
+    expect(vm.loginUser.deptName, isNull);
   });
 }

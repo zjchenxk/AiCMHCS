@@ -210,11 +210,11 @@ void main() {
     await tester.pumpWidget(_wrapWidget(viewModel));
     await tester.pumpAndSettle();
 
-    // 医院根已有院区无菜单；两个菜单依次属于院区节点与科室节点，
-    // 树按层序渲染，第一个属于院区节点
+    // 三个菜单依次属于医院根、院区节点与科室节点（2026-11-10 起医院根
+    // 也允许新增科室），树按层序渲染，第二个属于院区节点
     final menus = find.byTooltip('更多操作...');
-    expect(menus, findsNWidgets(2));
-    await tester.tap(menus.first);
+    expect(menus, findsNWidgets(3));
+    await tester.tap(menus.at(1));
     await tester.pumpAndSettle();
     await tester.tap(find.text('新增科室'));
     await tester.pumpAndSettle();
@@ -295,13 +295,14 @@ void main() {
     await tester.pumpWidget(_wrapWidget(viewModel));
     await tester.pumpAndSettle();
 
-    // 先选中第一个科室，再从其菜单删除（第 2 个菜单属于科室 1：
-    // 第 1 个属于院区节点）
+    // 先选中第一个科室，再从其菜单删除（菜单依次属于医院根、院区、
+    // 科室 1、科室 2：2026-11-10 起医院根也有「新增科室」菜单，第 3 个
+    // 属于科室 1）
     await tester.tap(find.text('儿童保健科'));
     await tester.pumpAndSettle();
     final menus = find.byTooltip('更多操作...');
-    expect(menus, findsNWidgets(3));
-    await tester.tap(menus.at(1));
+    expect(menus, findsNWidgets(4));
+    await tester.tap(menus.at(2));
     await tester.pumpAndSettle();
     await tester.tap(find.text('删除'));
     await tester.pumpAndSettle();

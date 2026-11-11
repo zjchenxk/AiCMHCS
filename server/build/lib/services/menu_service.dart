@@ -75,6 +75,23 @@ class MenuService {
     return result.rowsAsMaps.map(_fromRow).toList(growable: false);
   }
 
+  /// 查询指定角色已授权的模块与菜单项目（ITEM_TYPE 限 1-模块、
+  /// 2-菜单，操作类项目不下发），按项目编码排序，
+  /// 供登录响应携带、主界面侧边栏构建「模块→菜单」树。
+  Future<List<Menu>> listRoleAll(String roleId) async {
+    final idValue = _toInt(roleId, '角色ID');
+    final result = await _db.query(
+      'SELECT M.ID, M.PARENT_ID, M.ITEM_CODE, M.ITEM_NAME, M.ITEM_TYPE, '
+      'M.MENU_ROUTE, M.MENU_ICON, M.VISIBLE '
+      'FROM SYS_ROLE_PERMISSION P '
+      'JOIN SYS_MENU M ON M.ID = P.MENU_ID '
+      'WHERE P.ROLE_ID = ? AND M.ITEM_TYPE IN (?, ?) '
+      'ORDER BY M.ITEM_CODE',
+      [idValue, itemTypeModule, itemTypeMenu],
+    );
+    return result.rowsAsMaps.map(_fromRow).toList(growable: false);
+  }
+
   /// 按 ID 查询单个菜单项目，不存在时抛业务异常。
   Future<Menu> getById(String id) async {
     final result = await _db.query(

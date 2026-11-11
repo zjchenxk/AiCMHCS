@@ -26,8 +26,8 @@ final class AuthException implements Exception {
 
 /// 登录会话（内存版；重启后失效，生产环境应落库或改用 Redis）。
 final class LoginSession {
-  /// 构造函数：注入令牌、会话加密密钥、登录用户、过期时间。
-  LoginSession(this.token, this.sessionKey, this.user, this.expiresAt);
+  /// 构造函数：注入令牌、会话加密密钥、登录用户、过期时间、所选角色 ID。
+  LoginSession(this.token, this.sessionKey, this.user, this.expiresAt, this.roleId);
 
   /// 令牌（base64 的 32 字节随机数，随登录下发，与会话加密密钥同生命周期）。
   final String token;
@@ -40,6 +40,9 @@ final class LoginSession {
 
   /// 会话过期时间（滑动续期）。
   DateTime expiresAt;
+
+  /// 登录时所选角色 ID（字符串形式；已校验属于该用户，供按角色取菜单）。
+  final String roleId;
 }
 
 /// 登录认证服务：口令校验（盐 + SHA-256）、令牌签发与校验、登录审计。
@@ -76,6 +79,7 @@ class AuthService {
     mchisUserCode: row['MCHIS_USER_CODE'],
     certId: row['CERT_ID'],
     signatureImage: row['SIGNATURE_IMAGE'],
+    avatarImage: row['AVATAR_IMAGE'],
     deptId: row['DEPT_ID'],
     deptName: row['DEPT_NAME'],
     campusId: row['CAMPUS_ID'],
@@ -117,7 +121,8 @@ class AuthService {
     final result = await _db.query(
       'SELECT U.ID, U.USER_CODE, U.USER_NAME, U.PASSWORD, U.USER_TYPE, '
       'U.PERMISSION_LEVEL, U.PHONE, U.ID_CARD_NO, U.HIS_USER_CODE, '
-      'U.MCHIS_USER_CODE, U.CERT_ID, U.SIGNATURE_IMAGE, U.DEPT_ID, '
+      'U.MCHIS_USER_CODE, U.CERT_ID, U.SIGNATURE_IMAGE, U.AVATAR_IMAGE, '
+      'U.DEPT_ID, '
       'D.NAME AS DEPT_NAME, D.CAMPUS_ID AS CAMPUS_ID, C.NAME AS CAMPUS_NAME, '
       'U.HOSP_ID, H.NAME AS HOSP_NAME, U.STATUS '
       'FROM SYS_USER U '
@@ -150,6 +155,15 @@ class AuthService {
       throw const AuthException(403, 40301, '账号已被停用，请联系管理员');
     }
 
+    // 所选角色必须真实分配给该用户（防凭任意角色 ID 冒取他人角色菜单），
+    // 校验通过后记入会话，供主界面按角色取菜单。
+    final roleIdValue = int.tryParse(role.trim());
+    if (roleIdValue == null) {
+      await _logLogin(user.id, uCode, ip, 'FAIL', '角色参数不正确');
+      throw const AuthException(400, 40001, '所选角色参数不正确');
+    }
+    await _ensureUserRole(user.id, roleIdValue, uCode, ip);
+
     await _logLogin(user.id, uCode, ip, 'SUCCESS', null);
 
     _pruneExpired();
@@ -159,9 +173,22 @@ class AuthService {
       SecurePayload.generateSessionKey(),
       user,
       DateTime.now().add(sessionTtl),
+      '$roleIdValue',
     );
     _sessions[token] = session;
     return session;
+  }
+
+  /// 校验角色已分配给用户（SYS_USER_ROLE），未分配时写失败审计并抛 403 业务异常。
+  Future<void> _ensureUserRole(int userId, int roleId, String userCode, String? ip) async {
+    final result = await _db.query(
+      'SELECT COUNT(*) AS CNT FROM SYS_USER_ROLE WHERE USER_ID = ? AND ROLE_ID = ?',
+      [userId, roleId],
+    );
+    if (int.parse(result.rowsAsMaps.first['CNT'] ?? '0') == 0) {
+      await _logLogin(userId, userCode, ip, 'FAIL', '所选角色未授权');
+      throw const AuthException(403, 40301, '所选角色无效或未授权，请重新选择');
+    }
   }
 
   /// 查询用户名拥有的角色列表（SYS_USER × SYS_USER_ROLE × SYS_ROLE 三表联查），

@@ -16,6 +16,7 @@ final class LoginUser {
     this.mchisUserCode,
     this.certId,
     this.signatureImage,
+    this.avatarImage,
     this.deptId,
     this.deptName,
     this.campusId,
@@ -37,6 +38,7 @@ final class LoginUser {
     mchisUserCode: json['mchisUserCode'] as String?,
     certId: json['certId'] as String?,
     signatureImage: json['signatureImage'] as String?,
+    avatarImage: json['avatarImage'] as String?,
     deptId: json['deptId'] as String?,
     deptName: json['deptName'] as String?,
     campusId: json['campusId'] as String?,
@@ -81,6 +83,9 @@ final class LoginUser {
   ///手写签名图片BASE64
   final String? signatureImage;
 
+  ///用户头像图片BASE64
+  final String? avatarImage;
+
   /// 科室 ID
   final String? deptId;
 
@@ -112,6 +117,7 @@ final class LoginUser {
     String? mchisUserCode,
     String? certId,
     String? signatureImage,
+    String? avatarImage,
     String? deptId,
     String? deptName,
     String? campusId,
@@ -130,6 +136,7 @@ final class LoginUser {
     mchisUserCode: mchisUserCode ?? this.mchisUserCode,
     certId: certId ?? this.certId,
     signatureImage: signatureImage ?? this.signatureImage,
+    avatarImage: avatarImage ?? this.avatarImage,
     deptId: deptId ?? this.deptId,
     deptName: deptName ?? this.deptName,
     campusId: campusId ?? this.campusId,
@@ -151,6 +158,7 @@ final class LoginUser {
     'mchisUserCode': mchisUserCode,
     'certId': certId,
     'signatureImage': signatureImage,
+    'avatarImage': avatarImage,
     'deptId': deptId,
     'deptName': deptName,
     'campusId': campusId,

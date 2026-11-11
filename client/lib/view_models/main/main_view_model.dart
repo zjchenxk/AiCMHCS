@@ -1,6 +1,7 @@
 import 'package:client/main.dart' as app;
 import 'package:client/models/child_info.dart';
 import 'package:client/models/menu_item.dart';
+import 'package:client/utils/menu_icons.dart';
 import 'package:common/model.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -14,38 +15,16 @@ class MainViewModel extends ChangeNotifier {
     ('D005', '产科'),
   ];
 
-  // 本地默认工作区（示例数据：登录 SQL 已关联下发医院/科室/院区真实
-  // 名称，仅用户未设置对应归属时用此兜底，避免界面显示空白）
-  static const _defaultWorkUser = LoginUser(
-    id: 0,
-    userCode: '',
-    userName: '',
-    userType: '',
-    hospId: 'O001',
-    hospName: '首都医科大学附属北京儿童医院',
-    campusId: 'B001',
-    campusName: '顺义院区',
-    deptId: 'D001',
-    deptName: '儿童保健科',
-  );
-
-  // 登录用户信息（登录前为本地默认占位，登录后经 syncLoginUser 刷新为真实身份）
-  LoginUser loginUser = _defaultWorkUser;
+  // 登录用户信息（登录前为空占位，登录成功后经 syncLoginUser 刷新为真实身份；
+  // 医院/院区/科室均为登录接口关联下发的真实数据，未设置的字段保持 null，
+  // 由界面按需隐藏对应展示项）
+  LoginUser loginUser = const LoginUser(id: 0, userCode: '', userName: '', userType: '');
 
   /// 登录成功后以全局 loginUser 刷新工作副本
-  /// （医院/科室/院区名称优先用登录接口关联下发的真实数据，
-  /// 未设置的字段保底本地默认示例；hospId/deptId/campusId 始终
-  /// 保留后端真实值，供院区/科室管理等按归属过滤的功能）
   void syncLoginUser() {
     final user = app.loginUser;
     if (user == null) return;
-    loginUser = user.copyWith(
-      deptId: user.deptId ?? _defaultWorkUser.deptId,
-      deptName: user.deptName ?? _defaultWorkUser.deptName,
-      campusId: user.campusId ?? _defaultWorkUser.campusId,
-      campusName: user.campusName ?? _defaultWorkUser.campusName,
-      hospName: user.hospName ?? _defaultWorkUser.hospName,
-    );
+    loginUser = user;
     notifyListeners();
   }
 
@@ -62,113 +41,58 @@ class MainViewModel extends ChangeNotifier {
     phone: '13800138000',
   );
 
-  // 功能菜单
-  final List<MenuItem> menus = const [
-    MenuItem(
-      id: 'home',
-      title: '首页',
-      icon: Icons.home_outlined,
-      route: '/home',
-    ),
-    MenuItem(
-      id: 'children',
-      title: '儿童管理',
-      icon: Icons.child_care,
-      children: [
-        MenuItem(id: 'children-build', title: '儿童建档', icon: Icons.folder_open),
-        MenuItem(
-          id: 'children-photo',
-          title: '儿童拍照',
-          icon: Icons.camera_alt_outlined,
-        ),
-      ],
-    ),
-    MenuItem(
-      id: 'intelligence',
-      title: '智力测验',
-      icon: Icons.psychology_outlined,
-      children: [
-        MenuItem(id: 'raven', title: '瑞文测验', icon: Icons.grid_on_outlined),
-        MenuItem(id: 'wisc', title: '韦氏测验', icon: Icons.calculate_outlined),
-      ],
-    ),
-    MenuItem(
-      id: 'neuro',
-      title: '神经运动测查',
-      icon: Icons.accessibility_new,
-      children: [
-        MenuItem(id: 'nbna', title: 'NBNA', icon: Icons.monitor_heart_outlined),
-        MenuItem(id: 'pdms', title: 'PDMS', icon: Icons.directions_run),
-      ],
-    ),
-    MenuItem(
-      id: 'development',
-      title: '发育测查',
-      icon: Icons.trending_up,
-      children: [
-        MenuItem(id: 'asq3', title: 'ASQ-3', icon: Icons.quiz_outlined),
-        MenuItem(id: 'ddst', title: '丹佛DDST', icon: Icons.checklist),
-      ],
-    ),
-    MenuItem(
-      id: 'behavior',
-      title: '行为测评',
-      icon: Icons.emoji_emotions_outlined,
-      children: [
-        MenuItem(id: 'abc', title: 'ABC', icon: Icons.assignment_outlined),
-        MenuItem(id: 'mchat', title: 'M-CHAT', icon: Icons.chat_bubble_outline),
-      ],
-    ),
-    MenuItem(
-      id: 'system',
-      title: '系统管理',
-      icon: Icons.settings_outlined,
-      children: [
-        MenuItem(
-          id: 'adminDivisions',
-          title: '行政区划管理',
-          icon: Icons.language_outlined,
-          route: '/system/adminDivision',
-        ),
-        MenuItem(
-          id: 'menu',
-          title: '菜单管理',
-          icon: Icons.menu_book_outlined,
-          route: '/system/menu',
-        ),
-        MenuItem(
-          id: 'hospital',
-          title: '医院管理',
-          icon: Icons.local_hospital_outlined,
-          route: '/system/hospital',
-        ),
-        MenuItem(
-          id: 'campus',
-          title: '院区管理',
-          icon: Icons.domain_outlined,
-          route: '/system/campus',
-        ),
-        MenuItem(
-          id: 'department',
-          title: '科室管理',
-          icon: Icons.meeting_room_outlined,
-          route: '/system/department',
-        ),
-        MenuItem(
-          id: 'role',
-          title: '角色管理',
-          icon: Icons.group_outlined,
-          route: '/system/role',
-        ),
-        MenuItem(
-          id: 'staff',
-          title: '用户管理',
-          icon: Icons.people_outline,
-          route: '/system/user',
-        ),
-      ],
-    ),
-  ];
+  // 功能菜单（登录成功后经 setRoleMenus 以所选角色的权限菜单构建，
+  // 数据源为登录响应下发的 SYS_ROLE_PERMISSION ∩ SYS_MENU 可见模块/菜单）
+  List<MenuItem> _menus = const [];
+  List<MenuItem> get menus => _menus;
+
+  /// 以登录响应下发的角色菜单构建侧边栏树：模块（ITEM_TYPE=1）为一级
+  /// 项目、菜单（ITEM_TYPE=2）挂其下，各层按 ITEM_CODE 排序；上级模块
+  /// 未授权的散落菜单兜底挂根级（权限数据异常时不丢失入口）。图标经
+  /// iconMap 解析、查不到按项目类型回退，与角色管理权限树同一套规则。
+  void setRoleMenus(List<Menu> roleMenus) {
+    final sorted = [...roleMenus]..sort((a, b) => a.itemCode.compareTo(b.itemCode));
+
+    final hasParent = <String>{};
+    for (final m in sorted) {
+      final p = m.parentId?.trim() ?? '';
+      if (p.isNotEmpty) hasParent.add(m.id);
+    }
+
+    final childrenByParent = <String, List<MenuItem>>{};
+    for (final m in sorted) {
+      final p = m.parentId?.trim() ?? '';
+      if (p.isEmpty) continue;
+      childrenByParent.putIfAbsent(p, () => []).add(_menuToItem(m));
+    }
+
+    // 顶层 = 没有 parentId 的项（无论 itemType），按编码顺序输出
+    final result = <MenuItem>[];
+    for (final m in sorted) {
+      final p = m.parentId?.trim() ?? '';
+      if (p.isEmpty) {
+        result.add(_menuToItem(m, childrenByParent[m.id] ?? []));
+      }
+    }
+
+    _menus = result;
+    // 菜单集已整体更换：清空选中项、展开态与搜索过滤缓存
+    _selectedMenuId = null;
+    _breadcrumbs = [];
+    _expandedIds.clear();
+    _filterCacheKey = '';
+    _cachedFilteredMenus = null;
+    notifyListeners();
+  }
+
+  /// 数据库菜单项目转侧边栏菜单项（图标名解析失败时按项目类型回退）。
+  MenuItem _menuToItem(Menu menu, [List<MenuItem> children = const []]) => MenuItem(
+    id: menu.id,
+    title: menu.itemName,
+    icon: menuIconOrFallback(menu.menuIcon, fallback: menuItemTypeIcon(menu.itemType)),
+    route: menu.menuRoute,
+    children: children,
+  );
 
   // 状态
   String? _selectedMenuId;
@@ -294,6 +218,7 @@ class MainViewModel extends ChangeNotifier {
     _cachedFilteredMenus = null;
     _expandedIds.clear();
     _collapsed = false;
+    _menus = const [];
     notifyListeners();
   }
 

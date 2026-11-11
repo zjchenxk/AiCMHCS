@@ -39,6 +39,16 @@ void main() {
       ],
     );
     auth = AuthService(db, cipher);
+    // 种子：角色 1（系统管理员）分配给 admin——登录自本改造起校验所选
+    // 角色归属（SYS_USER_ROLE），本文件的登录用例固定用角色 1。
+    await db.execute(
+      'INSERT INTO SYS_ROLE (ID, ROLE_CODE, ROLE_NAME, CREATE_TIME) '
+      "VALUES (1, 'R0001', '系统管理员', '2026-11-08 09:00:00')",
+    );
+    await db.execute(
+      'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID) '
+      "SELECT U.ID, 1 FROM SYS_USER U WHERE U.USER_CODE = 'admin'",
+    );
   });
 
   tearDownAll(() {
@@ -47,7 +57,7 @@ void main() {
   });
 
   test('登录成功：返回会话（手机号已解密）、写审计', () async {
-    final session = await auth.login('superadmin', 'Admin@123', '1', ip: '127.0.0.1');
+    final session = await auth.login('admin', 'Admin@123', '1', ip: '127.0.0.1');
     expect(session.user.id, greaterThan(0));
     expect(session.user.userCode, 'admin');
     expect(session.user.userName, '系统管理员');
@@ -91,8 +101,18 @@ void main() {
       'VALUES (?, ?, ?, ?, ?, ?, 1)',
       ['doctor09', AuthService.makeStoredPassword('Doctor@123'), '关联用户', 'DOCTOR', 9, 7],
     );
+    // 种子：角色 2（儿童心理医生）分配给该用户（登录校验所选角色归属）
+    await db.execute(
+      'INSERT INTO SYS_ROLE (ID, ROLE_CODE, ROLE_NAME, CREATE_TIME) '
+      "VALUES (2, 'R0002', '儿童心理医生', '2026-11-08 09:00:00')",
+    );
+    await db.execute(
+      'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID) '
+      "SELECT U.ID, 2 FROM SYS_USER U WHERE U.USER_CODE = 'doctor09'",
+    );
 
     final session = await auth.login('doctor09', 'Doctor@123', '2');
+    expect(session.roleId, '2');
     expect(session.user.hospId, '9');
     expect(session.user.hospName, '测试三级医院');
     expect(session.user.deptId, '7');
@@ -102,7 +122,7 @@ void main() {
     expect(session.user.campusName, '城南院区');
 
     // 未设置归属的用户名称字段为 null（LEFT JOIN 不命中）
-    final bare = await auth.login('superadmin', 'Admin@123', '1');
+    final bare = await auth.login('admin', 'Admin@123', '1');
     expect(bare.user.hospName, isNull);
     expect(bare.user.deptName, isNull);
   });
@@ -113,6 +133,11 @@ void main() {
       '(USER_CODE, PASSWORD, USER_NAME, USER_TYPE, PHONE, STATUS) '
       "VALUES ('legacy', ?, '存量用户', 'DOCTOR', '13900000000', 1)",
       [AuthService.makeStoredPassword('Legacy@123')],
+    );
+    // 复用「关联下发」用例种子化的角色 2（登录校验所选角色归属）
+    await db.execute(
+      'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID) '
+      "SELECT U.ID, 2 FROM SYS_USER U WHERE U.USER_CODE = 'legacy'",
     );
     final session = await auth.login('legacy', 'Legacy@123', '2');
     expect(session.user.phone, '13900000000');
@@ -174,13 +199,40 @@ void main() {
       {'id': '20', 'roleName': '儿童心理医生'},
     ]);
 
-    // 未分配角色的用户与不存在的用户名统一返回空列表（避免账号枚举）
-    expect(await auth.listUserRoles('admin'), isEmpty);
+    // 未分配角色的用户与不存在的用户名统一返回空列表（避免账号枚举）。
+    // admin 已在 setUpAll 分配角色 1，此处另建无角色用户验证空列表分支。
+    await db.execute(
+      'INSERT INTO SYS_USER '
+      '(USER_CODE, PASSWORD, USER_NAME, USER_TYPE, STATUS) '
+      "VALUES ('norole09', ?, '无角色用户', 'DOCTOR', 1)",
+      [AuthService.makeStoredPassword('Doctor@123')],
+    );
+    expect(await auth.listUserRoles('norole09'), isEmpty);
     expect(await auth.listUserRoles('nobody'), isEmpty);
   });
 
+  test('登录校验所选角色归属：角色存在但未分配给该用户时 40301', () async {
+    // 角色 20 已在「查询用户角色列表」用例种子化（分配给 roleuser09），
+    // admin 未持有该角色，登录应拒绝
+    await expectLater(
+      auth.login('admin', 'Admin@123', '20'),
+      throwsA(
+        isA<AuthException>().having((e) => e.code, 'code', 40301),
+      ),
+    );
+  });
+
+  test('登录角色参数非数字：40001', () async {
+    await expectLater(
+      auth.login('admin', 'Admin@123', 'abc'),
+      throwsA(
+        isA<AuthException>().having((e) => e.code, 'code', 40001),
+      ),
+    );
+  });
+
   test('会话校验、续期与登出', () async {
-    final session = await auth.login('superadmin', 'Admin@123', '1');
+    final session = await auth.login('admin', 'Admin@123', '1');
 
     final verified = await auth.verify(session.token);
     expect(verified.userCode, 'admin');
