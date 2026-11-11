@@ -66,12 +66,7 @@ class _MainPageState extends State<MainPage> {
   }
 
   // 毛玻璃容器
-  Widget _glassPanel({
-    required Widget child,
-    double blur = 20,
-    required Color color,
-    required BorderRadius radius,
-  }) {
+  Widget _glassPanel({required Widget child, double blur = 20, required Color color, required BorderRadius radius}) {
     return ClipRRect(
       borderRadius: radius,
       child: BackdropFilter(
@@ -247,14 +242,10 @@ class _MainPageState extends State<MainPage> {
         shape: WidgetStatePropertyAll(
           RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
-            side: BorderSide(
-              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
-            ),
+            side: BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3)),
           ),
         ),
-        padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(vertical: 6),
-        ),
+        padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 6)),
       ),
       menuChildren: [
         MenuItemButton(
@@ -270,9 +261,7 @@ class _MainPageState extends State<MainPage> {
           onPressed: () => _showChangePasswordDialog(context),
           child: Text(
             '修改密码',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurface,
-            ),
+            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
           ),
         ),
         const Divider(height: 9, thickness: 0.5),
@@ -290,9 +279,7 @@ class _MainPageState extends State<MainPage> {
           onPressed: () => _showSwitchDeptDialog(context, theme),
           child: Text(
             '切换科室',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurface,
-            ),
+            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
           ),
         ),
         const Divider(height: 9, thickness: 0.5),
@@ -310,21 +297,15 @@ class _MainPageState extends State<MainPage> {
           onPressed: () => _logout(context),
           child: Text(
             '注销退出',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.error,
-            ),
+            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error),
           ),
         ),
       ],
       builder: (context, controller, child) => InkWell(
         borderRadius: BorderRadius.circular(10),
         // 显式三态高亮色
-        hoverColor: theme.colorScheme.onPrimaryContainer.withValues(
-          alpha: 0.15,
-        ),
-        highlightColor: theme.colorScheme.onPrimaryContainer.withValues(
-          alpha: 0.28,
-        ),
+        hoverColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.15),
+        highlightColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.28),
         onTap: () => controller.isOpen ? controller.close() : controller.open(),
         child: child,
       ),
@@ -347,9 +328,7 @@ class _MainPageState extends State<MainPage> {
             const SizedBox(width: 8),
             Text(
               userName,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onPrimaryContainer,
-              ),
+              style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer),
             ),
           ],
         ),
@@ -378,14 +357,10 @@ class _MainPageState extends State<MainPage> {
         shape: WidgetStatePropertyAll(
           RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
-            side: BorderSide(
-              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
-            ),
+            side: BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3)),
           ),
         ),
-        padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(vertical: 6),
-        ),
+        padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 6)),
       ),
       menuChildren: [
         // 设置字体菜单
@@ -437,9 +412,7 @@ class _MainPageState extends State<MainPage> {
           ],
           child: Text(
             '设置字体',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurface,
-            ),
+            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
           ),
         ),
 
@@ -517,12 +490,8 @@ class _MainPageState extends State<MainPage> {
         message: '设置',
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
-          hoverColor: theme.colorScheme.onPrimaryContainer.withValues(
-            alpha: 0.15,
-          ),
-          highlightColor: theme.colorScheme.onPrimaryContainer.withValues(
-            alpha: 0.28,
-          ),
+          hoverColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.15),
+          highlightColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.28),
           onTap: () => controller.isOpen ? controller.close() : controller.open(),
           child: child,
         ),
@@ -548,9 +517,7 @@ class _MainPageState extends State<MainPage> {
         shape: WidgetStatePropertyAll(
           RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
-            side: BorderSide(
-              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
-            ),
+            side: BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3)),
           ),
         ),
         padding: const WidgetStatePropertyAll(
@@ -605,12 +572,8 @@ class _MainPageState extends State<MainPage> {
         message: '帮助',
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
-          hoverColor: theme.colorScheme.onPrimaryContainer.withValues(
-            alpha: 0.15,
-          ),
-          highlightColor: theme.colorScheme.onPrimaryContainer.withValues(
-            alpha: 0.28,
-          ),
+          hoverColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.15),
+          highlightColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.28),
           onTap: () => controller.isOpen ? controller.close() : controller.open(),
           child: child,
         ),
@@ -654,14 +617,14 @@ class _MainPageState extends State<MainPage> {
                 // 菜单列表
                 Expanded(
                   child: isWide
-                      // 展开态：给它完整的 207px 内部宽度，
+                      // 展开态：给它完整的 223px 内部宽度，
                       // 面板还没拉开时由 ClipRRect 裁掉，不会溢出
                       ? OverflowBox(
                           alignment: AlignmentDirectional.centerStart,
                           minWidth: 0,
-                          maxWidth: 207, // 240 − margin16 − border1 − listPadding16
+                          maxWidth: 223, // 240 − margin16 − border1
                           child: SizedBox(
-                            width: 207,
+                            width: 223,
                             child: ListView.builder(
                               padding: const EdgeInsets.symmetric(
                                 vertical: 4,
@@ -679,10 +642,7 @@ class _MainPageState extends State<MainPage> {
                           ),
                         )
                       : ListView.builder(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 4,
-                            horizontal: 8,
-                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
                           itemCount: menus.length,
                           itemBuilder: (context, index) => _buildMenuItem(
                             theme,
@@ -726,12 +686,8 @@ class _MainPageState extends State<MainPage> {
           InkWell(
             borderRadius: BorderRadius.circular(10),
             // 显式三态高亮色
-            hoverColor: theme.colorScheme.onPrimaryContainer.withValues(
-              alpha: 0.15,
-            ),
-            highlightColor: theme.colorScheme.onPrimaryContainer.withValues(
-              alpha: 0.28,
-            ),
+            hoverColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.15),
+            highlightColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.28),
             onTap: () => mainViewModel.toggleCollapse(),
             child: SizedBox(
               width: 32,
@@ -753,14 +709,10 @@ class _MainPageState extends State<MainPage> {
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
       child: TextField(
         controller: _searchController,
-        style: theme.textTheme.bodyMedium?.copyWith(
-          color: theme.colorScheme.onPrimaryContainer,
-        ),
+        style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer),
         decoration: InputDecoration(
           hintText: '搜索功能菜单...',
-          hintStyle: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.5),
-          ),
+          hintStyle: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.5)),
           prefixIcon: Icon(
             Icons.search,
             color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.6),
@@ -796,15 +748,9 @@ class _MainPageState extends State<MainPage> {
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
           // 显式三态高亮色
-          hoverColor: theme.colorScheme.onPrimaryContainer.withValues(
-            alpha: 0.15,
-          ),
-          highlightColor: theme.colorScheme.onPrimaryContainer.withValues(
-            alpha: 0.28,
-          ),
-          splashColor: theme.colorScheme.onPrimaryContainer.withValues(
-            alpha: 0.20,
-          ),
+          hoverColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.15),
+          highlightColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.28),
+          splashColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.20),
           onTap: () {
             hasChildren ? mainViewModel.toggleExpand(menu.id) : mainViewModel.selectMenu(menu, path);
           },
@@ -1034,9 +980,7 @@ class _MainPageState extends State<MainPage> {
     );
     if (changed == true && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('密码修改成功，请重新登录'),
-        ),
+        const SnackBar(content: Text('密码修改成功，请重新登录')),
       );
       // 等保要求：密码修改后强制重新登录
       _logout(context);
@@ -1238,24 +1182,16 @@ class _MainPageState extends State<MainPage> {
                     const SizedBox(height: 14),
                     Text(
                       '©2026 Chenxk Software Studio. All rights reserved.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.6,
-                        ),
-                      ),
+                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
                     ),
                     const SizedBox(height: 20),
                     // 关闭按钮（FilledButton 在毛玻璃上比 TextButton 更清晰）
                     FilledButton(
                       onPressed: () => Navigator.of(dialogContext).pop(),
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size(120, 40),
-                      ),
+                      style: FilledButton.styleFrom(minimumSize: const Size(120, 40)),
                       child: Text(
                         '关闭',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onPrimary,
-                        ),
+                        style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimary),
                       ),
                     ),
                   ],
