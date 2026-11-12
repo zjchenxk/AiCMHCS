@@ -231,14 +231,15 @@ CREATE TABLE SYS_MENU (
     expect(await service.delete('2'), 1);
   });
 
-  test('listRoleVisibleMenus：仅返回角色已授权的可见模块/菜单（操作类与隐藏项排除）', () async {
+  test('listRoleAll：返回角色已授权的模块/菜单（操作类与未授权排除，隐藏项目按设计下发）', () async {
     await db.executeDirect('''
 CREATE TABLE SYS_ROLE_PERMISSION (
   ROLE_ID INTEGER NOT NULL, -- 角色ID
   MENU_ID INTEGER NOT NULL, -- 菜单ID
   PRIMARY KEY (ROLE_ID, MENU_ID)
 )''');
-    // 追加一个隐藏菜单（5，挂模块 1 下）用于验证 VISIBLE 过滤
+    // 追加一个隐藏菜单（5，挂模块 1 下）：VISIBLE 不参与服务端过滤，
+    // 隐藏项目有意随登录下发（客户端按 visible 决定展示形态）
     await db.execute(
       'INSERT INTO SYS_MENU (ID, PARENT_ID, ITEM_CODE, ITEM_NAME, ITEM_TYPE, '
       'MENU_ROUTE, MENU_ICON, VISIBLE) '
@@ -252,12 +253,13 @@ CREATE TABLE SYS_ROLE_PERMISSION (
       );
     }
 
-    // 仅剩可见的模块 1 与菜单 2，按 ITEM_CODE 排序；操作 3（类型）、
-    // 隐藏 5（可见性）、模块 4（未授权）均不下发
+    // 模块 1、菜单 2、隐藏菜单 5 下发（按 ITEM_CODE 排序）；操作 3
+    // （类型）、模块 4（未授权）不下发
     final menus = await service.listRoleAll('7');
-    expect(menus.map((m) => m.id), ['1', '2']);
-    expect(menus.map((m) => m.itemType), ['1', '2']);
-    expect(menus.last.menuRoute, '/system/hospital');
+    expect(menus.map((m) => m.id), ['1', '2', '5']);
+    expect(menus.map((m) => m.itemType), ['1', '2', '2']);
+    expect(menus.last.menuRoute, '/system/hidden');
+    expect(menus.last.visible, '0', reason: 'VISIBLE 原样下发供客户端处理');
 
     // 未授权角色返回空列表；非法角色 ID 报格式错误
     expect(await service.listRoleAll('8'), isEmpty);

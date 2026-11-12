@@ -54,11 +54,28 @@ class _FakeHospitalService extends HospitalService {
   );
 
   @override
-  Future<List<Hospital>> getAll() async {
+  Future<(List<Hospital>, String?)> getAll() async {
     getAllCalls++;
-    final list = store.values.toList()..sort((a, b) => int.parse(a.id).compareTo(int.parse(b.id)));
-    return list.map(_withFlags).toList();
+    final scope = scopeRootId?.trim() ?? '';
+    // 模拟服务端数据范围过滤：范围根非空时只回该医院及其嵌套下级
+    Iterable<Hospital> source = store.values;
+    if (scope.isNotEmpty) {
+      final ids = <String>[scope];
+      var i = 0;
+      while (i < ids.length) {
+        final parent = ids[i++];
+        ids.addAll(
+          store.values.where((h) => h.parentId == parent).map((h) => h.id).where((id) => !ids.contains(id)),
+        );
+      }
+      source = store.values.where((h) => ids.contains(h.id));
+    }
+    final list = source.toList()..sort((a, b) => int.parse(a.id).compareTo(int.parse(b.id)));
+    return (list.map(_withFlags).toList(), scope.isEmpty ? null : scope);
   }
+
+  /// 模拟服务端下发的数据范围根（登录用户 hospId，null 为未限定）。
+  String? scopeRootId;
 
   @override
   Future<Hospital> create({
@@ -370,5 +387,41 @@ void main() {
     expect(find.text('示例人民医院'), findsNothing);
     expect(find.text('请先在左侧选择医院'), findsOneWidget);
     expect(viewModel.hospitalTree, isEmpty);
+  });
+
+  testWidgets('数据范围限定：仅显示所属医院子树且隐藏「添加顶级医院」入口', (tester) async {
+    tester.view.physicalSize = const Size(1400, 2200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final service = _FakeHospitalService()
+      ..seed('1', null, 'H001', '示例人民医院')
+      ..seed('2', '1', 'H002', '示例人民医院-第一分院')
+      ..seed('3', null, 'H003', '示例中医院')
+      // 登录用户所属医院为第一分院：服务端只回其子树
+      ..scopeRootId = '2';
+    final viewModel = _viewModel(service);
+
+    await tester.pumpWidget(_wrapWidget(viewModel));
+    await tester.pumpAndSettle();
+
+    // 树中仅范围根（第一分院），范围外医院不可见
+    expect(find.text('示例人民医院-第一分院'), findsOneWidget);
+    expect(find.text('示例人民医院'), findsNothing);
+    expect(find.text('示例中医院'), findsNothing);
+    expect(viewModel.scopeRootId, '2');
+
+    // 范围限定时不提供新增顶级入口（避免建出范围外医院）
+    expect(find.byTooltip('添加顶级医院'), findsNothing);
+
+    // 对照：未限定范围（系统管理员）时入口可见
+    final adminService = _FakeHospitalService()
+      ..seed('1', null, 'H001', '示例人民医院')
+      ..seed('2', '1', 'H002', '示例人民医院-第一分院');
+    final adminViewModel = _viewModel(adminService);
+    await tester.pumpWidget(_wrapWidget(adminViewModel));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('添加顶级医院'), findsOneWidget);
+    expect(adminViewModel.scopeRootId, isNull);
   });
 }

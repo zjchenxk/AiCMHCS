@@ -9,11 +9,19 @@ class HospitalService {
   /// 经服务定位器取加密客户端（登录后才可用；构造期不取，便于测试覆写）。
   BaseService get _base => getIt<BaseService>();
 
-  /// 获取全部医院（扁平列表，含 hasChildren 标记），按创建顺序。
-  Future<List<Hospital>> getAll() async {
+  /// 获取医院扁平列表（含 hasChildren 标记），按创建顺序。
+  ///
+  /// 服务端按登录用户所属医院做数据范围过滤：hospId 为空返回全部，
+  /// 非空仅返回该医院及其全部嵌套下级；scopeRootId 为范围根医院 ID
+  /// （null 表示未限定，如系统管理员全量视图）。
+  ///returns: (医院列表, 范围根医院 ID)
+  Future<(List<Hospital>, String?)> getAll() async {
     final data = await _base.post('/api/hospital/query', {});
     final list = data['hospitals'] as List<dynamic>? ?? const [];
-    return list.map((e) => Hospital.fromJson(e as Map<String, dynamic>)).toList();
+    return (
+      list.map((e) => Hospital.fromJson(e as Map<String, dynamic>)).toList(),
+      data['scopeRootId'] as String?,
+    );
   }
 
   /// 获取医院详情、子树规模与子树内院区数（删除前确认提示用）。

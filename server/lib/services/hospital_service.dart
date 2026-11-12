@@ -43,18 +43,36 @@ class HospitalService {
   /// IN 批量查询/删除的单批参数上限（与行政区划服务一致）。
   static const int _batchSize = 500;
 
-  /// 查询全部医院（扁平列表，按创建顺序），供前端构建医联体树。
+  /// 查询医院扁平列表（按创建顺序），供前端构建医联体树。
+  ///
+  /// [scopeHospId] 为数据范围过滤（服务端从登录会话推导，不信任客户端
+  /// 上报）：空返回全部医院；非空仅返回 ID 等于它的医院及其全部嵌套
+  /// 下级（引用不存在的医院视为空结果）。
   ///
   /// hasChildren 经 EXISTS 子查询带出，供树形 UI 决定是否显示展开箭头。
-  Future<List<Hospital>> listAll() async {
-    final result = await _db.query(
-      'SELECT H.ID, H.PARENT_ID, H.CODE, H.NAME, H.NAME_EN, H.PROVINCE, '
-      'H.CITY, H.COUNTY, H.TOWN, H.ADDRESS, H.TEL, H.LOGO_IMAGE, '
-      'H.SEAL_IMAGE, H.WATERMARK_IMAGE, '
-      'CASE WHEN EXISTS (SELECT 1 FROM SYS_HOSPITAL H2 '
-      'WHERE H2.PARENT_ID = H.ID) THEN 1 ELSE 0 END AS HAS_CHILDREN '
-      'FROM SYS_HOSPITAL H ORDER BY H.ID',
-    );
+  Future<List<Hospital>> listAll({String? scopeHospId}) async {
+    final scope = scopeHospId?.trim() ?? '';
+    if (scope.isNotEmpty) {
+      // 收集范围医院子树全部 ID（含根）；根不存在时结果为空列表
+      List<int> ids;
+      try {
+        ids = await _collectSubtreeIds(scope);
+      } on HospitalException {
+        return const [];
+      }
+      final rows = <Hospital>[];
+      for (var i = 0; i < ids.length; i += _batchSize) {
+        final batch = ids.skip(i).take(_batchSize).toList();
+        final placeholders = List.filled(batch.length, '?').join(', ');
+        final result = await _db.query(
+          '$_detailSql WHERE H.ID IN ($placeholders) ORDER BY H.ID',
+          batch,
+        );
+        rows.addAll(result.rowsAsMaps.map(_fromRow));
+      }
+      return rows;
+    }
+    final result = await _db.query('$_detailSql ORDER BY H.ID');
     return result.rowsAsMaps.map(_fromRow).toList(growable: false);
   }
 

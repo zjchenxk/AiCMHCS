@@ -55,11 +55,28 @@ class FakeHospitalService extends HospitalService {
   );
 
   @override
-  Future<List<Hospital>> getAll() async {
+  Future<(List<Hospital>, String?)> getAll() async {
     getAllCalls++;
-    final list = store.values.toList()..sort((a, b) => int.parse(a.id).compareTo(int.parse(b.id)));
-    return list.map(_withFlags).toList();
+    final scope = scopeRootId?.trim() ?? '';
+    // 模拟服务端数据范围过滤：范围根非空时只回该医院及其嵌套下级
+    Iterable<Hospital> source = store.values;
+    if (scope.isNotEmpty) {
+      final ids = <String>[scope];
+      var i = 0;
+      while (i < ids.length) {
+        final parent = ids[i++];
+        ids.addAll(
+          store.values.where((h) => h.parentId == parent).map((h) => h.id).where((id) => !ids.contains(id)),
+        );
+      }
+      source = store.values.where((h) => ids.contains(h.id));
+    }
+    final list = source.toList()..sort((a, b) => int.parse(a.id).compareTo(int.parse(b.id)));
+    return (list.map(_withFlags).toList(), scope.isEmpty ? null : scope);
   }
+
+  /// 模拟服务端下发的数据范围根（登录用户 hospId，null 为未限定）。
+  String? scopeRootId;
 
   @override
   Future<Hospital> create({
@@ -330,5 +347,24 @@ void main() {
     await viewModel.loadHospitals();
     expect(await viewModel.subtreeInfo(viewModel.hospitalTree.first), (3, 0));
     expect(await viewModel.subtreeInfo(viewModel.hospitalTree.last), (1, 0));
+  });
+
+  test('数据范围限定：登录用户有所属医院时树仅含范围根及其下级', () async {
+    // 模拟服务端按登录用户 hospId=2 过滤（只回分院子树）并下发范围根
+    service.scopeRootId = '2';
+    await viewModel.loadHospitals();
+
+    expect(viewModel.scopeRootId, '2');
+    expect(viewModel.hospitalTree.map((n) => n.id), ['2']);
+    expect(viewModel.hospitalTree.first.children.single.id, '3');
+    // 范围外的顶级医院不在树中
+    expect(viewModel.hospitalTree.any((n) => n.id == '1'), isFalse);
+    expect(viewModel.hospitalTree.any((n) => n.id == '4'), isFalse);
+  });
+
+  test('数据范围未限定：scopeRootId 为空且树为全量', () async {
+    await viewModel.loadHospitals();
+    expect(viewModel.scopeRootId, isNull);
+    expect(viewModel.hospitalTree.map((n) => n.id), ['1', '4']);
   });
 }

@@ -86,6 +86,30 @@ CREATE TABLE SYS_DEPARTMENT (
     expect(hospitals.first.county, '东城区');
   });
 
+  test('listAll：scopeHospId 为空串/null 视为未限定，返回全量', () async {
+    expect((await service.listAll(scopeHospId: null)).map((h) => h.id), ['1', '2', '3', '4']);
+    expect((await service.listAll(scopeHospId: '  ')).map((h) => h.id), ['1', '2', '3', '4']);
+  });
+
+  test('listAll：scopeHospId 限定返回该医院及其全部嵌套下级', () async {
+    // 以中间节点为范围根：只含自身与子树，兄弟分支与上级均不在结果内
+    final scoped = await service.listAll(scopeHospId: '2');
+    expect(scoped.map((h) => h.id), ['2', '4']);
+    expect(scoped.first.hasChildren, isTrue, reason: '子级在结果内，hasChildren 应为真');
+    expect(scoped.last.hasChildren, isFalse);
+
+    // 以顶级为范围根：整棵子树
+    expect((await service.listAll(scopeHospId: '1')).map((h) => h.id), ['1', '2', '3', '4']);
+
+    // 叶子为范围根：仅自身
+    expect((await service.listAll(scopeHospId: '3')).map((h) => h.id), ['3']);
+  });
+
+  test('listAll：scopeHospId 不存在或非法时返回空列表', () async {
+    expect(await service.listAll(scopeHospId: '999'), isEmpty);
+    expect(await service.listAll(scopeHospId: 'abc'), isEmpty);
+  });
+
   test('getById：查详情；不存在与非法 ID 报错', () async {
     final hospital = await service.getById('2');
     expect(hospital.name, '示例人民医院-第一分院');

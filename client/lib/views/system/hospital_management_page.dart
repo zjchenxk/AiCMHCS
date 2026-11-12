@@ -107,16 +107,21 @@ class _HospitalManagementPageState extends State<HospitalManagementPage> {
                   theme,
                   title: '医院列表',
                   icon: Icons.account_tree_outlined,
-                  trailing: IconButton(
-                    tooltip: '添加顶级医院',
-                    icon: Icon(
-                      Icons.add_home_work_outlined,
-                      size: 20,
-                      color: theme.colorScheme.primary,
-                    ),
-                    // 右侧表单切换为新增顶级（上级为空）
-                    onPressed: viewModel.busy ? null : () => viewModel.startCreate(),
-                  ),
+                  // 数据范围限定（登录用户有所属医院）时不提供新增顶级入口，
+                  // 避免建出范围外自己不可见的顶级医院；范围内新增走节点
+                  // 菜单「添加下级医院」
+                  trailing: viewModel.scopeRootId == null
+                      ? IconButton(
+                          tooltip: '添加顶级医院',
+                          icon: Icon(
+                            Icons.add_home_work_outlined,
+                            size: 20,
+                            color: theme.colorScheme.primary,
+                          ),
+                          // 右侧表单切换为新增顶级（上级为空）
+                          onPressed: viewModel.busy ? null : () => viewModel.startCreate(),
+                        )
+                      : null,
                 ),
 
                 Expanded(

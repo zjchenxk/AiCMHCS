@@ -57,8 +57,16 @@ class HospitalManagementViewModel extends ChangeNotifier {
   bool _busy = false;
   String? _errorMsg;
 
+  /// 数据范围根医院 ID（服务端按登录用户所属医院过滤下发；null 表示
+  /// 未限定，如系统管理员全量视图）。
+  String? _scopeRootId;
+
   /// 医院树（顶级医院列表，子级挂在各节点 children 下）。
   List<HospitalTreeNode> get hospitalTree => _hospitalTree;
+
+  /// 数据范围根医院 ID：非空时树仅含该医院及其嵌套下级（列表接口随
+  /// 登录用户 hospId 下发，用于隐藏「添加顶级医院」等越界入口）。
+  String? get scopeRootId => _scopeRootId;
 
   /// 当前选中节点（编辑模式数据源、树上高亮依据；新增模式下保留，
   /// 取消新增或选中新节点即回到其编辑态）。
@@ -103,7 +111,8 @@ class HospitalManagementViewModel extends ChangeNotifier {
 
   /// 拉取全量医院并重建本地树（不切首屏 loading 标记，供增删后刷新）。
   Future<void> _fetchAndRebuild() async {
-    final hospitals = await _hospitalService.getAll();
+    final (hospitals, scopeRootId) = await _hospitalService.getAll();
+    _scopeRootId = scopeRootId;
     _rebuildTree(hospitals);
   }
 
