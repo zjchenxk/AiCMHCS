@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:client/utils/image_helper.dart';
 import 'package:client/utils/log_helper.dart';
+import 'package:common/utils/password_policy.dart';
 import 'package:client/view_models/system/user_management_view_model.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -31,8 +32,6 @@ class _UserInfoFormState extends State<UserInfoForm> {
   static const int _phoneMaxLength = 20;
   static const int _idCardNoMaxLength = 20;
   static const int _extCodeMaxLength = 20;
-  static const int _passwordMaxLength = 32;
-  static const int _passwordMinLength = 8;
 
   /// 用户类别标准值域（显示标签）；编辑存量 TEACHER/PARENT 等非标准
   /// 值时动态补入选项原样显示，保存不强制订正。
@@ -316,7 +315,7 @@ class _UserInfoFormState extends State<UserInfoForm> {
             key: _passwordKey,
             controller: _passwordCtrl,
             focusNode: _passwordFocus,
-            maxLength: _passwordMaxLength,
+            maxLength: PasswordPolicy.maxLength,
             obscureText: _obscurePassword,
             style: theme.textTheme.bodyMedium,
             textInputAction: TextInputAction.next,
@@ -336,7 +335,12 @@ class _UserInfoFormState extends State<UserInfoForm> {
                     onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                   ),
                 ),
-            validator: (v) => _validatePassword(v, creating: creating),
+            // 密码校验规则与文案由 common 包 PasswordPolicy 统一（与服务端兜底同源）
+            validator: (v) {
+              // 编辑模式留空表示不修改，直接放行
+              if ((v ?? '').isEmpty) return creating ? '请输入密码' : null;
+              return PasswordPolicy.complexityError(v!, userCode: _userCodeCtrl.text);
+            },
           ),
           const SizedBox(height: 12),
 
@@ -482,31 +486,6 @@ class _UserInfoFormState extends State<UserInfoForm> {
         ],
       ),
     );
-  }
-
-  /// 密码校验（等保三级复杂度要求，与服务端 UserService._requiredPassword
-  /// 同规则同文案）：非空、8-32 位、不得与登录账号相同、须包含大写
-  /// 字母 / 小写字母 / 数字 / 特殊字符中的至少三类；编辑模式留空表示
-  /// 不修改，直接放行。
-  String? _validatePassword(String? v, {required bool creating}) {
-    final t = v ?? '';
-    if (t.isEmpty) return creating ? '请输入密码' : null;
-    if (t.length < _passwordMinLength || t.length > _passwordMaxLength) {
-      return '密码长度须在 $_passwordMinLength-$_passwordMaxLength 位之间';
-    }
-    final code = _userCodeCtrl.text.trim();
-    if (code.isNotEmpty && t == code) {
-      return '密码不能与登录账号相同';
-    }
-    var kinds = 0;
-    if (RegExp(r'[A-Z]').hasMatch(t)) kinds++;
-    if (RegExp(r'[a-z]').hasMatch(t)) kinds++;
-    if (RegExp(r'[0-9]').hasMatch(t)) kinds++;
-    if (RegExp(r'[^A-Za-z0-9]').hasMatch(t)) kinds++;
-    if (kinds < 3) {
-      return '密码复杂度不足：须包含大写字母、小写字母、数字、特殊字符中的至少三类';
-    }
-    return null;
   }
 
   /// 用户类别下拉选项：标准值域 + 编辑存量非标准值动态补入（原样显示）。

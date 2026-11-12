@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:client/main.dart';
-import 'package:common/utils/security_util.dart';
+import 'package:common/utils/security_helper.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
 

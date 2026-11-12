@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:common/utils/security_util.dart';
+import 'package:common/utils/security_helper.dart';
 import 'package:dart_frog/dart_frog.dart';
 import 'package:server/models/api_body.dart';
 import 'package:server/services/auth_service.dart';

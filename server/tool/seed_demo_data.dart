@@ -1,4 +1,4 @@
-// 初始化数据库结构并写入演示账号（口令散列直接复用 AuthService 算法、
+// 初始化数据库结构并写入演示账号（口令散列直接复用 PasswordUtil 算法、
 // 联系电话直接复用 FieldCipher 加密，保证与后端读写逻辑一致——
 // 原 generate_demo_data.dart 的两处维护已合并）。
 //
@@ -11,8 +11,8 @@ import 'package:server/app_config.dart';
 import 'package:server/database/engine/database_gateway.dart';
 import 'package:server/database/engine/db_factory.dart';
 import 'package:server/database/migrator/schema_migrator.dart';
-import 'package:server/services/auth_service.dart';
 import 'package:server/utils/field_cipher.dart';
+import 'package:server/utils/password_helper.dart';
 
 /// 演示账号（userCode / 口令 / 姓名 / 用户类别 / 权限级别 / 手机号）。
 /// TEACHER / PARENT 不在新值域内，按迁移约定原值保留待人工订正。
@@ -89,7 +89,7 @@ Future<void> main() async {
         'VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)',
         [
           userCode,
-          AuthService.makeStoredPassword(password),
+          PasswordHelper.makeStoredPassword(password),
           userName,
           userType,
           permissionLevel,

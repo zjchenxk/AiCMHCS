@@ -1,5 +1,6 @@
 import 'package:client/services/user_service.dart';
 import 'package:client/utils/log_helper.dart';
+import 'package:common/utils/password_policy.dart';
 import 'package:client/widgets/glass_panel.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -31,16 +32,32 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
   final _newPwdController = TextEditingController();
   final _confirmPwdController = TextEditingController();
 
+  // 回车跳格用的显式焦点链：原密码→新密码→确认新密码（回车提交）
+  late final FocusNode _oldPwdFocus;
+  late final FocusNode _newPwdFocus;
+  late final FocusNode _confirmPwdFocus;
+
   bool _obscureOld = true;
   bool _obscureNew = true;
   bool _obscureConfirm = true;
   bool _submitting = false;
 
   @override
+  void initState() {
+    super.initState();
+    _oldPwdFocus = FocusNode();
+    _newPwdFocus = FocusNode();
+    _confirmPwdFocus = FocusNode();
+  }
+
+  @override
   void dispose() {
     _oldPwdController.dispose();
     _newPwdController.dispose();
     _confirmPwdController.dispose();
+    _oldPwdFocus.dispose();
+    _newPwdFocus.dispose();
+    _confirmPwdFocus.dispose();
     super.dispose();
   }
 
@@ -94,9 +111,13 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                   _buildPasswordField(
                     theme,
                     controller: _oldPwdController,
+                    focusNode: _oldPwdFocus,
                     label: '原密码',
                     obscure: _obscureOld,
                     onToggle: () => setState(() => _obscureOld = !_obscureOld),
+                    onFieldSubmitted: (_) => _newPwdFocus.requestFocus(),
+                    // 中间输入框回车跳下一框用 next，最后一个用 done（回车直接提交）
+                    textInputAction: TextInputAction.next,
                     validator: (v) => (v == null || v.isEmpty) ? '请输入原密码' : null,
                   ),
                   const SizedBox(height: 12),
@@ -104,36 +125,27 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                   _buildPasswordField(
                     theme,
                     controller: _newPwdController,
+                    focusNode: _newPwdFocus,
                     label: '新密码',
                     obscure: _obscureNew,
                     onToggle: () => setState(() => _obscureNew = !_obscureNew),
+                    onFieldSubmitted: (_) => _confirmPwdFocus.requestFocus(),
+                    textInputAction: TextInputAction.next,
                     // 便捷校验在 validator 中做，完整校验在提交时做
-                    validator: (v) {
-                      if (v == null || v.isEmpty) return '请输入新密码';
-                      if (v.length < 8) return '密码长度不能少于 8 位';
-                      if (v.length > 32) return '密码长度不能超过 32 位';
-                      final hasUpper = v.contains(RegExp(r'[A-Z]'));
-                      final hasLower = v.contains(RegExp(r'[a-z]'));
-                      final hasDigit = v.contains(RegExp(r'[0-9]'));
-                      final hasSpecial = v.contains(RegExp(r'[!@#$%^&*()_+\-=\[\]{};:"\\|,.<>/?~`]'));
-                      final kinds = [
-                        hasUpper,
-                        hasLower,
-                        hasDigit,
-                        hasSpecial,
-                      ].where((e) => e).length;
-                      if (kinds < 4) return '需包含大小写字母、数字和特殊字符';
-                      return null;
-                    },
+                    validator: PasswordPolicy.quickError,
                   ),
                   const SizedBox(height: 12),
 
                   _buildPasswordField(
                     theme,
                     controller: _confirmPwdController,
+                    focusNode: _confirmPwdFocus,
                     label: '确认新密码',
                     obscure: _obscureConfirm,
                     onToggle: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                    // 最后一个输入框回车直接提交
+                    onFieldSubmitted: (_) => _submit(),
+                    textInputAction: TextInputAction.done,
                     validator: (v) {
                       if (v == null || v.isEmpty) return '请再次输入新密码';
                       if (v != _newPwdController.text) return '两次输入的密码不一致';
@@ -180,11 +192,24 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
     );
   }
 
-  Widget _buildPasswordField(ThemeData theme, {required TextEditingController controller, required String label, required bool obscure, required VoidCallback onToggle, required String? Function(String?) validator}) {
+  Widget _buildPasswordField(
+    ThemeData theme, {
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required String label,
+    required bool obscure,
+    required VoidCallback onToggle,
+    required ValueChanged<String> onFieldSubmitted,
+    required TextInputAction textInputAction,
+    required String? Function(String?) validator,
+  }) {
     return TextFormField(
       controller: controller,
+      focusNode: focusNode,
       obscureText: obscure,
       validator: validator,
+      onFieldSubmitted: onFieldSubmitted,
+      textInputAction: textInputAction,
       style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer),
       decoration: InputDecoration(
         labelText: label,
@@ -225,7 +250,11 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
     if (!_formKey.currentState!.validate()) return;
 
     // 表单校验通过后，再执行一次完整强密码校验（包含用户名/旧密码比对）
-    final error = _validateStrongPassword(_newPwdController.text, username: widget.username, oldPassword: _oldPwdController.text);
+    final error = PasswordPolicy.strongError(
+      _newPwdController.text,
+      username: widget.username,
+      oldPassword: _oldPwdController.text,
+    );
     if (error != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -257,51 +286,5 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
       final msg = e.toString().replaceFirst(RegExp(r'^\w*(Exception|Error):\s*'), '');
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('修改密码失败：$msg')));
     }
-  }
-
-  /// 三级等保强密码校验结果
-  /// 返回 null 表示通过，否则返回错误提示文本
-  String? _validateStrongPassword(String password, {required String username, required String oldPassword}) {
-    if (password.isEmpty) return '请输入新密码';
-    if (password.length < 8) return '密码长度不能少于 8 位';
-    if (password.length > 32) return '密码长度不能超过 32 位';
-    if (password == oldPassword) return '新密码不能与原密码相同';
-    if (username.isNotEmpty && password.toLowerCase().contains(username.toLowerCase())) {
-      return '密码不能包含用户名';
-    }
-
-    final hasUpper = password.contains(RegExp(r'[A-Z]'));
-    final hasLower = password.contains(RegExp(r'[a-z]'));
-    final hasDigit = password.contains(RegExp(r'[0-9]'));
-    final hasSpecial = password.contains(RegExp(r'''[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`€£¥§]'''));
-
-    final kinds = [
-      hasUpper,
-      hasLower,
-      hasDigit,
-      hasSpecial,
-    ].where((e) => e).length;
-    if (kinds < 4) {
-      return '密码必须同时包含大写字母、小写字母、数字和特殊字符';
-    }
-
-    // 连续字符检测（如 abc、123，正/逆序，长度≥3）
-    for (int i = 0; i + 2 < password.length; i++) {
-      final a = password.codeUnitAt(i);
-      final b = password.codeUnitAt(i + 1);
-      final c = password.codeUnitAt(i + 2);
-      if (b == a + 1 && c == b + 1) return '密码不能包含连续字符（如 abc、123）';
-      if (b == a - 1 && c == b - 1) return '密码不能包含连续字符（如 cba、321）';
-    }
-
-    // 重复字符检测（如 aaa、111，长度≥3）
-    for (int i = 0; i + 2 < password.length; i++) {
-      final a = password.codeUnitAt(i);
-      if (password.codeUnitAt(i + 1) == a && password.codeUnitAt(i + 2) == a) {
-        return '密码不能包含 3 个及以上重复字符';
-      }
-    }
-
-    return null;
   }
 }

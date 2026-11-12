@@ -5,9 +5,9 @@ import 'dart:convert';
 
 import 'package:server/database/engine/sqlite/sqlite_gateway.dart';
 import 'package:server/database/migrator/schema_migrator.dart';
-import 'package:server/services/auth_service.dart';
 import 'package:server/services/user_service.dart';
 import 'package:server/utils/field_cipher.dart';
+import 'package:server/utils/password_helper.dart';
 import 'package:test/test.dart';
 
 import '../support/test_divisions.dart';
@@ -102,7 +102,7 @@ void main() {
     );
     expect(byMac.rowsAsMaps.first['CNT'], '1');
     // 口令为 salt:hash 格式且可校验通过
-    expect(AuthService.verifyStoredPassword(cols['PASSWORD']!, 'Doctor@123'), isTrue);
+    expect(PasswordHelper.verifyStoredPassword(cols['PASSWORD']!, 'Doctor@123'), isTrue);
   });
 
   test('listByHospital：仅返回指定医院用户、携带各自角色；getById 解密回明文', () async {
@@ -260,8 +260,8 @@ void main() {
       [int.parse(created.id)],
     );
     final cols = row.rowsAsMaps.first;
-    expect(AuthService.verifyStoredPassword(cols['PASSWORD']!, 'NewPass@123'), isTrue);
-    expect(AuthService.verifyStoredPassword(cols['PASSWORD']!, 'Doctor@123'), isFalse);
+    expect(PasswordHelper.verifyStoredPassword(cols['PASSWORD']!, 'NewPass@123'), isTrue);
+    expect(PasswordHelper.verifyStoredPassword(cols['PASSWORD']!, 'Doctor@123'), isFalse);
     final byMac = await db.query(
       'SELECT COUNT(*) AS CNT FROM SYS_USER WHERE PHONE_HMAC = ?',
       [await cipher.mac(FieldCipher.phonePurpose, '13900000222')],

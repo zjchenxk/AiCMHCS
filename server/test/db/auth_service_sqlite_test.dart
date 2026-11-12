@@ -6,6 +6,7 @@ import 'package:server/database/engine/sqlite/sqlite_gateway.dart';
 import 'package:server/database/migrator/schema_migrator.dart';
 import 'package:server/services/auth_service.dart';
 import 'package:server/utils/field_cipher.dart';
+import 'package:server/utils/password_helper.dart';
 import 'package:test/test.dart';
 
 import '../support/test_divisions.dart';
@@ -31,7 +32,7 @@ void main() {
       'VALUES (?, ?, ?, ?, ?, ?, 1)',
       [
         'admin',
-        AuthService.makeStoredPassword('Admin@123'),
+        PasswordHelper.makeStoredPassword('Admin@123'),
         '系统管理员',
         'ADMIN',
         await cipher.seal(FieldCipher.phonePurpose, '13800000001'),
@@ -99,7 +100,7 @@ void main() {
       'INSERT INTO SYS_USER '
       '(USER_CODE, PASSWORD, USER_NAME, USER_TYPE, HOSP_ID, DEPT_ID, STATUS) '
       'VALUES (?, ?, ?, ?, ?, ?, 1)',
-      ['doctor09', AuthService.makeStoredPassword('Doctor@123'), '关联用户', 'DOCTOR', 9, 7],
+      ['doctor09', PasswordHelper.makeStoredPassword('Doctor@123'), '关联用户', 'DOCTOR', 9, 7],
     );
     // 种子：角色 2（儿童心理医生）分配给该用户（登录校验所选角色归属）
     await db.execute(
@@ -132,7 +133,7 @@ void main() {
       'INSERT INTO SYS_USER '
       '(USER_CODE, PASSWORD, USER_NAME, USER_TYPE, PHONE, STATUS) '
       "VALUES ('legacy', ?, '存量用户', 'DOCTOR', '13900000000', 1)",
-      [AuthService.makeStoredPassword('Legacy@123')],
+      [PasswordHelper.makeStoredPassword('Legacy@123')],
     );
     // 复用「关联下发」用例种子化的角色 2（登录校验所选角色归属）
     await db.execute(
@@ -162,7 +163,7 @@ void main() {
       'INSERT INTO SYS_USER '
       '(USER_CODE, PASSWORD, USER_NAME, USER_TYPE, STATUS) '
       'VALUES (?, ?, ?, ?, 0)',
-      ['disabled', AuthService.makeStoredPassword('X@123'), '停用账号', 'DOCTOR'],
+      ['disabled', PasswordHelper.makeStoredPassword('X@123'), '停用账号', 'DOCTOR'],
     );
     await expectLater(
       auth.login('disabled', 'X@123', '2'),
@@ -179,7 +180,7 @@ void main() {
       'INSERT INTO SYS_USER '
       '(USER_CODE, PASSWORD, USER_NAME, USER_TYPE, STATUS) '
       "VALUES ('roleuser09', ?, '角色用户', 'DOCTOR', 1)",
-      [AuthService.makeStoredPassword('Doctor@123')],
+      [PasswordHelper.makeStoredPassword('Doctor@123')],
     );
     await db.execute(
       'INSERT INTO SYS_ROLE (ID, ROLE_CODE, ROLE_NAME, CREATE_TIME) VALUES '
@@ -205,7 +206,7 @@ void main() {
       'INSERT INTO SYS_USER '
       '(USER_CODE, PASSWORD, USER_NAME, USER_TYPE, STATUS) '
       "VALUES ('norole09', ?, '无角色用户', 'DOCTOR', 1)",
-      [AuthService.makeStoredPassword('Doctor@123')],
+      [PasswordHelper.makeStoredPassword('Doctor@123')],
     );
     expect(await auth.listUserRoles('norole09'), isEmpty);
     expect(await auth.listUserRoles('nobody'), isEmpty);

@@ -9,7 +9,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:common/utils/security_util.dart';
+import 'package:common/utils/security_helper.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:server/app_config.dart';

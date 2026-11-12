@@ -1,7 +1,8 @@
 import 'package:common/model.dart';
+import 'package:common/utils/password_policy.dart';
 import 'package:server/database/engine/database_gateway.dart';
-import 'package:server/services/auth_service.dart';
 import 'package:server/utils/field_cipher.dart';
+import 'package:server/utils/password_helper.dart';
 
 /// 用户类业务异常：httpStatus / code / message 直接映射到 HTTP 响应
 /// （模式同 AuthException / RoleException）。
@@ -30,7 +31,7 @@ final class UserException implements Exception {
 /// ID_CARD_NO 为 FieldCipher 密文存储并配 *_HMAC 盲索引列（本服务不提供
 /// 按敏感字段查询，盲索引仅随写入同步维护）。USER_CODE 全局唯一（表上
 /// 有 UK 约束兜底，本层先 COUNT 判重给出友好错误）。口令散列复用
-/// AuthService.makeStoredPassword，PASSWORD 任何接口不下发。角色保存为
+/// PasswordUtil.makeStoredPassword，PASSWORD 任何接口不下发。角色保存为
 /// 全量覆盖（先清后插，网关 execute 不重试、无重复写入风险；网关无事务
 /// 通道，清插非原子——中断重保存可自愈，不影响其他数据）。名称等含
 /// 中文参数由达梦网关参数改写自动内联，业务层直接写参数化 SQL。
@@ -49,8 +50,6 @@ class UserService {
   static const int _phoneMaxLength = 20;
   static const int _idCardNoMaxLength = 20;
   static const int _extCodeMaxLength = 20;
-  static const int _passwordMinLength = 8;
-  static const int _passwordMaxLength = 32;
   static const int _signatureMaxLength = 1024 * 1024;
   static const int _avatarMaxLength = 1024 * 1024;
 
@@ -140,7 +139,7 @@ class UserService {
       'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         code,
-        AuthService.makeStoredPassword(pwd),
+        PasswordHelper.makeStoredPassword(pwd),
         name,
         type,
         level,
@@ -281,7 +280,7 @@ class UserService {
     }
     if (pwd != null) {
       setters.add('PASSWORD = ?');
-      params.add(AuthService.makeStoredPassword(pwd));
+      params.add(PasswordHelper.makeStoredPassword(pwd));
     }
 
     if (setters.isNotEmpty) {
@@ -326,7 +325,7 @@ class UserService {
     }
 
     // 原口令验证：与登录校验同源。
-    if (!AuthService.verifyStoredPassword(stored, oldPassword)) {
+    if (!PasswordHelper.verifyStoredPassword(stored, oldPassword)) {
       throw const UserException(400, 40003, '原密码不正确');
     }
     if (oldPassword == newPassword) {
@@ -338,7 +337,7 @@ class UserService {
 
     await _db.execute(
       'UPDATE SYS_USER SET PASSWORD = ?, UPDATE_TIME = ? WHERE ID = ?',
-      [AuthService.makeStoredPassword(pwd), formatTimestamp(DateTime.now()), id],
+      [PasswordHelper.makeStoredPassword(pwd), formatTimestamp(DateTime.now()), id],
     );
   }
 
@@ -460,38 +459,16 @@ class UserService {
     }
   }
 
-  /// 口令校验（等保三级复杂度要求）：去空格、非空、8-32 位、不得与
-  /// 登录账号相同、须包含大写字母 / 小写字母 / 数字 / 特殊字符中的
-  /// 至少三类。前端表单有同规则即时提示，本方法为服务端兜底（防绕过
-  /// 前端直调接口），两处规则须保持一致。
+  /// 口令校验（等保三级复杂度要求）：规则与前端共享，实现在
+  /// common 包 PasswordPolicy.complexityError，本方法为服务端兜底
+  /// （防绕过前端直调接口），校验失败抛 UserException，通过返回去
+  /// 空格后的口令。
   String _requiredPassword(String password, {required String userCode}) {
-    final v = password.trim();
-    if (v.isEmpty) {
-      throw const UserException(400, 40002, '密码不能为空');
+    final error = PasswordPolicy.complexityError(password, userCode: userCode);
+    if (error != null) {
+      throw UserException(400, 40002, error);
     }
-    if (v.length < _passwordMinLength || v.length > _passwordMaxLength) {
-      throw const UserException(
-        400,
-        40002,
-        '密码长度须在 $_passwordMinLength-$_passwordMaxLength 位之间',
-      );
-    }
-    if (userCode.trim().isNotEmpty && v == userCode.trim()) {
-      throw const UserException(400, 40002, '密码不能与登录账号相同');
-    }
-    var kinds = 0;
-    if (RegExp(r'[A-Z]').hasMatch(v)) kinds++;
-    if (RegExp(r'[a-z]').hasMatch(v)) kinds++;
-    if (RegExp(r'[0-9]').hasMatch(v)) kinds++;
-    if (RegExp(r'[^A-Za-z0-9]').hasMatch(v)) kinds++;
-    if (kinds < 3) {
-      throw const UserException(
-        400,
-        40002,
-        '密码复杂度不足：须包含大写字母、小写字母、数字、特殊字符中的至少三类',
-      );
-    }
-    return v;
+    return password.trim();
   }
 
   /// 权限级别校验（必填）：非空且须为 0 / 1 / 2，返回 int 形式。

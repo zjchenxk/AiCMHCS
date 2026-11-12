@@ -4,7 +4,7 @@
 // 用法：后端启动后 cd server && dart run tool/hospital_api_smoke.dart
 import 'dart:convert';
 
-import 'package:common/utils/security_util.dart';
+import 'package:common/utils/security_helper.dart';
 import 'package:http/http.dart' as http;
 
 const baseUrl = 'http://localhost:8080';

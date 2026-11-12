@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:common/utils/security_util.dart';
+import 'package:common/utils/security_helper.dart';
 import 'package:cryptography/cryptography.dart';
 
 import 'package:server/app_config.dart';

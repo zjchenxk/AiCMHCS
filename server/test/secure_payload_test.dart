@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:common/utils/security_util.dart';
+import 'package:common/utils/security_helper.dart';
 import 'package:test/test.dart';
 
 void main() {

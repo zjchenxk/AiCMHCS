@@ -1,10 +1,9 @@
-import 'dart:convert';
 import 'dart:math';
 import 'package:common/model.dart';
-import 'package:common/utils/security_util.dart';
-import 'package:crypto/crypto.dart';
+import 'package:common/utils/security_helper.dart';
 import 'package:server/database/engine/database_gateway.dart';
 import 'package:server/utils/field_cipher.dart';
+import 'package:server/utils/password_helper.dart';
 
 /// 认证类业务异常：httpStatus / code / message 直接映射到 HTTP 响应。
 final class AuthException implements Exception {
@@ -90,29 +89,6 @@ class AuthService {
     hospName: row['HOSP_NAME'],
   );
 
-  /// 口令散列算法：sha256(salt + password) 的十六进制。
-  /// 库中存储格式：`salt:hash`（salt 为 16 字节随机数的十六进制）。
-  static String hashPassword(String saltHex, String password) => sha256.convert(utf8.encode('$saltHex$password')).toString();
-
-  /// 生成随机盐（16 字节的十六进制）。
-  static String makeSalt() => _randomHex(16);
-
-  /// 生成存储口令：salt + hash，库中存储格式为 `salt:hash`。
-  static String makeStoredPassword(String password) {
-    final salt = makeSalt();
-    return '$salt:${hashPassword(salt, password)}';
-  }
-
-  /// 校验存储口令：salt + hash，库中存储格式为 `salt:hash`。
-  static bool verifyStoredPassword(String stored, String password) {
-    final parts = stored.split(':');
-    if (parts.length != 2) return false;
-    return _fixedTimeEquals(
-      utf8.encode(hashPassword(parts[0], password)),
-      utf8.encode(parts[1]),
-    );
-  }
-
   /// 登录：校验用户名口令、写审计日志、签发令牌（登录时间由 SYS_LOGIN_LOG 审计）。
   Future<LoginSession> login(String userCode, String password, String role, {String? ip}) async {
     final uCode = userCode.trim();
@@ -142,7 +118,7 @@ class AuthService {
       final row = result.rowsAsMaps.first;
       stored = row['PASSWORD'] ?? '';
       status = row['STATUS'];
-      if (verifyStoredPassword(stored, password)) {
+      if (PasswordHelper.verifyStoredPassword(stored, password)) {
         user = await _loginUserFromRow(row);
       }
     }
@@ -286,15 +262,5 @@ class AuthService {
     final rng = Random.secure();
     final bytes = List<int>.generate(byteCount, (_) => rng.nextInt(256));
     return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-  }
-
-  /// 常量时间字节比较，避免时序侧信道。
-  static bool _fixedTimeEquals(List<int> a, List<int> b) {
-    if (a.length != b.length) return false;
-    var diff = 0;
-    for (var i = 0; i < a.length; i++) {
-      diff |= a[i] ^ b[i];
-    }
-    return diff == 0;
   }
 }
