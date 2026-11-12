@@ -169,10 +169,10 @@ class _MainPageState extends State<MainPage> {
         // loginUser 引用变化时本 Selector 已重建）
         final roleName = context.read<MainViewModel>().roleName;
         final items = <(String, String?)>[
-          ('当前角色', roleName),
           ('当前医院', loginUser.hospName),
           ('当前院区', loginUser.campusName),
           ('当前科室', loginUser.deptName),
+          ('当前角色', roleName),
         ];
 
         return Padding(
@@ -192,9 +192,7 @@ class _MainPageState extends State<MainPage> {
                       children: [
                         Text(
                           '$label:',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
-                          ),
+                          style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.7)),
                         ),
                         const SizedBox(width: 4),
                         Text(
@@ -493,9 +491,7 @@ class _MainPageState extends State<MainPage> {
           ],
           child: Text(
             '设置主题',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurface,
-            ),
+            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
           ),
         ),
       ],
@@ -534,9 +530,7 @@ class _MainPageState extends State<MainPage> {
             side: BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3)),
           ),
         ),
-        padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(vertical: 6),
-        ),
+        padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 6)),
       ),
       menuChildren: [
         MenuItemButton(
@@ -555,9 +549,7 @@ class _MainPageState extends State<MainPage> {
           },
           child: Text(
             '帮助中心',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurface,
-            ),
+            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
           ),
         ),
         const Divider(height: 9, thickness: 0.5),
@@ -575,9 +567,7 @@ class _MainPageState extends State<MainPage> {
           onPressed: () => _showAboutDialog(theme),
           child: Text(
             '关于',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurface,
-            ),
+            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
           ),
         ),
       ],
@@ -847,11 +837,7 @@ class _MainPageState extends State<MainPage> {
           firstChild: Padding(
             padding: const EdgeInsets.only(left: 20),
             child: Column(
-              children: menu.children
-                  .map(
-                    (c) => _buildMenuItem(theme, mainViewModel, c, path, isWide),
-                  )
-                  .toList(),
+              children: menu.children.map((c) => _buildMenuItem(theme, mainViewModel, c, path, isWide)).toList(),
             ),
           ),
           secondChild: const SizedBox(width: double.infinity),
@@ -970,11 +956,9 @@ class _MainPageState extends State<MainPage> {
   Future<void> _showChangePasswordDialog(BuildContext context) async {
     final mainViewModel = context.read<MainViewModel>();
     final username = mainViewModel.loginUser.userCode; // 或 userName，取决于服务端登录名
+    final userId = mainViewModel.loginUser.id;
 
-    final changed = await ChangePasswordDialog.show(
-      context,
-      username: username,
-    );
+    final changed = await ChangePasswordDialog.show(context, userId: userId, username: username);
     if (changed == true && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('密码修改成功，请重新登录')),

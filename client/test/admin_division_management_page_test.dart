@@ -65,7 +65,7 @@ Widget _wrapWidget(AdminDivisionManagementViewModel viewModel) {
       home: Scaffold(
         body: AdminDivisionManagementPage(
           loginUser: const LoginUser(
-            id: 1,
+            id: '1',
             userCode: 'admin',
             userName: '管理员',
             roleId: '',

@@ -180,7 +180,7 @@ void main() {
 
   test('未设置归属的账号：工作副本保持真实值，未设置字段为 null', () {
     loginUser = const LoginUser(
-      id: 3,
+      id: '3',
       userCode: 'teacher01',
       userName: '李老师',
       userType: 'TEACHER',

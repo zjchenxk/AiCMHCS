@@ -57,7 +57,7 @@ void main() {
 
   test('add：userId 与日志内容为空均可写入', () async {
     await service.add(
-      userId: 1,
+      userId: '1',
       logType: OperationLogService.typeInfo,
       logName: '/api/admin-divisions',
     );
@@ -86,7 +86,7 @@ void main() {
     // 模拟 base64Decode 的 FormatException 消息：内嵌含 NUL 的源串片段
     const content = 'FormatException: Invalid character (at character 8192)\nABCD\u0000EFGH\u0001IJKL\u007F';
     await service.add(
-      userId: 1,
+      userId: '1',
       logType: OperationLogService.typeError,
       logName: 'client:FlutterError',
       logContent: content,
@@ -105,7 +105,7 @@ void main() {
   test('中文内容（含非 ASCII）正常写入与读回', () async {
     const content = '异常：新增行政区划失败，编码重复（110000）';
     await service.add(
-      userId: 2,
+      userId: '2',
       logType: OperationLogService.typeError,
       logName: 'server:AdminDivisionService.create',
       logContent: content,
@@ -123,6 +123,6 @@ void main() {
     addTearDown(emptyDb.close);
 
     await LogHelper.error('server:X.y', StateError('boom'), StackTrace.current);
-    await LogHelper.info('server:X.z', content: 'hello', userId: 9);
+    await LogHelper.info('server:X.z', content: 'hello', userId: '9');
   });
 }

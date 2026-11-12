@@ -25,7 +25,7 @@ class MainViewModel extends ChangeNotifier {
   // 医院/院区/科室均为登录接口关联下发的真实数据，未设置的字段保持 null，
   // 由界面按需隐藏对应展示项）
   LoginUser loginUser = const LoginUser(
-    id: 0,
+    id: '',
     userCode: '',
     userName: '',
     userType: '',

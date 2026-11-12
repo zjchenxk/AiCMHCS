@@ -81,7 +81,7 @@ final _testChild = ChildInfo(
 );
 
 const _testLoginUser = LoginUser(
-  id: 1,
+  id: '1',
   userCode: 'doctor01',
   userName: '王心怡',
   roleId: '',
@@ -241,7 +241,7 @@ void main() {
       _wrapWidget(
         viewModel,
         loginUser: const LoginUser(
-          id: 2,
+          id: '2',
           userCode: 'x',
           userName: 'x',
           userType: 'DOCTOR',

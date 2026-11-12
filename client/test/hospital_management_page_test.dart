@@ -197,7 +197,7 @@ Widget _wrapWidget(HospitalManagementViewModel viewModel) {
       home: Scaffold(
         body: HospitalManagementPage(
           loginUser: const LoginUser(
-            id: 1,
+            id: '1',
             userCode: 'admin',
             userName: '管理员',
             roleId: '',

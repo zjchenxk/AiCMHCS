@@ -28,10 +28,10 @@ class LogHelper {
   ///param content: 日志内容
   ///param userId: 用户ID（无会话场景可为 null）
   ///returns: 写入完成的 Future（不抛异常，调用方可不等待）
-  static Future<void> info(String name, {String? content, int? userId}) => _write(OperationLogService.typeInfo, name, content, userId);
+  static Future<void> info(String name, {String? content, String? userId}) => _write(OperationLogService.typeInfo, name, content, userId);
 
   /// 警告日志，参数同 [info]。
-  static Future<void> warn(String name, {String? content, int? userId}) => _write(OperationLogService.typeWarn, name, content, userId);
+  static Future<void> warn(String name, {String? content, String? userId}) => _write(OperationLogService.typeWarn, name, content, userId);
 
   ///param name: 日志名称
   ///param error: 异常对象（toString 落库）
@@ -39,30 +39,20 @@ class LogHelper {
   ///param content: 附加内容（置于异常消息之前）
   ///param userId: 用户ID
   ///returns: 写入完成的 Future（不抛异常，调用方可不等待）
-  static Future<void> error(String name, Object? error, StackTrace? stackTrace, {String? content, int? userId}) {
+  static Future<void> error(String name, Object? error, StackTrace? stackTrace, {String? content, String? userId}) {
     final parts = [
       if (content != null && content.isNotEmpty) content,
       if (error != null) '$error',
       if (stackTrace != null) '$stackTrace',
     ];
-    return _write(
-      OperationLogService.typeError,
-      name,
-      parts.isEmpty ? null : parts.join('\n'),
-      userId,
-    );
+    return _write(OperationLogService.typeError, name, parts.isEmpty ? null : parts.join('\n'), userId);
   }
 
-  static Future<void> _write(String logType, String logName, String? logContent, int? userId) async {
+  static Future<void> _write(String logType, String logName, String? logContent, String? userId) async {
     final operationLogs = _service;
     if (operationLogs == null) return;
     try {
-      await operationLogs.add(
-        userId: userId,
-        logType: logType,
-        logName: logName,
-        logContent: logContent,
-      );
+      await operationLogs.add(userId: userId, logType: logType, logName: logName, logContent: logContent);
     } catch (e, s) {
       stderr.writeln('[操作日志写入失败] $e\n$s');
     }

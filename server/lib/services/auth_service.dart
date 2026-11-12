@@ -69,7 +69,7 @@ class AuthService {
   /// 存量明文原样返回；工作区名称列由登录 SQL 关联 SYS_HOSPITAL /
   /// SYS_DEPARTMENT / SYS_CAMPUS 带出，未设置时为 null）。
   Future<LoginUser> _loginUserFromRow(Map<String, String?> row) async => LoginUser(
-    id: int.parse(row['ID'] ?? '0'),
+    id: row['ID'] ?? '',
     userCode: row['USER_CODE'] ?? '',
     userName: row['USER_NAME'] ?? '',
     roleId: '',
@@ -160,10 +160,10 @@ class AuthService {
 
     // 所选角色必须真实分配给该用户（防凭任意角色 ID 冒取他人角色菜单），
     // 校验通过后记入会话，供主界面按角色取菜单。
-    final roleIdValue = int.tryParse(role.trim());
-    if (roleIdValue == null) {
-      await _logLogin(user.id, uCode, ip, 'FAIL', '角色参数不正确');
-      throw const AuthException(400, 40001, '所选角色参数不正确');
+    final roleIdValue = role.trim();
+    if (roleIdValue.isEmpty) {
+      await _logLogin(user.id, uCode, ip, 'FAIL', '角色不能为空');
+      throw const AuthException(400, 40001, '角色不能为空');
     }
 
     await _ensureUserRole(user.id, roleIdValue, uCode, ip);
@@ -173,19 +173,13 @@ class AuthService {
     _pruneExpired();
 
     final token = _randomHex(32);
-    final session = LoginSession(
-      token,
-      SecurePayload.generateSessionKey(),
-      user,
-      DateTime.now().add(sessionTtl),
-      '$roleIdValue',
-    );
+    final session = LoginSession(token, SecurePayload.generateSessionKey(), user, DateTime.now().add(sessionTtl), roleIdValue);
     _sessions[token] = session;
     return session;
   }
 
   /// 校验角色已分配给用户（SYS_USER_ROLE），未分配时写失败审计并抛 403 业务异常。
-  Future<void> _ensureUserRole(int userId, int roleId, String userCode, String? ip) async {
+  Future<void> _ensureUserRole(String userId, String roleId, String userCode, String? ip) async {
     if (!await _hasUserRole(userId, roleId)) {
       await _logLogin(userId, userCode, ip, 'FAIL', '所选角色未授权');
       throw const AuthException(403, 40301, '所选角色无效或未授权，请重新选择');
@@ -193,7 +187,7 @@ class AuthService {
   }
 
   /// 查询角色是否已分配给用户（SYS_USER_ROLE 精确匹配），登录与切换角色共用。
-  Future<bool> _hasUserRole(int userId, int roleId) async {
+  Future<bool> _hasUserRole(String userId, String roleId) async {
     final result = await _db.query(
       'SELECT COUNT(*) AS CNT FROM SYS_USER_ROLE WHERE USER_ID = ? AND ROLE_ID = ?',
       [userId, roleId],
@@ -230,16 +224,17 @@ class AuthService {
   Future<LoginSession> switchRole(String token, String role) async {
     final session = await verifySession(token);
 
-    final roleIdValue = int.tryParse(role.trim());
-    if (roleIdValue == null) {
-      throw const AuthException(400, 40001, '所选角色参数不正确');
+    final roleIdValue = role.trim();
+    if (roleIdValue.isEmpty) {
+      throw const AuthException(400, 40001, '角色不能为空');
     }
 
     if (!await _hasUserRole(session.user.id, roleIdValue)) {
       throw const AuthException(403, 40301, '所选角色无效或未授权，请重新选择');
     }
 
-    session.roleId = '$roleIdValue';
+    session.roleId = roleIdValue;
+
     return session;
   }
 
@@ -262,7 +257,7 @@ class AuthService {
 
   /// 写登录审计（含中文的失败原因经参数传入，由达梦网关自动内联；
   /// 登录时间由 Dart 侧生成后绑定，见 formatTimestamp）。
-  Future<void> _logLogin(int? userId, String userCode, String? ip, String result, String? failReason) async {
+  Future<void> _logLogin(String? userId, String userCode, String? ip, String result, String? failReason) async {
     try {
       await _db.execute(
         'INSERT INTO SYS_LOGIN_LOG '

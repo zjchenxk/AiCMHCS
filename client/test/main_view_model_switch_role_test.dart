@@ -13,7 +13,7 @@ class FakeAccountService extends AccountService {
   Future<SwitchRoleResult> switchRole(String roleId) async {
     return (
       user: const LoginUser(
-        id: 2,
+        id: '2',
         userCode: 'doctor01',
         userName: '李医生',
         roleId: '6',
@@ -89,7 +89,7 @@ void main() {
   });
 
   LoginUser loginAsRole2() => const LoginUser(
-    id: 2,
+    id: '2',
     userCode: 'doctor01',
     userName: '李医生',
     roleId: '2',

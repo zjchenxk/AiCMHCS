@@ -43,7 +43,7 @@ class OperationLogService {
   ///param logName: 日志名称（方法全路径或请求路由路径）
   ///param userId: 用户ID（无会话的请求/异常可为 null）
   ///param logContent: 日志内容（脱敏后的入参/异常消息及堆栈，可空）
-  Future<void> add({required String logType, required String logName, int? userId, String? logContent}) async {
+  Future<void> add({required String logType, required String logName, String? userId, String? logContent}) async {
     await _db.execute(
       'INSERT INTO SYS_OPERATION_LOG '
       '(USER_ID, LOG_TYPE, LOG_NAME, LOG_CONTENT, LOG_TIME) '

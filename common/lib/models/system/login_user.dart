@@ -28,7 +28,7 @@ final class LoginUser {
 
   /// 从 JSON 对象创建 LoginUser 实例（后端响应的 user 字段）
   factory LoginUser.fromJson(Map<String, dynamic> json) => LoginUser(
-    id: json['id'] as int,
+    id: json['id'] as String,
     userCode: json['userCode'] as String,
     userName: json['userName'] as String,
     roleId: json['roleId'] as String,
@@ -50,7 +50,7 @@ final class LoginUser {
   );
 
   /// 用户 ID
-  final int id;
+  final String id;
 
   /// 用户名（登录账号）
   final String userCode;
@@ -111,7 +111,7 @@ final class LoginUser {
 
   /// 复制并替换指定字段
   LoginUser copyWith({
-    int? id,
+    String? id,
     String? userCode,
     String? userName,
     String? roleId,

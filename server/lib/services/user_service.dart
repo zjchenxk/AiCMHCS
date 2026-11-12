@@ -181,12 +181,7 @@ class UserService {
   /// （userCode）、归属医院、挂载科室（deptId）不可改；CREATE_TIME 不可
   /// 改，UPDATE_TIME 由本方法统一写入。password 非空时重置口令；roleIds
   /// 非 null 时全量覆盖角色关联（null 表示本次不动角色）。
-  Future<User> update(
-    String id,
-    Map<String, Object?> changes, {
-    String? password,
-    List<String>? roleIds,
-  }) async {
+  Future<User> update(String id, Map<String, Object?> changes, {String? password, List<String>? roleIds}) async {
     const allowed = <String>{
       'userName',
       'userType',
@@ -303,6 +298,48 @@ class UserService {
       await _saveRoles(id, roleValues);
     }
     return getById(id);
+  }
+
+  /// 当前登录用户自助修改口令（与 update 的 password 管理员重置语义
+  /// 分离）：先验证原口令，再按等保三级复杂度兜底校验新口令，通过后
+  /// 更新 SYS_USER.PASSWORD 并刷新 UPDATE_TIME。
+  ///
+  /// 原口令验证必须与登录同源（同一散列算法与比对方式），见下方
+  /// verifyPassword 调用处注释。
+  Future<void> changePassword({required String id, required String oldPassword, required String newPassword}) async {
+    // 单独取 PASSWORD（_columns 特意不含它），仅在本方法内部比对，
+    // 不随任何响应下发
+    final result = await _db.query(
+      'SELECT PASSWORD, USER_CODE, STATUS FROM SYS_USER WHERE ID = ?',
+      [id],
+    );
+    if (result.rows.isEmpty) {
+      throw UserException(400, 40001, '用户不存在：$id');
+    }
+    final row = result.rowsAsMaps.first;
+    final stored = row['PASSWORD'] ?? '';
+    if (stored.isEmpty) {
+      throw const UserException(500, 50000, '用户口令数据异常，请联系管理员');
+    }
+    if ((row['STATUS'] ?? '1') == '0') {
+      throw const UserException(400, 40003, '用户已停用，无法修改密码');
+    }
+
+    // 原口令验证：与登录校验同源。
+    if (!AuthService.verifyStoredPassword(stored, oldPassword)) {
+      throw const UserException(400, 40003, '原密码不正确');
+    }
+    if (oldPassword == newPassword) {
+      throw const UserException(400, 40002, '新密码不能与原密码相同');
+    }
+
+    // 服务端兜底做等保三级强口令校验（防绕过前端直调接口）
+    final pwd = _requiredPassword(newPassword, userCode: row['USER_CODE'] ?? '');
+
+    await _db.execute(
+      'UPDATE SYS_USER SET PASSWORD = ?, UPDATE_TIME = ? WHERE ID = ?',
+      [AuthService.makeStoredPassword(pwd), formatTimestamp(DateTime.now()), id],
+    );
   }
 
   /// 从数据库行解析（手机号 / 身份证号解密为明文，传输由信封保护；

@@ -113,7 +113,7 @@ final _testChild = ChildInfo(
 );
 
 const _testLoginUser = LoginUser(
-  id: 1,
+  id: '1',
   userCode: 'admin',
   userName: '系统管理员',
   userType: 'ADMIN',

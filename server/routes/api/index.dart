@@ -41,6 +41,7 @@ Response onRequest(RequestContext context) {
           {'method': 'POST', 'path': '/api/user/query', 'desc': '用户查询（id 查详情；hospId 查指定医院下的用户列表，携带各自角色ID列表）'},
           {'method': 'POST', 'path': '/api/user/add', 'desc': '新增用户（挂载科室必填且须属于该医院；登录账号全局唯一；roleIds 全量保存角色关联）'},
           {'method': 'POST', 'path': '/api/user/update', 'desc': '修改用户（登录账号与归属不可改；password 留空不改；roleIds 非 null 时全量覆盖）'},
+          {'method': 'POST', 'path': '/api/user/changePassword', 'desc': '当前登录用户自助修改口令（服务端先验证原口令，再按等保三级复杂度兜底校验新口令）'},
           {'method': 'GET', 'path': '/health', 'desc': '健康检查（含数据库探活）'},
         ],
       },

@@ -1,3 +1,4 @@
+import 'package:client/services/user_service.dart';
 import 'package:client/utils/log_helper.dart';
 import 'package:client/widgets/glass_panel.dart';
 import 'package:material_ui/material_ui.dart';
@@ -5,17 +6,18 @@ import 'package:material_ui/material_ui.dart';
 /// 修改密码对话框（毛玻璃风格）
 /// 返回值：修改成功时返回 true，取消时返回 null
 class ChangePasswordDialog extends StatefulWidget {
+  final String userId; // 用于服务端接口调用
   final String username; // 用于弱口令检测：密码不能包含用户名
 
-  const ChangePasswordDialog({super.key, this.username = ''});
+  const ChangePasswordDialog({super.key, this.userId = '', this.username = ''});
 
   /// 静态方法，方便外部一行代码调用
-  static Future<bool?> show(BuildContext context, {String username = ''}) {
+  static Future<bool?> show(BuildContext context, {String userId = '', String username = ''}) {
     return showDialog<bool>(
       context: context,
       barrierDismissible: false, // 防止误点背景关闭
       barrierColor: Colors.black26,
-      builder: (_) => ChangePasswordDialog(username: username),
+      builder: (_) => ChangePasswordDialog(userId: userId, username: username),
     );
   }
 
@@ -84,10 +86,8 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                   const SizedBox(height: 6),
 
                   Text(
-                    '密码需包含大写字母、小写字母、数字和特殊字符，长度至少 8 位',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
+                    '密码需包含大写字母、小写字母、数字和特殊字符，长度至少 8-32 位',
+                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
                   ),
                   const SizedBox(height: 16),
 
@@ -111,12 +111,11 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                     validator: (v) {
                       if (v == null || v.isEmpty) return '请输入新密码';
                       if (v.length < 8) return '密码长度不能少于 8 位';
+                      if (v.length > 32) return '密码长度不能超过 32 位';
                       final hasUpper = v.contains(RegExp(r'[A-Z]'));
                       final hasLower = v.contains(RegExp(r'[a-z]'));
                       final hasDigit = v.contains(RegExp(r'[0-9]'));
-                      final hasSpecial = v.contains(
-                        RegExp(r'[!@#$%^&*()_+\-=\[\]{};:"\\|,.<>/?~`]'),
-                      );
+                      final hasSpecial = v.contains(RegExp(r'[!@#$%^&*()_+\-=\[\]{};:"\\|,.<>/?~`]'));
                       final kinds = [
                         hasUpper,
                         hasLower,
@@ -151,31 +150,23 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                         onPressed: _submitting ? null : () => Navigator.of(context).pop(),
                         child: Text(
                           '取消',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onSurface,
-                          ),
+                          style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
                         ),
                       ),
                       const SizedBox(width: 12),
 
                       FilledButton(
                         onPressed: _submitting ? null : _submit,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: theme.colorScheme.primary,
-                        ),
+                        style: FilledButton.styleFrom(backgroundColor: theme.colorScheme.primary),
                         child: _submitting
                             ? const SizedBox(
                                 width: 18,
                                 height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
+                                child: CircularProgressIndicator(strokeWidth: 2),
                               )
                             : Text(
                                 '确定',
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: theme.colorScheme.onPrimary,
-                                ),
+                                style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimary),
                               ),
                       ),
                     ],
@@ -194,28 +185,17 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
       controller: controller,
       obscureText: obscure,
       validator: validator,
-      style: theme.textTheme.bodyMedium?.copyWith(
-        color: theme.colorScheme.onPrimaryContainer,
-      ),
+      style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: theme.textTheme.bodyMedium?.copyWith(
-          color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.6),
-        ),
+        labelStyle: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.6)),
         // 毛玻璃底色：半透明 surface
         filled: true,
-        fillColor: theme.colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.6,
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 14,
-        ),
+        fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(
-            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
-          ),
+          borderSide: BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
@@ -245,11 +225,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
     if (!_formKey.currentState!.validate()) return;
 
     // 表单校验通过后，再执行一次完整强密码校验（包含用户名/旧密码比对）
-    final error = _validateStrongPassword(
-      _newPwdController.text,
-      username: widget.username,
-      oldPassword: _oldPwdController.text,
-    );
+    final error = _validateStrongPassword(_newPwdController.text, username: widget.username, oldPassword: _oldPwdController.text);
     if (error != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -262,21 +238,24 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
 
     setState(() => _submitting = true);
     try {
-      // TODO: 调用服务端接口修改密码（服务端必须做同样的校验！）
-      // await client.auth.changePassword(old, new);
-      await Future.delayed(const Duration(milliseconds: 500)); // 模拟请求
+      await UserService().changePassword(
+        userId: widget.userId,
+        oldPassword: _oldPwdController.text,
+        newPassword: _newPwdController.text,
+      );
 
       if (!mounted) return;
+
       Navigator.of(context).pop(true);
     } catch (e, st) {
       LogHelper.error('client:ChangePasswordDialog._submit', e, st);
+
       if (!mounted) return;
+
       setState(() => _submitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('修改密码失败：$e'),
-        ),
-      );
+
+      final msg = e.toString().replaceFirst(RegExp(r'^\w*(Exception|Error):\s*'), '');
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('修改密码失败：$msg')));
     }
   }
 
@@ -285,7 +264,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
   String? _validateStrongPassword(String password, {required String username, required String oldPassword}) {
     if (password.isEmpty) return '请输入新密码';
     if (password.length < 8) return '密码长度不能少于 8 位';
-    if (password.length > 64) return '密码长度不能超过 64 位';
+    if (password.length > 32) return '密码长度不能超过 32 位';
     if (password == oldPassword) return '新密码不能与原密码相同';
     if (username.isNotEmpty && password.toLowerCase().contains(username.toLowerCase())) {
       return '密码不能包含用户名';
@@ -294,9 +273,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
     final hasUpper = password.contains(RegExp(r'[A-Z]'));
     final hasLower = password.contains(RegExp(r'[a-z]'));
     final hasDigit = password.contains(RegExp(r'[0-9]'));
-    final hasSpecial = password.contains(
-      RegExp(r'''[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`€£¥§]'''),
-    );
+    final hasSpecial = password.contains(RegExp(r'''[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`€£¥§]'''));
 
     final kinds = [
       hasUpper,

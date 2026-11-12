@@ -6,10 +6,10 @@ import 'package:common/model.dart';
 /// 携带 token）。用户归属登录用户的所属医院，医院参数由调用方传
 /// loginUser.hospId；用户列表携带各自的角色 ID 列表（roleIds）。
 class UserService {
-  /// 经服务定位器取加密客户端（登录后才可用；构造期不取，便于测试覆写）。
+  ///经服务定位器取加密客户端（登录后才可用；构造期不取，便于测试覆写）。
   BaseService get _base => getIt<BaseService>();
 
-  /// 获取指定医院下的用户列表（按创建顺序，携带各自角色 ID）。
+  ///获取指定医院下的用户列表（按创建顺序，携带各自角色 ID）。
   ///param hospId: 医院 ID（登录用户所属医院）
   Future<List<User>> getByHospital(String hospId) async {
     final data = await _base.post('/api/user/query', {'hospId': hospId});
@@ -17,14 +17,14 @@ class UserService {
     return list.map((e) => User.fromJson(e as Map<String, dynamic>)).toList();
   }
 
-  /// 查询单个用户。
+  ///查询单个用户。
   ///param id: 用户 ID
   Future<User> getById(String id) async {
     final data = await _base.post('/api/user/query', {'id': id});
     return User.fromJson(data['user'] as Map<String, dynamic>);
   }
 
-  /// 新增用户。
+  ///新增用户。
   ///param hospId: 所属医院 ID（登录用户所属医院）
   ///param deptId: 挂载科室 ID（须属于该医院）
   ///param userCode: 登录账号（全局唯一）
@@ -80,7 +80,7 @@ class UserService {
     return User.fromJson(data['user'] as Map<String, dynamic>);
   }
 
-  /// 修改用户。
+  ///修改用户。
   ///param id: 用户 ID
   ///param changes: 要修改的字段集合（键为 userName/userType/
   /// permissionLevel/phone/idCardNo/status/hisUserCode/mchisUserCode/
@@ -88,12 +88,7 @@ class UserService {
   ///param password: 非空时重置口令（留空/null 不改）
   ///param roleIds: 非 null 时全量覆盖角色关联（null 不动角色，空列表清空）
   ///returns: 修改后的用户
-  Future<User> update(
-    String id,
-    Map<String, Object?> changes, {
-    String? password,
-    List<String>? roleIds,
-  }) async {
+  Future<User> update(String id, Map<String, Object?> changes, {String? password, List<String>? roleIds}) async {
     final data = await _base.post('/api/user/update', {
       'id': id,
       ...changes,
@@ -101,5 +96,17 @@ class UserService {
       'roleIds': ?roleIds,
     });
     return User.fromJson(data['user'] as Map<String, dynamic>);
+  }
+
+  ///修改密码
+  ///param userId: 用户 ID
+  ///param oldPassword: 旧密码
+  ///param newPassword: 新密码
+  Future<void> changePassword({required String userId, required String oldPassword, required String newPassword}) async {
+    await _base.post('/api/user/changePassword', {
+      'userId': userId,
+      'oldPassword': oldPassword,
+      'newPassword': newPassword,
+    });
   }
 }

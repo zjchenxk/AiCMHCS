@@ -21,7 +21,7 @@ Future<Response> onRequest(RequestContext context) async {
     return _error(401, 40103, '缺少访问令牌（Authorization: Bearer <token>）');
   }
   final auth = context.read<AuthService>();
-  final int userId;
+  final String userId;
   try {
     userId = (await auth.verify(token)).id;
   } on AuthException catch (e) {
@@ -44,12 +44,7 @@ Future<Response> onRequest(RequestContext context) async {
   }
 
   try {
-    await context.read<OperationLogService>().add(
-      userId: userId,
-      logType: logType,
-      logName: logName,
-      logContent: logContent as String?,
-    );
+    await context.read<OperationLogService>().add(userId: userId, logType: logType, logName: logName, logContent: logContent as String?);
     return Response.json(
       body: {'code': 0, 'message': 'ok', 'data': <String, dynamic>{}},
     );
