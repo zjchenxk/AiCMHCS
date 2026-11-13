@@ -108,16 +108,18 @@ class _DictionaryManagementPageState extends State<DictionaryManagementPage> {
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      IconButton(
-                        tooltip: '新增顶级字典',
-                        icon: Icon(
-                          Icons.library_add_outlined,
-                          size: 20,
-                          color: Theme.of(context).colorScheme.primary,
+                      // 新增顶级字典按钮按「新增数据字典」操作权限显隐
+                      if (viewModel.canCreateDict)
+                        IconButton(
+                          tooltip: '新增顶级字典',
+                          icon: Icon(
+                            Icons.library_add_outlined,
+                            size: 20,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          // 顶级新增（挂载目标为空）；树为空时也可用
+                          onPressed: viewModel.loading || viewModel.busy ? null : () => _showDictForm(viewModel),
                         ),
-                        // 顶级新增（挂载目标为空）；树为空时也可用
-                        onPressed: viewModel.loading || viewModel.busy ? null : () => _showDictForm(viewModel),
-                      ),
                       IconButton(
                         tooltip: '刷新',
                         icon: Icon(
@@ -157,7 +159,8 @@ class _DictionaryManagementPageState extends State<DictionaryManagementPage> {
                   theme: Theme.of(context),
                   title: viewModel.selectedDict == null ? '数据项' : '数据项 · ${viewModel.selectedDict!.dictName}',
                   icon: Icons.list_alt_outlined,
-                  trailing: viewModel.selectedDict == null
+                  // 新增数据项按钮按「新增数据项」操作权限显隐
+                  trailing: viewModel.selectedDict == null || !viewModel.canCreateItem
                       ? null
                       : Row(
                           mainAxisSize: MainAxisSize.min,
@@ -274,13 +277,15 @@ class _DictionaryManagementPageState extends State<DictionaryManagementPage> {
     );
   }
 
-  /// 节点行尾：展开/折叠箭头 + 操作菜单（新增下级字典/修改/删除）。
+  /// 节点行尾：展开/折叠箭头 + 操作菜单（新增下级字典/修改/删除，
+  /// 各项按对应操作权限显隐；全部未授权时整个操作菜单不显示）。
   Widget _buildNodeTrailing(
     BuildContext context,
     DictManagementViewModel viewModel,
     DictTreeNode node,
   ) {
     final theme = Theme.of(context);
+    final hasDictActions = viewModel.canCreateDict || viewModel.canUpdateDict || viewModel.canDeleteDict;
     return SizedBox(
       width: 72,
       child: Row(
@@ -294,71 +299,75 @@ class _DictionaryManagementPageState extends State<DictionaryManagementPage> {
                 size: 20,
               ),
             ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, size: 18),
-            itemBuilder: (_) => [
-              PopupMenuItem(
-                value: 'add',
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.library_add_outlined,
-                      size: 18,
-                      color: theme.colorScheme.primary,
+          if (hasDictActions)
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert, size: 18),
+              itemBuilder: (_) => [
+                if (viewModel.canCreateDict)
+                  PopupMenuItem(
+                    value: 'add',
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.library_add_outlined,
+                          size: 18,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 10),
+                        const Text('新增下级字典'),
+                      ],
                     ),
-                    const SizedBox(width: 10),
-                    const Text('新增下级字典'),
-                  ],
+                  ),
+                if (viewModel.canUpdateDict)
+                  PopupMenuItem(
+                    value: 'edit',
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.edit_outlined,
+                          size: 18,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 10),
+                        const Text('修改'),
+                      ],
+                    ),
+                  ),
+                if (viewModel.canDeleteDict)
+                  PopupMenuItem(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.delete_outline,
+                          size: 18,
+                          color: theme.colorScheme.error,
+                        ),
+                        const SizedBox(width: 10),
+                        const Text('删除'),
+                      ],
+                    ),
+                  ),
+              ],
+              tooltip: '更多操作...',
+              color: theme.colorScheme.surface,
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(
+                  color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
                 ),
               ),
-              PopupMenuItem(
-                value: 'edit',
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.edit_outlined,
-                      size: 18,
-                      color: theme.colorScheme.primary,
-                    ),
-                    const SizedBox(width: 10),
-                    const Text('修改'),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'delete',
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.delete_outline,
-                      size: 18,
-                      color: theme.colorScheme.error,
-                    ),
-                    const SizedBox(width: 10),
-                    const Text('删除'),
-                  ],
-                ),
-              ),
-            ],
-            tooltip: '更多操作...',
-            color: theme.colorScheme.surface,
-            elevation: 4,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(
-                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
-              ),
+              onSelected: (action) {
+                if (action == 'add') {
+                  _showDictForm(viewModel, parent: node);
+                } else if (action == 'edit') {
+                  _showDictForm(viewModel, dict: node.dict);
+                } else if (action == 'delete') {
+                  _confirmDeleteDict(context, viewModel, node);
+                }
+              },
             ),
-            onSelected: (action) {
-              if (action == 'add') {
-                _showDictForm(viewModel, parent: node);
-              } else if (action == 'edit') {
-                _showDictForm(viewModel, dict: node.dict);
-              } else if (action == 'delete') {
-                _confirmDeleteDict(context, viewModel, node);
-              }
-            },
-          ),
         ],
       ),
     );
@@ -416,12 +425,14 @@ class _DictionaryManagementPageState extends State<DictionaryManagementPage> {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
+      // 行尾操作：修改（含设为默认项）/删除分别按「修改数据项」
+      // 「删除数据项」权限显隐
       trailing: SizedBox(
         width: 120,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            if (!isDefault)
+            if (!isDefault && viewModel.canUpdateItem)
               IconButton(
                 tooltip: '设为默认项',
                 icon: Icon(
@@ -439,30 +450,33 @@ class _DictionaryManagementPageState extends State<DictionaryManagementPage> {
                         // 失败提示由 errorMsg 监听统一弹出
                       },
               ),
-            IconButton(
-              tooltip: '修改',
-              icon: Icon(
-                Icons.edit_outlined,
-                size: 18,
-                color: theme.colorScheme.primary,
+            if (viewModel.canUpdateItem)
+              IconButton(
+                tooltip: '修改',
+                icon: Icon(
+                  Icons.edit_outlined,
+                  size: 18,
+                  color: theme.colorScheme.primary,
+                ),
+                visualDensity: VisualDensity.compact,
+                onPressed: viewModel.busy ? null : () => _showItemForm(viewModel, item: item),
               ),
-              visualDensity: VisualDensity.compact,
-              onPressed: viewModel.busy ? null : () => _showItemForm(viewModel, item: item),
-            ),
-            IconButton(
-              tooltip: '删除',
-              icon: Icon(
-                Icons.delete_outline,
-                size: 18,
-                color: theme.colorScheme.error,
+            if (viewModel.canDeleteItem)
+              IconButton(
+                tooltip: '删除',
+                icon: Icon(
+                  Icons.delete_outline,
+                  size: 18,
+                  color: theme.colorScheme.error,
+                ),
+                visualDensity: VisualDensity.compact,
+                onPressed: viewModel.busy ? null : () => _confirmDeleteItem(context, viewModel, item),
               ),
-              visualDensity: VisualDensity.compact,
-              onPressed: viewModel.busy ? null : () => _confirmDeleteItem(context, viewModel, item),
-            ),
           ],
         ),
       ),
-      onTap: () => _showItemForm(viewModel, item: item),
+      // 点击行打开编辑弹窗等同「修改数据项」，同权限控制
+      onTap: viewModel.canUpdateItem ? () => _showItemForm(viewModel, item: item) : null,
     );
   }
 

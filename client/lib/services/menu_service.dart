@@ -23,6 +23,14 @@ class MenuService {
     return list.map((e) => Menu.fromJson(e as Map<String, dynamic>)).toList();
   }
 
+  /// 查询当前登录角色已授权的操作类权限编码集合（ITEM_TYPE=3，服务端
+  /// 从令牌会话推导角色），供功能页做按钮级显隐控制。
+  Future<Set<String>> queryOperationCodes() async {
+    final data = await _base.post('/api/menu/operations', const {});
+    final list = data['operationCodes'] as List<dynamic>? ?? const [];
+    return list.whereType<String>().toSet();
+  }
+
   /// 查询单个菜单项目。
   ///param id: 菜单项目 ID
   Future<Menu> getById(String id) async {

@@ -92,6 +92,20 @@ class MenuService {
     return result.rowsAsMaps.map(_fromRow).toList(growable: false);
   }
 
+  /// 查询指定角色已授权的操作类项目（ITEM_TYPE=3）ITEM_CODE 集合，
+  /// 供功能页做按钮级权限控制（登录下发的 data.menus 刻意不含操作项，
+  /// 操作权限编码由功能页经 /api/menu/operations 另行拉取）。
+  Future<Set<String>> listRoleOperationCodes(String roleId) async {
+    final idValue = _toInt(roleId, '角色ID');
+    final result = await _db.query(
+      'SELECT M.ITEM_CODE FROM SYS_ROLE_PERMISSION P '
+      'JOIN SYS_MENU M ON M.ID = P.MENU_ID '
+      'WHERE P.ROLE_ID = ? AND M.ITEM_TYPE = ?',
+      [idValue, itemTypeAction],
+    );
+    return result.rowsAsMaps.map((row) => row['ITEM_CODE'] ?? '').where((code) => code.isNotEmpty).toSet();
+  }
+
   /// 按 ID 查询单个菜单项目，不存在时抛业务异常。
   Future<Menu> getById(String id) async {
     final result = await _db.query(

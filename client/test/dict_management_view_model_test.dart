@@ -3,9 +3,34 @@
 // 参数、增删改后整表重拉与选中保持、删除前置校验、数据项增删改与默认
 // 项互斥、失败提示。
 import 'package:client/services/dict_service.dart';
+import 'package:client/services/menu_service.dart';
 import 'package:client/view_models/system/dict_management_view_model.dart';
 import 'package:common/model.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+/// 内存版菜单服务：仅覆写操作权限查询（字典 VM 只用到该接口），
+/// 默认全量授权、既有数据流用例不关心权限差异。
+class FakeMenuService extends MenuService {
+  FakeMenuService({Set<String>? operationCodes}) : _operationCodes = operationCodes ?? _allOperationCodes;
+
+  static final Set<String> _allOperationCodes = {
+    DictManagementViewModel.opCreateDict,
+    DictManagementViewModel.opUpdateDict,
+    DictManagementViewModel.opDeleteDict,
+    DictManagementViewModel.opCreateItem,
+    DictManagementViewModel.opUpdateItem,
+    DictManagementViewModel.opDeleteItem,
+  };
+
+  final Set<String> _operationCodes;
+  int queryCalls = 0;
+
+  @override
+  Future<Set<String>> queryOperationCodes() async {
+    queryCalls++;
+    return {..._operationCodes};
+  }
+}
 
 /// 内存版字典服务：模拟后端查询、同医院字典编码/同字典项目编码查重、
 /// 删除前置校验、默认项互斥。
@@ -230,7 +255,7 @@ void main() {
       ..seedItem('2', '3', 'F', '女', displayOrder: '1')
       ..seedItem('3', '3', 'U', '未知');
 
-    final viewModel = DictManagementViewModel(dictService: service);
+    final viewModel = DictManagementViewModel(menuService: FakeMenuService(), dictService: service);
     expect(await viewModel.loadData(), isTrue);
     expect(viewModel.isEmpty, isFalse);
 
@@ -250,7 +275,7 @@ void main() {
 
   test('createDict：挂载目标随请求下发，新增后整表重拉并选中新字典', () async {
     final service = FakeDictService()..seedDict('1', null, 'D001', '性别');
-    final viewModel = DictManagementViewModel(dictService: service);
+    final viewModel = DictManagementViewModel(menuService: FakeMenuService(), dictService: service);
     await viewModel.loadData();
 
     viewModel.startCreate(service.dictStore['1'] != null ? viewModel.roots[0] : null);
@@ -268,7 +293,7 @@ void main() {
 
   test('updateDict：改名后树同步更新且选中保持；重码失败置错误提示', () async {
     final service = FakeDictService()..seedDict('1', null, 'D001', '性别');
-    final viewModel = DictManagementViewModel(dictService: service);
+    final viewModel = DictManagementViewModel(menuService: FakeMenuService(), dictService: service);
     await viewModel.loadData();
     viewModel.selectNode(viewModel.roots[0]);
 
@@ -290,7 +315,7 @@ void main() {
       ..seedDict('1', null, 'D001', '性别')
       ..seedDict('2', '1', 'D002', '学历层次')
       ..seedItem('1', '2', 'P', '小学');
-    final viewModel = DictManagementViewModel(dictService: service);
+    final viewModel = DictManagementViewModel(menuService: FakeMenuService(), dictService: service);
     await viewModel.loadData();
     viewModel.selectNode(viewModel.roots[0]);
     await flushMicrotasks();
@@ -312,7 +337,7 @@ void main() {
 
   test('数据项增删改与设默认：同字典默认互斥、重码失败提示', () async {
     final service = FakeDictService()..seedDict('1', null, 'D001', '性别');
-    final viewModel = DictManagementViewModel(dictService: service);
+    final viewModel = DictManagementViewModel(menuService: FakeMenuService(), dictService: service);
     await viewModel.loadData();
     viewModel.selectNode(viewModel.roots[0]);
     await flushMicrotasks();
@@ -329,7 +354,7 @@ void main() {
     expect(viewModel.items.map((i) => i.isDefault), ['1', '0']);
 
     // 未选中字典时新增数据项直接失败
-    final viewModel2 = DictManagementViewModel(dictService: service);
+    final viewModel2 = DictManagementViewModel(menuService: FakeMenuService(), dictService: service);
     expect(await viewModel2.createItem(itemCode: 'X', itemValue: '无归属'), isFalse);
 
     // 新增带默认标记的数据项：原默认项互斥清位
@@ -350,5 +375,39 @@ void main() {
     expect(viewModel.items.map((i) => i.isDefault), ['1', '0', '0']);
     expect(await viewModel.deleteItem(viewModel.items.first), isTrue);
     expect(viewModel.items.map((i) => i.itemCode), ['F', 'U']);
+  });
+
+  test('loadData 拉取角色操作权限：canXxx getter 按 6 个操作权限编码判定，全未授权时按钮全隐藏', () async {
+    final dictService = FakeDictService()..seedDict('1', null, 'D001', '性别');
+    final menuService = FakeMenuService(
+      operationCodes: {
+        DictManagementViewModel.opCreateDict,
+        DictManagementViewModel.opCreateItem,
+        DictManagementViewModel.opDeleteItem,
+      },
+    );
+    final viewModel = DictManagementViewModel(dictService: dictService, menuService: menuService);
+    expect(await viewModel.loadData(), isTrue);
+    // 每次进页重拉权限（loadData 内恰好调用一次）
+    expect(menuService.queryCalls, 1);
+    expect(viewModel.canCreateDict, isTrue);
+    expect(viewModel.canUpdateDict, isFalse);
+    expect(viewModel.canDeleteDict, isFalse);
+    expect(viewModel.canCreateItem, isTrue);
+    expect(viewModel.canUpdateItem, isFalse);
+    expect(viewModel.canDeleteItem, isTrue);
+
+    // 全未授权：全部按钮隐藏（权限未知时不放行）
+    final none = DictManagementViewModel(
+      dictService: dictService,
+      menuService: FakeMenuService(operationCodes: {}),
+    );
+    expect(await none.loadData(), isTrue);
+    expect(none.canCreateDict, isFalse);
+    expect(none.canUpdateDict, isFalse);
+    expect(none.canDeleteDict, isFalse);
+    expect(none.canCreateItem, isFalse);
+    expect(none.canUpdateItem, isFalse);
+    expect(none.canDeleteItem, isFalse);
   });
 }

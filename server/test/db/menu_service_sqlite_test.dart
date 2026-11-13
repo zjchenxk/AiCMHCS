@@ -268,4 +268,28 @@ CREATE TABLE SYS_ROLE_PERMISSION (
       throwsA(isA<MenuException>().having((e) => e.message, 'message', contains('格式不正确'))),
     );
   });
+
+  test('listRoleOperationCodes：返回角色已授权的操作类编码集合（模块/菜单除外）', () async {
+    await db.executeDirect('''
+CREATE TABLE SYS_ROLE_PERMISSION (
+  ROLE_ID INTEGER NOT NULL, -- 角色ID
+  MENU_ID INTEGER NOT NULL, -- 菜单ID
+  PRIMARY KEY (ROLE_ID, MENU_ID)
+)''');
+    // 角色 7 授权：模块 1、菜单 2、操作 3——仅操作类下发编码
+    for (final menuId in [1, 2, 3]) {
+      await db.execute(
+        'INSERT INTO SYS_ROLE_PERMISSION (ROLE_ID, MENU_ID) VALUES (7, ?)',
+        [menuId],
+      );
+    }
+    // 角色 8 仅授权菜单 2（非操作类）
+
+    expect(await service.listRoleOperationCodes('7'), {'M003'});
+    expect(await service.listRoleOperationCodes('8'), isEmpty);
+    await expectLater(
+      service.listRoleOperationCodes('abc'),
+      throwsA(isA<MenuException>().having((e) => e.message, 'message', contains('格式不正确'))),
+    );
+  });
 }

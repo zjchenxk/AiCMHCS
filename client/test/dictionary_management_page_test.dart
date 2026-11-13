@@ -1,15 +1,36 @@
 // 数据字典管理页面交互回归测试：加载后左侧显示字典树、右侧数据项
 // 空态提示；选中字典懒加载数据项（默认徽章）；顶级/下级新增与修改
 // 走 Form 对话框；删除走确认对话框（有下级时后端阻止）；数据项设为
-// 默认与删除。
+// 默认与删除；操作权限显隐（仅授权的按钮可见）。
 import 'package:client/models/child_info.dart';
 import 'package:client/services/dict_service.dart';
+import 'package:client/services/menu_service.dart';
 import 'package:client/view_models/system/dict_management_view_model.dart';
 import 'package:client/views/system/dictionary_management_page.dart';
 import 'package:common/model.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
+
+/// 内存版菜单服务：仅覆写操作权限查询，默认全量授权（既有用例不
+/// 关心权限差异，权限显隐用例按需传入子集）。
+class _FakeMenuService extends MenuService {
+  _FakeMenuService({Set<String>? operationCodes}) : _operationCodes = operationCodes ?? _allOperationCodes;
+
+  static final Set<String> _allOperationCodes = {
+    DictManagementViewModel.opCreateDict,
+    DictManagementViewModel.opUpdateDict,
+    DictManagementViewModel.opDeleteDict,
+    DictManagementViewModel.opCreateItem,
+    DictManagementViewModel.opUpdateItem,
+    DictManagementViewModel.opDeleteItem,
+  };
+
+  final Set<String> _operationCodes;
+
+  @override
+  Future<Set<String>> queryOperationCodes() async => {..._operationCodes};
+}
 
 /// 内存版字典服务（页面交互所需子集）。
 class _FakeDictService extends DictService {
@@ -247,7 +268,7 @@ void main() {
       ..seedDict('2', '1', 'D002', '学历层次')
       ..seedItem('1', '1', 'M', '男', displayOrder: '1')
       ..seedItem('2', '1', 'F', '女', displayOrder: '2', isDefault: '1');
-    final viewModel = DictManagementViewModel(dictService: dictService);
+    final viewModel = DictManagementViewModel(menuService: _FakeMenuService(), dictService: dictService);
 
     await tester.pumpWidget(_wrapWidget(viewModel));
     await tester.pumpAndSettle();
@@ -275,7 +296,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     final dictService = _FakeDictService()..seedDict('1', null, 'D001', '性别');
-    final viewModel = DictManagementViewModel(dictService: dictService);
+    final viewModel = DictManagementViewModel(menuService: _FakeMenuService(), dictService: dictService);
 
     await tester.pumpWidget(_wrapWidget(viewModel));
     await tester.pumpAndSettle();
@@ -306,7 +327,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     final dictService = _FakeDictService()..seedDict('1', null, 'D001', '性别');
-    final viewModel = DictManagementViewModel(dictService: dictService);
+    final viewModel = DictManagementViewModel(menuService: _FakeMenuService(), dictService: dictService);
 
     await tester.pumpWidget(_wrapWidget(viewModel));
     await tester.pumpAndSettle();
@@ -336,7 +357,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     final dictService = _FakeDictService()..seedDict('1', null, 'D001', '性别');
-    final viewModel = DictManagementViewModel(dictService: dictService);
+    final viewModel = DictManagementViewModel(menuService: _FakeMenuService(), dictService: dictService);
 
     await tester.pumpWidget(_wrapWidget(viewModel));
     await tester.pumpAndSettle();
@@ -374,7 +395,7 @@ void main() {
       ..seedDict('1', null, 'D001', '性别')
       ..seedDict('2', '1', 'D002', '学历层次')
       ..seedDict('3', null, 'D003', '民族');
-    final viewModel = DictManagementViewModel(dictService: dictService);
+    final viewModel = DictManagementViewModel(menuService: _FakeMenuService(), dictService: dictService);
 
     await tester.pumpWidget(_wrapWidget(viewModel));
     await tester.pumpAndSettle();
@@ -423,7 +444,7 @@ void main() {
     final dictService = _FakeDictService()
       ..seedDict('1', null, 'D001', '性别')
       ..seedItem('1', '1', 'M', '男', isDefault: '1');
-    final viewModel = DictManagementViewModel(dictService: dictService);
+    final viewModel = DictManagementViewModel(menuService: _FakeMenuService(), dictService: dictService);
 
     await tester.pumpWidget(_wrapWidget(viewModel));
     await tester.pumpAndSettle();
@@ -469,5 +490,73 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('女'), findsNothing);
     expect(dictService.itemStore.containsKey('2'), isFalse);
+  });
+
+  testWidgets('操作权限显隐：仅授予「新增数据字典」时，新增可见，修改/删除/新增数据项隐藏', (tester) async {
+    tester.view.physicalSize = const Size(1400, 2200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final dictService = _FakeDictService()
+      ..seedDict('1', null, 'D001', '性别')
+      ..seedItem('1', '1', 'M', '男');
+    final viewModel = DictManagementViewModel(
+      menuService: _FakeMenuService(operationCodes: {DictManagementViewModel.opCreateDict}),
+      dictService: dictService,
+    );
+
+    await tester.pumpWidget(_wrapWidget(viewModel));
+    await tester.pumpAndSettle();
+
+    // 左侧：「新增顶级字典」按钮可见；树节点操作菜单仅剩「新增下级字典」
+    expect(find.byTooltip('新增顶级字典'), findsOneWidget);
+    await tester.tap(find.byTooltip('更多操作...'));
+    await tester.pumpAndSettle();
+    expect(find.text('新增下级字典'), findsOneWidget);
+    expect(find.text('修改'), findsNothing);
+    expect(find.text('删除'), findsNothing);
+
+    // 关闭弹出菜单，选中字典后检查右侧
+    await tester.tapAt(const Offset(20, 300));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('性别'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('新增数据项'), findsNothing);
+    expect(find.byTooltip('修改'), findsNothing);
+    expect(find.byTooltip('删除'), findsNothing);
+    // 「设为默认项」挂在「修改数据项」权限下：未授予即隐藏（该项
+    // 非默认，排除了默认项本就不显示该按钮的干扰）
+    expect(find.byTooltip('设为默认项'), findsNothing);
+    // 行点击不再打开编辑弹窗（未授予修改数据项权限）
+    await tester.tap(find.text('男'));
+    await tester.pumpAndSettle();
+    expect(find.text('编辑数据项'), findsNothing);
+  });
+
+  testWidgets('操作权限显隐：全量授权时各按钮可见、行点击打开编辑弹窗', (tester) async {
+    tester.view.physicalSize = const Size(1400, 2200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final dictService = _FakeDictService()
+      ..seedDict('1', null, 'D001', '性别')
+      ..seedItem('1', '1', 'M', '男');
+    final viewModel = DictManagementViewModel(menuService: _FakeMenuService(), dictService: dictService);
+
+    await tester.pumpWidget(_wrapWidget(viewModel));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('性别'));
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('新增数据项'), findsOneWidget);
+    expect(find.byTooltip('修改'), findsOneWidget);
+    expect(find.byTooltip('删除'), findsOneWidget);
+    expect(find.byTooltip('设为默认项'), findsOneWidget);
+
+    // 行点击打开编辑弹窗
+    await tester.tap(find.text('男'));
+    await tester.pumpAndSettle();
+    expect(find.text('编辑数据项'), findsOneWidget);
+    expect(find.text('归属字典：性别'), findsOneWidget);
   });
 }

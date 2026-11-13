@@ -1,6 +1,7 @@
 import 'package:client/main.dart';
 import 'package:client/models/dict_tree_node.dart';
 import 'package:client/services/dict_service.dart';
+import 'package:client/services/menu_service.dart';
 import 'package:client/utils/log_helper.dart';
 import 'package:common/model.dart';
 import 'package:material_ui/material_ui.dart';
@@ -12,16 +13,42 @@ import 'package:material_ui/material_ui.dart';
 /// 各层按显示顺序（未设置靠后）→字典编码排序；右侧数据项随选中字典
 /// 懒加载、按显示顺序（未设置靠后）→项目编码排序。增删成功后整表重
 /// 拉，展开与选中状态尽量保留。每次进入页面 loadData 都强制重拉——
-/// 保证切回本页时数据一致。
+/// 保证切回本页时数据一致，同时重拉当前登录角色的操作权限编码
+/// （/api/menu/operations，角色经会话服务端推导、切换角色后重进即
+/// 生效），按钮级显隐经 canXxx getter 判定。
 class DictManagementViewModel extends ChangeNotifier {
-  /// 构造函数：注入字典服务（缺省从服务定位器取，测试可覆写）。
-  DictManagementViewModel({DictService? dictService}) : _dictService = dictService ?? getIt<DictService>();
+  /// 操作权限：新增数据字典（顶级与下级共用）。
+  static const String opCreateDict = '9908010001';
+
+  /// 操作权限：修改数据字典。
+  static const String opUpdateDict = '9908010002';
+
+  /// 操作权限：删除数据字典。
+  static const String opDeleteDict = '9908010003';
+
+  /// 操作权限：新增数据项。
+  static const String opCreateItem = '9908020001';
+
+  /// 操作权限：修改数据项。
+  static const String opUpdateItem = '9908020002';
+
+  /// 操作权限：删除数据项。
+  static const String opDeleteItem = '9908020003';
+
+  /// 构造函数：注入字典与菜单服务（缺省从服务定位器取，测试可覆写；
+  /// 菜单服务仅用于拉取角色操作权限编码）。
+  DictManagementViewModel({DictService? dictService, MenuService? menuService}) : _dictService = dictService ?? getIt<DictService>(), _menuService = menuService ?? getIt<MenuService>();
 
   final DictService _dictService;
+  final MenuService _menuService;
 
   final List<DictTreeNode> _roots = [];
   final List<Dict> _dicts = [];
   final List<DictItem> _items = [];
+
+  /// 当前登录角色已授权的操作权限编码（每次进页重拉；未加载/加载失败
+  /// 时为空集，按钮全隐藏——权限未知时不放行）。
+  final Set<String> _operationCodes = {};
   bool _loaded = false;
   DictTreeNode? _selectedNode;
   DictTreeNode? _createParent;
@@ -56,6 +83,27 @@ class DictManagementViewModel extends ChangeNotifier {
 
   String? get errorMsg => _errorMsg;
 
+  // ---------------- 操作权限 ----------------
+
+  /// 是否拥有「新增数据字典」权限（新增顶级/下级字典按钮显隐）。
+  bool get canCreateDict => _operationCodes.contains(opCreateDict);
+
+  /// 是否拥有「修改数据字典」权限。
+  bool get canUpdateDict => _operationCodes.contains(opUpdateDict);
+
+  /// 是否拥有「删除数据字典」权限。
+  bool get canDeleteDict => _operationCodes.contains(opDeleteDict);
+
+  /// 是否拥有「新增数据项」权限。
+  bool get canCreateItem => _operationCodes.contains(opCreateItem);
+
+  /// 是否拥有「修改数据项」权限（行内「修改」按钮、点击行打开编辑
+  /// 弹窗与「设为默认项」按钮的显隐依据）。
+  bool get canUpdateItem => _operationCodes.contains(opUpdateItem);
+
+  /// 是否拥有「删除数据项」权限。
+  bool get canDeleteItem => _operationCodes.contains(opDeleteItem);
+
   /// 已加载且本院未配置任何数据字典（左侧显示空态引导）。
   bool get isEmpty => _loaded && _dicts.isEmpty;
 
@@ -75,6 +123,7 @@ class DictManagementViewModel extends ChangeNotifier {
     _errorMsg = null;
     notifyListeners();
     try {
+      await _refreshPermissions();
       await _refreshTree();
       _loaded = true;
       await _refreshItems();
@@ -87,6 +136,15 @@ class DictManagementViewModel extends ChangeNotifier {
       _loading = false;
       notifyListeners();
     }
+  }
+
+  /// 拉取当前登录角色的操作权限编码（编码集整体覆盖；失败随 loadData
+  /// 统一报错，编码集保持为空——按钮全隐藏）。
+  Future<void> _refreshPermissions() async {
+    final codes = await _menuService.queryOperationCodes();
+    _operationCodes
+      ..clear()
+      ..addAll(codes);
   }
 
   /// 拉取全部数据字典并重建树（选中与新增目标被删时回退）。
