@@ -33,12 +33,26 @@ void main() {
 
   test('空库全量迁移：建表并记录版本', () async {
     final applied = await SchemaMigrator(db, fieldCipher: cipher).migrate();
-    expect(applied.map((m) => m.version), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
+    expect(applied.map((m) => m.version), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
 
     final tables = await tableNames();
     expect(
       tables,
-      containsAll(['SYS_USER', 'SYS_LOGIN_LOG', 'SYS_SCHEMA_VERSION', 'BASE_ADMIN_DIVISIONS', 'SYS_OPERATION_LOG', 'SYS_HOSPITAL', 'SYS_CAMPUS', 'SYS_DEPARTMENT', 'SYS_MENU', 'SYS_ROLE', 'SYS_ROLE_PERMISSION']),
+      containsAll([
+        'SYS_USER',
+        'SYS_LOGIN_LOG',
+        'SYS_SCHEMA_VERSION',
+        'BASE_ADMIN_DIVISIONS',
+        'SYS_OPERATION_LOG',
+        'SYS_HOSPITAL',
+        'SYS_CAMPUS',
+        'SYS_DEPARTMENT',
+        'SYS_MENU',
+        'SYS_ROLE',
+        'SYS_ROLE_PERMISSION',
+        'BASE_DICT',
+        'BASE_DICT_ITEM',
+      ]),
     );
 
     final versions = await db.query(
@@ -58,6 +72,7 @@ void main() {
       ['11', contains('角色')],
       ['12', contains('SYS_USER_ROLE')],
       ['13', contains('AVATAR_IMAGE')],
+      ['14', contains('数据字典')],
     ]);
   });
 

@@ -9,6 +9,7 @@ export 'models/basic/town.dart';
 export 'models/basic/village.dart';
 export 'models/system/campus.dart';
 export 'models/system/department.dart';
+export 'models/system/dict.dart';
 export 'models/system/hospital.dart';
 export 'models/system/login_user.dart';
 export 'models/system/menu.dart';

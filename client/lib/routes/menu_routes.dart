@@ -2,6 +2,7 @@ import 'package:client/models/child_info.dart';
 import 'package:client/views/system/admin_division_management_page.dart';
 import 'package:client/views/system/campus_management_page.dart';
 import 'package:client/views/system/department_management_page.dart';
+import 'package:client/views/system/dictionary_management_page.dart';
 import 'package:common/model.dart';
 import 'package:client/views/home/home_page.dart';
 import 'package:client/views/system/hospital_management_page.dart';
@@ -24,6 +25,7 @@ Map<String, MenuPageBuilder> menuRoutes = {
   '/system/hospital': _buildPage(HospitalManagementPage.new),
   '/system/campus': _buildPage(CampusManagementPage.new),
   '/system/department': _buildPage(DepartmentManagementPage.new),
+  '/system/dictionary': _buildPage(DictionaryManagementPage.new),
   '/system/menu': _buildPage(MenuManagementPage.new),
   '/system/role': _buildPage(RoleManagementPage.new),
   '/system/user': _buildPage(UserManagementPage.new),
