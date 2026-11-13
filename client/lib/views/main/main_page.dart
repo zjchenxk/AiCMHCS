@@ -972,7 +972,7 @@ class _MainPageState extends State<MainPage> {
   Future<void> _showSwitchRoleDialog(BuildContext context, ThemeData theme) async {
     final mainViewModel = context.read<MainViewModel>();
 
-    final selected = await showDialog<(String, String)>(
+    final selected = await showDialog<Map<String, String>>(
       context: context,
       builder: (dialogContext) {
         String currentRoleId = mainViewModel.loginUser.roleId; // 弹窗内的局部选中态
@@ -1082,7 +1082,7 @@ class _MainPageState extends State<MainPage> {
     );
 
     if (selected != null) {
-      final selectedRole = selected as Map<String, String>;
+      final selectedRole = selected;
       if (selectedRole['id'] != mainViewModel.loginUser.roleId) {
         // 调后端切换会话角色并刷新菜单权限，按结果给出提示
         final ok = await mainViewModel.switchRole(selectedRole['id'] ?? '');
