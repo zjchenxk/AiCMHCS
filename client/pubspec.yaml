@@ -76,6 +76,18 @@ flutter:
     - assets/images/welcome.png
     - assets/images/welcome.svg
 
+  # 内置中文字体（阿里巴巴普惠体，官方永久免费商用）：Web(CanvasKit) 端不能用
+  # 系统字体，汉字默认靠引擎运行时从 fonts.gstatic.com 下载回退字体，内网/无外网
+  # 环境会渲染成「框内 X」缺字形占位符；全主题内置后彻底切断该在线依赖（信创）。
+  fonts:
+    - family: AlibabaPuHuiTi
+      fonts:
+        - asset: assets/fonts/AlibabaPuHuiTi-Regular.ttf
+        - asset: assets/fonts/AlibabaPuHuiTi-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/AlibabaPuHuiTi-Bold.ttf
+          weight: 700
+
 dependency_overrides:
   flutter_secure_storage: ^10.0.0
 

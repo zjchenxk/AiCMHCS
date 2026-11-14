@@ -6,6 +6,8 @@ class AppThemes {
   static final Map<String, ThemeData> themes = {
     'Blue': FlexThemeData.light(
       scheme: FlexScheme.blue,
+      // 内置中文字体：Web 端汉字字形不再依赖 gstatic 在线回退下载（见 pubspec.yaml）
+      fontFamily: 'AlibabaPuHuiTi',
       subThemesData: const FlexSubThemesData(
         interactionEffects: true,
         tintedDisabledControls: true,
@@ -23,6 +25,7 @@ class AppThemes {
     ),
     'AquaBlue': FlexThemeData.light(
       scheme: FlexScheme.aquaBlue,
+      fontFamily: 'AlibabaPuHuiTi',
       subThemesData: const FlexSubThemesData(
         interactionEffects: true,
         tintedDisabledControls: true,
@@ -40,6 +43,7 @@ class AppThemes {
     ),
     'Green': FlexThemeData.light(
       scheme: FlexScheme.green,
+      fontFamily: 'AlibabaPuHuiTi',
       subThemesData: const FlexSubThemesData(
         interactionEffects: true,
         tintedDisabledControls: true,
@@ -57,6 +61,7 @@ class AppThemes {
     ),
     'Gold': FlexThemeData.light(
       scheme: FlexScheme.gold,
+      fontFamily: 'AlibabaPuHuiTi',
       subThemesData: const FlexSubThemesData(
         interactionEffects: true,
         tintedDisabledControls: true,
@@ -74,6 +79,7 @@ class AppThemes {
     ),
     'Teal': FlexThemeData.light(
       scheme: FlexScheme.tealM3,
+      fontFamily: 'AlibabaPuHuiTi',
       subThemesData: const FlexSubThemesData(
         interactionEffects: true,
         tintedDisabledControls: true,
@@ -91,6 +97,7 @@ class AppThemes {
     ),
     'Purple': FlexThemeData.light(
       scheme: FlexScheme.purpleM3,
+      fontFamily: 'AlibabaPuHuiTi',
       subThemesData: const FlexSubThemesData(
         interactionEffects: true,
         tintedDisabledControls: true,
@@ -108,6 +115,7 @@ class AppThemes {
     ),
     'Red': FlexThemeData.light(
       scheme: FlexScheme.red,
+      fontFamily: 'AlibabaPuHuiTi',
       subThemesData: const FlexSubThemesData(
         interactionEffects: true,
         tintedDisabledControls: true,
