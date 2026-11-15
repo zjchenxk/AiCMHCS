@@ -26,6 +26,7 @@ void main() {
     String? certificateNo = '110101202601011234',
     String? phone = '13800138000',
     String? healthNo = 'H0001',
+    String addressDetails = '景山前街4号',
   }) => ChildInfo(
     id: '',
     checkTime: '2026-11-14 09:30:00',
@@ -46,7 +47,7 @@ void main() {
     addressCounty: '东城区',
     addressTown: '景山街道',
     addressVillage: '景山社区',
-    addressDetails: '景山前街4号',
+    addressDetails: addressDetails,
     addressCode: '110101',
     phone: phone,
     creatorId: '',
@@ -331,7 +332,7 @@ CREATE TABLE CHILD_GUARDIAN_INFO (
   test('search：姓名盲索引精确匹配、就诊卡号、保健号或条件检索并解密', () async {
     await service.create(child: buildChild(), creatorId: '9', creatorName: '张医生', hospId: '1', hospName: '示例人民医院');
     await service.create(
-      child: buildChild(name: '李小红', visitCardNo: 'JZK202601002', certificateNo: null, healthNo: null),
+      child: buildChild(name: '李小红', visitCardNo: 'JZK202601002', certificateNo: null, phone: null, healthNo: null),
       creatorId: '9',
       creatorName: '张医生',
       hospId: '1',
@@ -347,6 +348,17 @@ CREATE TABLE CHILD_GUARDIAN_INFO (
     final byHealth = await service.search(hospId: '1', healthNo: 'H0001');
     expect(byHealth, hasLength(1));
     expect(byHealth.first.name, '王小明');
+
+    // 证件号码/联系电话走盲索引精确匹配
+    final byCert = await service.search(hospId: '1', certificateNo: '110101202601011234');
+    expect(byCert.map((c) => c.name), ['王小明']);
+    final byPhone = await service.search(hospId: '1', phone: '13800138000');
+    expect(byPhone.map((c) => c.name), ['王小明']);
+
+    // 超长条件静默跳过：仅剩合法条件仍可命中（全局搜索框容错）
+    final overlong = '一' * 30; // 90 字节 > 联系电话上限 24
+    final byLenient = await service.search(hospId: '1', phone: overlong, certificateNo: '110101202601011234');
+    expect(byLenient.map((c) => c.name), ['王小明']);
 
     // 空条件 → 报错；跨医院不可见
     await expectLater(
@@ -462,6 +474,26 @@ CREATE TABLE CHILD_GUARDIAN_INFO (
         hospName: '示例人民医院',
       ),
       throwsA(isA<ChildException>().having((e) => e.message, 'message', contains('Apgar评分-1分钟应为'))),
+    );
+    // 详细地址密文列（v16 扩容至 VARCHAR(214)）：明文上限 100 字节，
+    // 33 汉字 99 字节可存，超过 100 字节报错
+    final longAddress = await service.create(
+      child: buildChild(addressDetails: '详' * 33),
+      creatorId: '9',
+      creatorName: '张医生',
+      hospId: '1',
+      hospName: '示例人民医院',
+    );
+    expect(longAddress.$1.addressDetails, '详' * 33);
+    await expectLater(
+      service.create(
+        child: buildChild(addressDetails: '详' * 34),
+        creatorId: '9',
+        creatorName: '张医生',
+        hospId: '1',
+        hospName: '示例人民医院',
+      ),
+      throwsA(isA<ChildException>().having((e) => e.message, 'message', contains('居住地址详细超出长度限制'))),
     );
   });
 }

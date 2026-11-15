@@ -176,6 +176,13 @@ class MyApp extends StatelessWidget {
     return Consumer<ThemeProvider>(
       builder: (context, themeProvider, child) {
         return MaterialApp(
+          // 全局中文本地化：日期选择器等 Material 组件按中文显示
+          // （2026年11月、取消/确定等），系统界面语言固定中文；
+          // delegates 为 material_ui 重导出的 Material+Widgets+Cupertino
+          // 三件套
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          supportedLocales: const [Locale('zh', 'CN')],
+          locale: const Locale('zh', 'CN'),
           builder: (context, child) => ResponsiveBreakpoints.builder(
             child: child!,
             breakpoints: const [
@@ -192,7 +199,7 @@ class MyApp extends StatelessWidget {
               style: ButtonStyle(
                 textStyle: WidgetStatePropertyAll<TextStyle>(
                   TextStyle(
-                    fontSize: (baseTheme.textTheme.bodyLarge?.fontSize ?? 16) * fontScale,
+                    fontSize: (baseTheme.textTheme.bodyMedium?.fontSize ?? 14) * fontScale,
                   ),
                 ),
               ),
@@ -201,7 +208,7 @@ class MyApp extends StatelessWidget {
               style: ButtonStyle(
                 textStyle: WidgetStatePropertyAll<TextStyle>(
                   TextStyle(
-                    fontSize: (baseTheme.textTheme.bodyLarge?.fontSize ?? 16) * fontScale,
+                    fontSize: (baseTheme.textTheme.bodyMedium?.fontSize ?? 14) * fontScale,
                   ),
                 ),
               ),
@@ -210,7 +217,7 @@ class MyApp extends StatelessWidget {
               style: ButtonStyle(
                 textStyle: WidgetStatePropertyAll<TextStyle>(
                   TextStyle(
-                    fontSize: (baseTheme.textTheme.bodyLarge?.fontSize ?? 16) * fontScale,
+                    fontSize: (baseTheme.textTheme.bodyMedium?.fontSize ?? 14) * fontScale,
                   ),
                 ),
               ),
@@ -219,7 +226,7 @@ class MyApp extends StatelessWidget {
               style: ButtonStyle(
                 textStyle: WidgetStatePropertyAll<TextStyle>(
                   TextStyle(
-                    fontSize: (baseTheme.textTheme.bodyLarge?.fontSize ?? 16) * fontScale,
+                    fontSize: (baseTheme.textTheme.bodyMedium?.fontSize ?? 14) * fontScale,
                   ),
                 ),
               ),
@@ -231,7 +238,7 @@ class MyApp extends StatelessWidget {
               style: ButtonStyle(
                 textStyle: WidgetStatePropertyAll<TextStyle>(
                   TextStyle(
-                    fontSize: (baseTheme.textTheme.bodyLarge?.fontSize ?? 16) * fontScale,
+                    fontSize: (baseTheme.textTheme.bodyMedium?.fontSize ?? 14) * fontScale,
                   ),
                 ),
               ),
@@ -240,7 +247,7 @@ class MyApp extends StatelessWidget {
               style: ButtonStyle(
                 textStyle: WidgetStatePropertyAll<TextStyle>(
                   TextStyle(
-                    fontSize: (baseTheme.textTheme.bodyLarge?.fontSize ?? 16) * fontScale,
+                    fontSize: (baseTheme.textTheme.bodyMedium?.fontSize ?? 14) * fontScale,
                   ),
                 ),
               ),
@@ -249,7 +256,7 @@ class MyApp extends StatelessWidget {
               style: ButtonStyle(
                 textStyle: WidgetStatePropertyAll<TextStyle>(
                   TextStyle(
-                    fontSize: (baseTheme.textTheme.bodyLarge?.fontSize ?? 16) * fontScale,
+                    fontSize: (baseTheme.textTheme.bodyMedium?.fontSize ?? 14) * fontScale,
                   ),
                 ),
               ),
@@ -258,7 +265,7 @@ class MyApp extends StatelessWidget {
               style: ButtonStyle(
                 textStyle: WidgetStatePropertyAll<TextStyle>(
                   TextStyle(
-                    fontSize: (baseTheme.textTheme.bodyLarge?.fontSize ?? 16) * fontScale,
+                    fontSize: (baseTheme.textTheme.bodyMedium?.fontSize ?? 14) * fontScale,
                   ),
                 ),
               ),

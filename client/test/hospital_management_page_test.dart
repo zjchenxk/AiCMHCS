@@ -176,7 +176,7 @@ class _FakeAdminDivisionsService extends AdminDivisionsService {
 }
 
 final _testChild = CurrentChild(
-  cardNo: '',
+  visitCardNo: '',
   patientId: '',
   name: '',
   gender: '',

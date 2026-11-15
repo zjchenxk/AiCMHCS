@@ -1,5 +1,5 @@
-// 儿童建档 ViewModel 单元测试：Fake 服务构造注入，覆盖操作权限显隐
-// （canCreate/canUpdate/canDelete 与查询区联动）、检索结果、整档载入
+// 儿童建档 ViewModel 单元测试：Fake 服务构造注入，覆盖操作权限灰化
+// （canCreate/canUpdate/canSave/canDelete）、整档载入
 // 浏览态、新增/修改/删除流转、保存走新增或修改分支、监护人本地工作
 // 列表增删改（不做权限控制）。
 import 'package:client/services/admin_divisions_service.dart';
@@ -26,17 +26,11 @@ class FakeMenuService extends MenuService {
 /// 内存版儿童服务：整档存取 + 调用计数。
 class FakeChildService extends ChildService {
   final Map<String, ChildArchive> archives = {};
-  final List<ChildInfo> searchPool = [];
   int nextId = 1;
   int createCalls = 0;
   int updateCalls = 0;
   int deleteCalls = 0;
   String? lastUpdatedId;
-
-  @override
-  Future<List<ChildInfo>> search({String? name, String? visitCardNo, String? healthNo}) async {
-    return [...searchPool];
-  }
 
   @override
   Future<ChildArchive> load(String id) async => archives[id]!;
@@ -158,7 +152,6 @@ void main() {
     expect(all.canUpdate, isTrue);
     expect(all.canSave, isTrue);
     expect(all.canDelete, isTrue);
-    expect(all.showQueryArea, isTrue);
 
     final createOnly = _buildViewModel(operationCodes: {ChildCreateViewModel.opCreate});
     await createOnly.loadPermissions();
@@ -166,7 +159,6 @@ void main() {
     expect(createOnly.canUpdate, isFalse);
     expect(createOnly.canSave, isFalse);
     expect(createOnly.canDelete, isFalse);
-    expect(createOnly.showQueryArea, isFalse, reason: '无修改/删除权限不显示查询区');
 
     final none = _buildViewModel(operationCodes: <String>{});
     await none.loadPermissions();
@@ -174,18 +166,6 @@ void main() {
     expect(none.canUpdate, isFalse);
     expect(none.canSave, isFalse);
     expect(none.canDelete, isFalse);
-  });
-
-  test('search：检索结果落到 searchResults', () async {
-    final service = FakeChildService();
-    service.searchPool.add(_child('1'));
-    final vm = _buildViewModel(operationCodes: {ChildCreateViewModel.opUpdate}, childService: service);
-    await vm.loadPermissions();
-
-    final ok = await vm.search(name: '王小明');
-    expect(ok, isTrue);
-    expect(vm.searchResults, hasLength(1));
-    expect(vm.searchResults.first.name, '王小明');
   });
 
   test('selectChild：载入整档进入浏览态并回显省级区划', () async {

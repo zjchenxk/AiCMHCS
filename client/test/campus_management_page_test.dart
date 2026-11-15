@@ -69,7 +69,7 @@ class _FakeCampusService extends CampusService {
 }
 
 final _testChild = CurrentChild(
-  cardNo: '',
+  visitCardNo: '',
   patientId: '',
   name: '',
   gender: '',

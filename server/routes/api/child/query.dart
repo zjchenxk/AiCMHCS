@@ -5,7 +5,8 @@ import 'package:server/services/child_service.dart';
 
 /// POST /api/child/query
 /// 请求体：{id} 查整档（child + ext + guardians）；缺省按
-/// {name?, visitCardNo?, healthNo?} 检索本院档案（至少一个条件，返回
+/// {name?, visitCardNo?, healthNo?, certificateNo?, phone?} 检索本院
+/// 档案（姓名/证件号码/电话号码走盲索引精确匹配，至少一个条件，返回
 /// 前 20 条简要列表）。医院从令牌会话推导（不信任客户端上报）。
 Future<Response> onRequest(RequestContext context) async {
   if (context.request.method != HttpMethod.post) {
@@ -46,6 +47,8 @@ Future<Response> onRequest(RequestContext context) async {
       name: body['name']?.toString(),
       visitCardNo: body['visitCardNo']?.toString(),
       healthNo: body['healthNo']?.toString(),
+      certificateNo: body['certificateNo']?.toString(),
+      phone: body['phone']?.toString(),
     );
     return Response.json(
       body: {

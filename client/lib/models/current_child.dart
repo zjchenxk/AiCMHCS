@@ -1,5 +1,10 @@
+/// 当前儿童上下文（主界面顶部搜索选中后写入 MainViewModel，随
+/// BasePage 分发到各功能页；未选择儿童时各字段为空串占位）。
 class CurrentChild {
-  final String cardNo; // 就诊卡号
+  /// 儿童档案 ID（CHILD_INFO.ID；未选择/未建档为空串，儿童建档页据此
+  /// 自动载入整档）。
+  final String id;
+  final String visitCardNo; // 就诊卡号
   final String patientId; // 病人ID
   final String name; // 姓名
   final String gender; // 性别
@@ -10,14 +15,15 @@ class CurrentChild {
   final String phone; // 联系电话
 
   const CurrentChild({
-    required this.cardNo,
+    this.id = '',
+    required this.visitCardNo,
     required this.patientId,
     required this.name,
     required this.gender,
     required this.birthDate,
-    required this.gestationalWeek,
-    required this.actualAge,
-    required this.correctedAge,
+    this.gestationalWeek = '',
+    this.actualAge = '',
+    this.correctedAge = '',
     required this.phone,
   });
 }

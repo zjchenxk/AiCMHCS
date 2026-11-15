@@ -2,16 +2,19 @@ import 'package:client/main.dart' as app;
 import 'package:client/models/current_child.dart';
 import 'package:client/models/menu_item.dart';
 import 'package:client/services/account_service.dart';
+import 'package:client/services/child_service.dart';
 import 'package:client/utils/log_helper.dart';
 import 'package:client/utils/menu_icons.dart';
 import 'package:common/model.dart';
 import 'package:material_ui/material_ui.dart';
 
 class MainViewModel extends ChangeNotifier {
-  /// 可选注入账户服务（便于测试替换）；为空时运行期经 getIt 解析。
-  MainViewModel({AccountService? accountService}) : _accountService = accountService;
+  /// 可选注入账户/儿童服务（便于测试替换）；为空时运行期经 getIt 解析。
+  MainViewModel({AccountService? accountService, ChildService? childService}) : _accountService = accountService, _childService = childService;
 
   final AccountService? _accountService;
+
+  final ChildService? _childService;
   // 登录用户角色
   List<Map<String, String>> _roles = const [];
   List<Map<String, String>> get roles => _roles;
@@ -40,18 +43,65 @@ class MainViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  // 儿童信息（示例数据，实际可从接口获取）
+  // 当前儿童上下文（默认空占位；主界面顶部搜索框精确检索选中后写入，
+  // 随 BasePage 分发到各功能页，儿童建档页据此自动载入整档）
   CurrentChild child = CurrentChild(
-    cardNo: 'JZK202601001',
-    patientId: 'P00012345',
-    name: '王小明',
-    gender: '男',
-    birthDate: DateTime(2024, 3, 15),
-    gestationalWeek: '38+2',
-    actualAge: '12岁10月20天',
-    correctedAge: '12岁11月10天',
-    phone: '13800138000',
+    visitCardNo: '',
+    patientId: '',
+    name: '',
+    gender: '',
+    birthDate: DateTime.now(),
+    phone: '',
   );
+
+  /// 是否已选定当前儿童（id 非空即视为已选定）。
+  bool get hasCurrentChild => child.id.isNotEmpty;
+
+  /// 顶部搜索框精确检索儿童（姓名/就诊卡号/证件号码/电话号码任一精确
+  /// 命中，服务端按医院隔离并解密下发）。
+  ///param keyword: 搜索关键词（同一关键词同时投给多个条件）
+  ///returns: 命中的儿童简要档案列表；接口失败时抛出原异常（调用方提示）
+  Future<List<ChildInfo>> searchChildren(String keyword) async {
+    final kw = keyword.trim();
+    final service = _childService ?? app.getIt<ChildService>();
+    return service.search(name: kw, visitCardNo: kw, certificateNo: kw, phone: kw);
+  }
+
+  /// 将选中的儿童档案写入当前儿童上下文（显示字段由档案字段映射，
+  /// 实际年龄按出生日期实时计算）。
+  ///param info: 检索/保存得到的儿童档案（服务端已解密的明文）
+  void setCurrentChild(ChildInfo info) {
+    final birth = DateTime.tryParse(info.birthDate) ?? DateTime.now();
+    child = CurrentChild(
+      id: info.id,
+      visitCardNo: info.visitCardNo ?? '',
+      patientId: info.patientId ?? '',
+      name: info.name,
+      gender: switch (info.sex) {
+        '1' => '男',
+        '2' => '女',
+        _ => '',
+      },
+      birthDate: birth,
+      actualAge: _formatAge(birth),
+      phone: info.phone ?? '',
+    );
+    notifyListeners();
+  }
+
+  /// 按出生日期格式化实际年龄（x岁/x岁y个月/y个月，未满月为 0个月）。
+  String _formatAge(DateTime birth) {
+    final now = DateTime.now();
+    var months = (now.year - birth.year) * 12 + now.month - birth.month;
+    if (now.day < birth.day) months--;
+    if (months < 0) months = 0;
+    final years = months ~/ 12;
+    final rest = months % 12;
+    if (years > 0) {
+      return rest > 0 ? '$years岁$rest个月' : '$years岁';
+    }
+    return '$rest个月';
+  }
 
   // 功能菜单（登录成功后经 setRoleMenus 以所选角色的权限菜单构建，
   // 数据源为登录响应下发的 SYS_ROLE_PERMISSION ∩ SYS_MENU 可见模块/菜单）
@@ -278,6 +328,14 @@ class MainViewModel extends ChangeNotifier {
     _expandedIds.clear();
     _collapsed = false;
     _menus = const [];
+    child = CurrentChild(
+      visitCardNo: '',
+      patientId: '',
+      name: '',
+      gender: '',
+      birthDate: DateTime.now(),
+      phone: '',
+    );
     notifyListeners();
   }
 

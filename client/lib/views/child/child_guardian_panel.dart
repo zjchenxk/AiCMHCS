@@ -1,3 +1,4 @@
+import 'package:client/utils/dict_options.dart';
 import 'package:client/view_models/child/child_create_view_model.dart';
 import 'package:client/views/child/child_form_widgets.dart';
 import 'package:client/widgets/dict_dropdown_form_field.dart';
@@ -116,10 +117,12 @@ class ChildGuardianPanelState extends State<ChildGuardianPanel> {
       childId: vm.currentChildId,
       name: _nameCtrl.text.trim(),
       birthDate: _birthDateCtrl.text.trim().isEmpty ? null : _birthDateCtrl.text.trim(),
-      certificateType: _certType,
+      // 证件类型/国籍/民族在新增行自动选中字典默认项（autoSelectDefault
+      // 只设下拉初值、不触发 onChanged），镜像未变时从字典缓存兜底
+      certificateType: _certType ?? DictOptions.instance.cachedDefaultOf('0101004')?.itemValue,
       certificateNo: _certNoCtrl.text.trim().isEmpty ? null : _certNoCtrl.text.trim(),
-      country: _country,
-      nation: _nation,
+      country: _country ?? DictOptions.instance.cachedDefaultOf('0101001')?.itemValue,
+      nation: _nation ?? DictOptions.instance.cachedDefaultOf('0101002')?.itemValue,
       educationLevel: _education,
       occupation: _occupation,
       phone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
@@ -281,6 +284,7 @@ class ChildGuardianPanelState extends State<ChildGuardianPanel> {
                           label: '证件类型',
                           initialValue: _certType,
                           enabled: editable,
+                          autoSelectDefault: true,
                           onChanged: (v) => setState(() => _certType = v),
                         ),
                       ),
@@ -300,6 +304,7 @@ class ChildGuardianPanelState extends State<ChildGuardianPanel> {
                           label: '国籍',
                           initialValue: _country,
                           enabled: editable,
+                          autoSelectDefault: true,
                           onChanged: (v) => setState(() => _country = v),
                         ),
                       ),
@@ -310,6 +315,7 @@ class ChildGuardianPanelState extends State<ChildGuardianPanel> {
                           label: '民族',
                           initialValue: _nation,
                           enabled: editable,
+                          autoSelectDefault: true,
                           onChanged: (v) => setState(() => _nation = v),
                         ),
                       ),
@@ -407,16 +413,20 @@ class ChildGuardianPanelState extends State<ChildGuardianPanel> {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       Tooltip(
-                        message: editable ? '清空表单' : '浏览模式下不可维护，请先【新增】或【修改】儿童档案',
-                        child: TextButton(onPressed: editable ? _resetForm : null, child: const Text('重置')),
-                      ),
-                      const SizedBox(width: 12),
-                      Tooltip(
                         message: editable ? (_editingIndex == null ? '填完表单后加入监护人列表' : '更新监护人到列表') : '浏览模式下不可维护，请先【新增】或【修改】儿童档案',
                         child: FilledButton.icon(
                           onPressed: editable ? _submitRow : null,
-                          icon: Icon(_editingIndex == null ? Icons.playlist_add_outlined : Icons.playlist_add_check_outlined, size: 18),
-                          label: Text(_editingIndex == null ? '加入列表' : '更新到列表'),
+                          icon: Icon(_editingIndex == null ? Icons.add_outlined : Icons.edit_outlined, size: 18),
+                          label: Text(_editingIndex == null ? '添加' : '修改'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Tooltip(
+                        message: editable ? '清空表单' : '浏览模式下不可维护，请先【新增】或【修改】儿童档案',
+                        child: OutlinedButton.icon(
+                          onPressed: editable ? _resetForm : null,
+                          icon: const Icon(Icons.cancel_outlined, size: 18),
+                          label: const Text('取消'),
                         ),
                       ),
                     ],

@@ -1,21 +1,22 @@
 import 'package:client/view_models/child/child_create_view_model.dart';
+import 'package:client/view_models/main/main_view_model.dart';
 import 'package:client/views/base/base_page.dart';
 import 'package:client/views/child/child_basic_info_form.dart';
 import 'package:client/views/child/child_ext_info_form.dart';
-import 'package:client/views/child/child_form_widgets.dart';
 import 'package:client/views/child/child_guardian_panel.dart';
 import 'package:client/widgets/glass_panel.dart';
-import 'package:common/model.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 /// 儿童建档页（路由 /child/create）：无儿童列表的纯编辑界面。
 ///
-/// 顶部查询区（有修改/删除权限时显示）按姓名盲索引/就诊卡号/保健号
-/// 检索并载入已有档案；四个操作按钮常驻、按登录角色操作权限灰化
-/// （0201000001-新增/0201000002-修改/0201000003-保存/0201000004-删除）；
-/// 三个 Tab 分别编辑基本信息/扩展信息/监护人，监护人行增删改不做权限
-/// 控制、随整单保存。
+/// 待编辑的儿童来自主界面顶部搜索选定的「当前儿童」上下文：进页时
+/// 若 MainViewModel 中已有当前儿童则自动载入其整档（基本信息/扩展
+/// 信息/监护人）并进入浏览态；未选定时从空态开始（仅有新增权限的
+/// 账号自动进入新增录入态）。四个操作按钮常驻、按登录角色操作权限
+/// 灰化（0201000001-新增/0201000002-修改/0201000003-保存/0201000004-
+/// 删除）；三个 Tab 分别编辑基本信息/扩展信息/监护人，监护人行增删
+/// 改不做权限控制、随整单保存。
 class ChildCreatePage extends BasePage {
   const ChildCreatePage({super.key, required super.loginUser, required super.child});
 
@@ -27,28 +28,56 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
   late final TabController _tabController;
   late final ChildCreateViewModel _viewModel;
 
-  final GlobalKey<ChildBasicInfoFormState> _basicKey = GlobalKey<ChildBasicInfoFormState>();
-  final GlobalKey<ChildExtInfoFormState> _extKey = GlobalKey<ChildExtInfoFormState>();
+  /// 表单键：模式/目标档案变化时整体换新（新 GlobalKey 不会复用旧
+  /// State，等效于普通 ValueKey 的重建语义，确保各表单控制器从最新
+  /// 档案初始化；页面整单保存经这两个键访问表单校验与收集）。
+  String? _formIdentity;
+  GlobalKey<ChildBasicInfoFormState> _basicKey = GlobalKey(debugLabel: 'childBasicForm');
+  GlobalKey<ChildExtInfoFormState> _extKey = GlobalKey(debugLabel: 'childExtForm');
 
-  final _queryNameCtrl = TextEditingController();
-  final _queryCardCtrl = TextEditingController();
-  final _queryHealthCtrl = TextEditingController();
-  ChildInfo? _selectedResult;
+  /// 模式/档案标识变化时换新表单键。
+  void _ensureFormKeys(ChildCreateViewModel vm) {
+    final identity = '${vm.mode.name}:${vm.currentChildId}';
+    if (_formIdentity != identity) {
+      _formIdentity = identity;
+      _basicKey = GlobalKey(debugLabel: 'basic:$identity');
+      _extKey = GlobalKey(debugLabel: 'ext:$identity');
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    // Tab 切换时刷新（内容区为 IndexedStack，index 变更即切换显示）
+    _tabController.addListener(_onTabChanged);
     _viewModel = context.read<ChildCreateViewModel>();
     _viewModel.addListener(_onViewModelChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) => _init());
   }
 
+  /// Tab 切换落地时重建（动画过渡中的中间事件忽略）。
+  void _onTabChanged() {
+    if (_tabController.indexIsChanging) return;
+    setState(() {});
+  }
+
   Future<void> _init() async {
+    // await 前先取齐依赖（避免跨异步使用 BuildContext）
+    final mainViewModel = context.read<MainViewModel>();
     await _viewModel.loadPermissions();
-    await _viewModel.getProvinces();
-    // 无修改/删除权限时无查询区，直接进入新增录入态（仅有新增权限场景）
-    if (!_viewModel.showQueryArea && _viewModel.canCreate) {
+    // 主界面已选定当前儿童（顶部搜索写入的上下文）→ 自动载入整档进
+    // 浏览态，默认展示基本信息/扩展信息/监护人（selectChild 内部的
+    // initAddressFromChild 会按需加载省列表并完成五级区划回显；此处
+    // 不可再重复调 getProvinces——重复拉取会生成新的 Province 对象，
+    // 使已选中的省与 items 身份失配触发下拉断言）
+    final currentChildId = mainViewModel.child.id;
+    if (currentChildId.isNotEmpty) {
+      await _viewModel.selectChild(currentChildId);
+    }
+    // 无修改/删除权限（无查询入口）、也未选定儿童 → 直接进入新增录入态
+    //（仅有新增权限场景）
+    if (!_viewModel.browsing && _viewModel.canCreate) {
       await _viewModel.startCreate();
     }
   }
@@ -56,10 +85,8 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
   @override
   void dispose() {
     _viewModel.removeListener(_onViewModelChanged);
+    _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
-    _queryNameCtrl.dispose();
-    _queryCardCtrl.dispose();
-    _queryHealthCtrl.dispose();
     super.dispose();
   }
 
@@ -85,32 +112,25 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
     );
   }
 
-  /// 检索本院儿童档案（查询区按钮）。
-  Future<void> _search() async {
-    final ok = await _viewModel.search(
-      name: _queryNameCtrl.text.trim(),
-      visitCardNo: _queryCardCtrl.text.trim(),
-      healthNo: _queryHealthCtrl.text.trim(),
-    );
-    if (ok) {
-      setState(() => _selectedResult = null);
-    }
-  }
-
   /// 整单保存：依次校验基本/扩展 Tab，失败切到首个出错 Tab 并滚动定位。
   Future<void> _submit() async {
-    final basicOk = _basicKey.currentState?.validate() ?? true;
-    if (!basicOk) {
+    // 两个键在表单挂载后必然有 State；为空属异常兜底（重建间隙点击等）
+    final basicState = _basicKey.currentState;
+    final extState = _extKey.currentState;
+    if (basicState == null || extState == null) {
+      _showToast('表单尚未就绪，请稍候重试');
+      return;
+    }
+    if (!basicState.validate()) {
       _tabController.animateTo(0);
       return;
     }
-    final extOk = _extKey.currentState?.validate() ?? true;
-    if (!extOk) {
+    if (!extState.validate()) {
       _tabController.animateTo(1);
       return;
     }
-    final child = _basicKey.currentState!.collect();
-    final ext = _extKey.currentState!.collectOrNull();
+    final child = basicState.collect();
+    final ext = extState.collectOrNull();
     final ok = await _viewModel.save(child: child, ext: ext);
     if (ok) {
       _showToast('保存成功');
@@ -177,16 +197,14 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
     final theme = Theme.of(context);
     final vm = context.watch<ChildCreateViewModel>();
     final editing = vm.creating || vm.editing;
+    // 模式/目标档案变化时换新表单键（须在用键构建表单前执行）
+    _ensureFormKeys(vm);
 
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (vm.showQueryArea) ...[
-            _buildQueryArea(theme, vm),
-            const SizedBox(height: 12),
-          ],
           _buildButtonBar(theme, vm, editing),
           const SizedBox(height: 12),
           Expanded(
@@ -210,39 +228,34 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
                           ),
                           const Divider(height: 1),
                           const SizedBox(height: 16),
+                          // 用 IndexedStack 而非 TabBarView：三个 Tab 表单
+                          // 全部常驻挂载（TabBarView 懒构建，未访问过的 Tab
+                          // 表单 State 不存在，整单保存时校验键会为空）；
+                          // 各 Tab 顶部留 8px 内距，防首行浮动标签贴顶被裁
                           Expanded(
-                            child: TabBarView(
-                              controller: _tabController,
+                            child: IndexedStack(
+                              index: _tabController.index,
                               children: [
-                                // 各 Tab 顶部留 8px 内距：outlined 输入框的
-                                // 浮动标签会超出字段矩形上边缘约半个字高，
-                                // 首行字段标签贴视口顶边会被裁剪
-                                _keepAlive(
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 8),
-                                    child: ChildBasicInfoForm(
-                                      key: Key('basic:${vm.mode.name}:${vm.currentChildId}'),
-                                      viewModel: vm,
-                                      editable: editing,
-                                      onSubmit: editing ? _submit : null,
-                                    ),
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: ChildBasicInfoForm(
+                                    key: _basicKey,
+                                    viewModel: vm,
+                                    editable: editing,
+                                    onSubmit: editing ? _submit : null,
                                   ),
                                 ),
-                                _keepAlive(
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 8),
-                                    child: ChildExtInfoForm(
-                                      key: Key('ext:${vm.mode.name}:${vm.currentChildId}'),
-                                      viewModel: vm,
-                                      editable: editing,
-                                    ),
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: ChildExtInfoForm(
+                                    key: _extKey,
+                                    viewModel: vm,
+                                    editable: editing,
                                   ),
                                 ),
-                                _keepAlive(
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 8),
-                                    child: ChildGuardianPanel(viewModel: vm, editable: editing),
-                                  ),
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: ChildGuardianPanel(viewModel: vm, editable: editing),
                                 ),
                               ],
                             ),
@@ -253,98 +266,6 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
                   ),
           ),
         ],
-      ),
-    );
-  }
-
-  /// TabBarView 子项保活（三个 Tab 的表单状态/校验键在整单保存时都
-  /// 需要可用）。
-  Widget _keepAlive(Widget child) {
-    return _KeepAliveWidget(child: child);
-  }
-
-  /// 顶部查询区：姓名（盲索引精确匹配）/就诊卡号/保健号 + 检索结果下拉。
-  Widget _buildQueryArea(ThemeData theme, ChildCreateViewModel vm) {
-    final results = vm.searchResults;
-    return GlassPanel(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Wrap(
-              spacing: 16,
-              runSpacing: 12,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                _queryField(theme, _queryNameCtrl, '姓名（精确匹配）', width: 220),
-                _queryField(theme, _queryCardCtrl, '就诊卡号', width: 220),
-                _queryField(theme, _queryHealthCtrl, '保健号', width: 220),
-                FilledButton.tonalIcon(
-                  onPressed: vm.loading ? null : _search,
-                  icon: const Icon(Icons.search_outlined, size: 18),
-                  label: const Text('查询'),
-                ),
-                Text(
-                  '姓名为精确匹配，可组合查询',
-                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
-                ),
-              ],
-            ),
-            if (results.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              SizedBox(
-                width: 480,
-                child: DropdownButtonFormField<String>(
-                  key: ValueKey('search-result-${results.map((e) => e.id).join('-')}'),
-                  initialValue: _selectedResult?.id,
-                  isExpanded: true,
-                  items: results
-                      .map(
-                        (c) => DropdownMenuItem(
-                          value: c.id,
-                          child: Text(_resultLabel(c), style: theme.textTheme.bodyMedium, overflow: TextOverflow.ellipsis),
-                        ),
-                      )
-                      .toList(),
-                  hint: Text('请选择要载入的儿童档案（${results.length} 条）', style: theme.textTheme.bodyMedium),
-                  decoration: childGlassDecoration(theme, '检索结果'),
-                  style: theme.textTheme.bodyMedium,
-                  onChanged: (id) async {
-                    if (id == null) return;
-                    ChildInfo? matched;
-                    for (final c in results) {
-                      if (c.id == id) {
-                        matched = c;
-                        break;
-                      }
-                    }
-                    setState(() => _selectedResult = matched);
-                    await _viewModel.selectChild(id);
-                  },
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _resultLabel(ChildInfo c) {
-    final sex = c.sex == '1' ? '男' : (c.sex == '2' ? '女' : '');
-    final card = (c.visitCardNo == null || c.visitCardNo!.isEmpty) ? '' : ' · ${c.visitCardNo}';
-    return '${c.name} $sex ${c.birthDate}$card';
-  }
-
-  Widget _queryField(ThemeData theme, TextEditingController controller, String label, {double width = 240}) {
-    return SizedBox(
-      width: width,
-      child: TextFormField(
-        controller: controller,
-        decoration: childGlassDecoration(theme, label),
-        style: theme.textTheme.bodyMedium,
-        onFieldSubmitted: (_) => _search(),
       ),
     );
   }
@@ -377,7 +298,7 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
               message: vm.canCreate ? '新增儿童档案' : '无新增操作权限',
               child: OutlinedButton.icon(
                 onPressed: createReady ? () => _viewModel.startCreate() : null,
-                icon: const Icon(Icons.child_care_outlined, size: 18),
+                icon: const Icon(Icons.add_outlined, size: 18),
                 label: const Text('新增'),
               ),
             ),
@@ -398,9 +319,10 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
               ),
             ),
             if (editing)
-              TextButton(
+              OutlinedButton.icon(
                 onPressed: vm.busy ? null : _cancelEdit,
-                child: const Text('取消'),
+                icon: const Icon(Icons.cancel_outlined, size: 18),
+                label: const Text('取消'),
               ),
             Tooltip(
               message: !vm.canDelete ? '无删除操作权限' : (vm.browsing ? '删除当前儿童档案' : '请先新增或载入儿童档案'),
@@ -419,26 +341,5 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
         ),
       ),
     );
-  }
-}
-
-/// TabBarView 子项保活容器（AutomaticKeepAliveClientMixin）。
-class _KeepAliveWidget extends StatefulWidget {
-  const _KeepAliveWidget({required this.child});
-
-  final Widget child;
-
-  @override
-  State<_KeepAliveWidget> createState() => _KeepAliveWidgetState();
-}
-
-class _KeepAliveWidgetState extends State<_KeepAliveWidget> with AutomaticKeepAliveClientMixin {
-  @override
-  bool get wantKeepAlive => true;
-
-  @override
-  Widget build(BuildContext context) {
-    super.build(context);
-    return widget.child;
   }
 }

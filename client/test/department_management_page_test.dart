@@ -118,7 +118,7 @@ class _FakeDepartmentService extends DepartmentService {
 }
 
 final _testChild = CurrentChild(
-  cardNo: '',
+  visitCardNo: '',
   patientId: '',
   name: '',
   gender: '',

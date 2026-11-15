@@ -146,7 +146,7 @@ class _FakeUserService extends UserService {
 }
 
 final _testChild = CurrentChild(
-  cardNo: '',
+  visitCardNo: '',
   patientId: '',
   name: '',
   gender: '',

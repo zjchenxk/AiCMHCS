@@ -1,5 +1,6 @@
 import 'package:client/main.dart';
 import 'package:client/providers/theme_provider.dart';
+import 'package:client/utils/log_helper.dart';
 import 'package:client/utils/theme_color_mapper.dart';
 import 'package:client/utils/theme_data.dart';
 import 'package:client/views/help/help_center_page.dart';
@@ -28,6 +29,8 @@ class MainPage extends StatefulWidget {
 
 class _MainPageState extends State<MainPage> {
   final TextEditingController _searchController = TextEditingController();
+  // 顶部儿童精确搜索框
+  final TextEditingController _childSearchController = TextEditingController();
   // 用户菜单控制器
   final MenuController _userMenuController = MenuController();
   // 设置菜单控制器
@@ -38,6 +41,7 @@ class _MainPageState extends State<MainPage> {
   @override
   void dispose() {
     _searchController.dispose();
+    _childSearchController.dispose();
     super.dispose();
   }
 
@@ -103,8 +107,8 @@ class _MainPageState extends State<MainPage> {
           children: [
             // LOGO 及系统名称（可多行，字号分层）
             _buildLogo(theme),
-            // 登录用户信息
-            Expanded(child: _buildLoginUserInfoBar(theme)),
+            // 居中：儿童精确搜索框 + 高级搜索入口
+            Expanded(child: Center(child: _buildChildSearch(theme))),
             // 用户 / 设置 / 帮助
             _buildHeaderActions(theme),
           ],
@@ -161,54 +165,287 @@ class _MainPageState extends State<MainPage> {
     );
   }
 
-  Widget _buildLoginUserInfoBar(ThemeData theme) {
-    return Selector<MainViewModel, LoginUser>(
-      selector: (context, mainViewModel) => mainViewModel.loginUser,
-      builder: (context, loginUser, _) {
-        // 角色名称按当前角色 ID 从角色列表实时解析（不建立订阅：
-        // loginUser 引用变化时本 Selector 已重建）
-        final roleName = context.read<MainViewModel>().roleName;
-        final items = <(String, String?)>[
-          ('当前医院', loginUser.hospName),
-          ('当前院区', loginUser.campusName),
-          ('当前科室', loginUser.deptName),
-          ('当前角色', roleName),
-        ];
-
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Row(
-            children: [
-              Text(
-                '欢迎回来！',
-                style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.7)),
+  /// 顶部居中儿童精确搜索区：单个关键词同时按姓名（盲索引）/就诊卡号/
+  /// 证件号码/电话号码精确匹配，回车触发；命中单个直接载入当前儿童
+  /// 上下文，命中多个弹列表选择；右侧「高级搜索」仅展示条件弹窗（查询
+  /// 逻辑暂未实现）。
+  Widget _buildChildSearch(ThemeData theme) {
+    const searchTip = '输入就诊号/就诊卡号/姓名/证件号码/电话号码精确搜索儿童...';
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 600),
+      child: Row(
+        children: [
+          Expanded(
+            child: Tooltip(
+              message: searchTip,
+              child: TextField(
+                controller: _childSearchController,
+                style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer),
+                textInputAction: TextInputAction.search,
+                onSubmitted: (_) => _searchChild(),
+                decoration: InputDecoration(
+                  hintText: searchTip,
+                  hintStyle: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.5),
+                  ),
+                  prefixIcon: Icon(
+                    Icons.person_search_outlined,
+                    color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.6),
+                    size: 18,
+                  ),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                  filled: true,
+                  fillColor: theme.colorScheme.surface.withValues(alpha: 0.5),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: theme.colorScheme.primary),
+                  ),
+                ),
               ),
-              for (final (label, value) in items)
-                if (value != null && value.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 16),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          '$label:',
-                          style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.7)),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          value,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onPrimaryContainer,
-                            fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Tooltip(
+            message: '高级搜索',
+            child: OutlinedButton.icon(
+              onPressed: _showAdvancedSearchDialog,
+              icon: Icon(Icons.tune, size: 16, color: theme.colorScheme.onPrimaryContainer),
+              label: Text(
+                '高级搜索',
+                style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer),
+              ),
+              style: OutlinedButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                side: BorderSide(color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.4)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 回车精确搜索儿童：无命中提示「无此儿童！」；命中一位直接载入
+  /// 当前儿童上下文；命中多位弹列表由用户确认选择。
+  Future<void> _searchChild() async {
+    final keyword = _childSearchController.text.trim();
+    if (keyword.isEmpty) {
+      _toast('请输入就诊号/就诊卡号/姓名/证件号码或电话号码');
+      return;
+    }
+    final mainViewModel = context.read<MainViewModel>();
+    List<ChildInfo> results;
+    try {
+      results = await mainViewModel.searchChildren(keyword);
+    } catch (e, st) {
+      LogHelper.error('client:MainPage._searchChild', e, st);
+      if (!mounted) return;
+      _toast('搜索失败，请稍后重试');
+      return;
+    }
+    if (!mounted) return;
+    if (results.isEmpty) {
+      _toast('无此儿童！');
+      return;
+    }
+    if (results.length == 1) {
+      mainViewModel.setCurrentChild(results.first);
+      _toast('已选定儿童：${results.first.name}');
+      return;
+    }
+    final selected = await _showChildPickDialog(results);
+    if (selected != null) {
+      mainViewModel.setCurrentChild(selected);
+      _toast('已选定儿童：${selected.name}');
+    }
+  }
+
+  /// 多命中选择弹窗：可滚动列表展示姓名/性别/出生日期/联系电话/居住
+  /// 地址，点选即返回该儿童档案。
+  Future<ChildInfo?> _showChildPickDialog(List<ChildInfo> results) async {
+    final theme = Theme.of(context);
+    return showDialog<ChildInfo>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: GlassPanel(
+            blur: 24,
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.person_search_outlined, color: theme.colorScheme.primary, size: 22),
+                      const SizedBox(width: 10),
+                      Text(
+                        '共找到 ${results.length} 名儿童，请选择',
+                        style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // 多条命中可超出一屏：限制最大高度并支持滚动
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 360),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: results.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final c = results[index];
+                        final sex = switch (c.sex) {
+                          '1' => '男',
+                          '2' => '女',
+                          _ => '',
+                        };
+                        final address = [
+                          c.addressProvince,
+                          c.addressCity,
+                          c.addressCounty,
+                          c.addressTown,
+                          c.addressVillage,
+                          c.addressDetails,
+                        ].whereType<String>().where((s) => s.isNotEmpty).join();
+                        return GlassPanel(
+                          blur: 12,
+                          borderRadius: 12,
+                          child: ListTile(
+                            dense: true,
+                            onTap: () => Navigator.of(dialogContext).pop(c),
+                            title: Text(
+                              '${c.name}${sex.isEmpty ? '' : '  $sex'}  ${c.birthDate}',
+                              style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                            subtitle: Text(
+                              [
+                                if (c.phone != null && c.phone!.isNotEmpty) '电话 ${c.phone!}',
+                                if (address.isNotEmpty) address,
+                              ].join(' · '),
+                              style: theme.textTheme.bodySmall,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: Icon(Icons.chevron_right, color: theme.colorScheme.onSurfaceVariant, size: 18),
                           ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 高级搜索条件弹窗（查询逻辑暂未实现，仅展示条件输入框）。
+  Future<void> _showAdvancedSearchDialog() async {
+    final theme = Theme.of(context);
+    final nameCtrl = TextEditingController();
+    final cardCtrl = TextEditingController();
+    final certCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: GlassPanel(
+              blur: 24,
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.tune, color: theme.colorScheme.primary, size: 22),
+                        const SizedBox(width: 10),
+                        Text(
+                          '高级搜索',
+                          style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
-                  ),
-            ],
+                    const SizedBox(height: 16),
+                    for (final (label, controller) in <(String, TextEditingController)>[
+                      ('姓名', nameCtrl),
+                      ('就诊卡号', cardCtrl),
+                      ('证件号码', certCtrl),
+                      ('电话号码', phoneCtrl),
+                    ]) ...[
+                      TextField(
+                        controller: controller,
+                        style: theme.textTheme.bodyMedium,
+                        decoration: InputDecoration(
+                          labelText: label,
+                          labelStyle: theme.textTheme.bodyMedium,
+                          filled: true,
+                          fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: theme.colorScheme.primary),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    Text(
+                      '高级搜索功能开发中，暂不支持按组合条件检索',
+                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        FilledButton(
+                          onPressed: () => Navigator.of(dialogContext).pop(),
+                          child: const Text('关闭'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
-        );
-      },
+        ),
+      );
+    } finally {
+      nameCtrl.dispose();
+      cardCtrl.dispose();
+      certCtrl.dispose();
+      phoneCtrl.dispose();
+    }
+  }
+
+  /// 浮窗式提示（搜索结果反馈）。
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
     );
   }
 
@@ -246,6 +483,47 @@ class _MainPageState extends State<MainPage> {
         padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 6)),
       ),
       menuChildren: [
+        // 当前登录身份信息（医院/院区/科室/角色，原顶部信息栏迁入；
+        // 未设置的字段不显示，与原信息栏口径一致）
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final (label, value) in _loginInfoItems(loginUser))
+                if (value != null && value.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 80,
+                          child: Text(
+                            '$label：',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            value,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurface,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+            ],
+          ),
+        ),
+        const Divider(height: 9, thickness: 0.5),
         MenuItemButton(
           leadingIcon: Icon(
             Icons.key_outlined,
@@ -346,6 +624,18 @@ class _MainPageState extends State<MainPage> {
     } catch (_) {
       return null;
     }
+  }
+
+  /// 用户下拉菜单中的登录身份信息项（医院/院区/科室/角色；角色名称按
+  /// 当前角色 ID 从角色列表实时解析，未设置的字段为 null 不展示）。
+  List<(String, String?)> _loginInfoItems(LoginUser loginUser) {
+    final roleName = context.read<MainViewModel>().roleName;
+    return [
+      ('当前医院', loginUser.hospName),
+      ('当前院区', loginUser.campusName),
+      ('当前科室', loginUser.deptName),
+      ('当前角色', roleName),
+    ];
   }
 
   // 设置菜单

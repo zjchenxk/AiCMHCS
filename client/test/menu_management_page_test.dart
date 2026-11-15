@@ -101,7 +101,7 @@ class _FakeMenuService extends MenuService {
 }
 
 final _testChild = CurrentChild(
-  cardNo: '',
+  visitCardNo: '',
   patientId: '',
   name: '',
   gender: '',

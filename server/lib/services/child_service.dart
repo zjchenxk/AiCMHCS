@@ -67,7 +67,7 @@ class ChildService {
   static const int _plainCertMaxLength = 24;
   static const int _plainNameMaxLength = 57;
   static const int _healthNoMaxLength = 20;
-  static const int _addressPlainMaxLength = 24;
+  static const int _addressPlainMaxLength = 100;
   static const int _addressCodeMaxLength = 20;
   static const int _provinceMaxLength = 50;
   static const int _hospitalMaxLength = 100;
@@ -93,26 +93,26 @@ class ChildService {
 
   // ---------------- 查询 ----------------
 
-  /// 按姓名（盲索引精确匹配）/就诊卡号/保健号检索本院儿童档案。
+  /// 多条件精确检索本院儿童档案。
   ///
-  /// 至少提供一个查询条件；姓名经 HMAC 盲索引等值匹配，卡号与保健号
-  /// 为明文等值匹配，条件之间为「或」关系；按创建时间倒序取前
+  /// 至少提供一个查询条件；姓名/证件号码/联系电话经 HMAC 盲索引等值
+  /// 匹配（写入与检索同为 trim 后口径，保证可命中），就诊卡号/保健号
+  /// 为明文等值匹配，条件之间为「或」关系（主界面搜索框将同一关键词
+  /// 同时投给多个条件，命中任一即返回）；单个条件超长时静默跳过（全局
+  /// 搜索框场景下不因个别字段超限而整体失败）；按创建时间倒序取前
   /// [searchLimit] 条。
-  Future<List<ChildInfo>> search({
-    required String hospId,
-    String? name,
-    String? visitCardNo,
-    String? healthNo,
-  }) async {
+  Future<List<ChildInfo>> search({required String hospId, String? name, String? visitCardNo, String? healthNo, String? certificateNo, String? phone}) async {
     final scope = hospId.trim();
     if (scope.isEmpty) {
       return const [];
     }
-    final namePlain = _optionalEnc(name, '姓名', _plainNameMaxLength);
-    final cardNo = _optional(visitCardNo, '就诊卡号', _cardNoMaxLength);
-    final health = _optional(healthNo, '保健号', _healthNoMaxLength);
-    if (namePlain == null && cardNo == null && health == null) {
-      throw const ChildException(400, 40002, '请至少输入姓名、就诊卡号或保健号中的一个查询条件');
+    final namePlain = _searchCond(name, _plainNameMaxLength);
+    final cardNo = _searchCond(visitCardNo, _cardNoMaxLength);
+    final health = _searchCond(healthNo, _healthNoMaxLength);
+    final certPlain = _searchCond(certificateNo, _plainCertMaxLength);
+    final phonePlain = _searchCond(phone, _plainPhoneMaxLength);
+    if (namePlain == null && cardNo == null && health == null && certPlain == null && phonePlain == null) {
+      throw const ChildException(400, 40002, '请至少输入姓名、就诊卡号、保健号、证件号码或联系电话中的一个查询条件');
     }
 
     final conditions = <String>[];
@@ -129,6 +129,14 @@ class ChildService {
       conditions.add('HEALTH_NO = ?');
       params.add(health);
     }
+    if (certPlain != null) {
+      conditions.add('CERTIFICATE_NO_HMAC = ?');
+      params.add(await _cipher.mac(FieldCipher.certificateNoPurpose, certPlain));
+    }
+    if (phonePlain != null) {
+      conditions.add('PHONE_HMAC = ?');
+      params.add(await _cipher.mac(FieldCipher.childPhonePurpose, phonePlain));
+    }
 
     final result = await _db.query(
       'SELECT ${_childColumns.join(', ')} FROM CHILD_INFO '
@@ -143,6 +151,16 @@ class ChildService {
       children.add(await _childFromRow(row));
     }
     return children;
+  }
+
+  /// 检索条件归一：空值或超长（对密文列即明文字节超限，该字段不可能
+  /// 命中）时返回 null 并跳过该条件，不抛错（多条件组合检索容错）。
+  String? _searchCond(String? value, int maxBytes) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty || utf8.encode(v).length > maxBytes) {
+      return null;
+    }
+    return v;
   }
 
   /// 装载儿童整档（基本信息 + 扩展信息 + 监护人列表），不存在或非本院
@@ -163,15 +181,7 @@ class ChildService {
   /// BIRTH_DATE/三级居住地址/详细地址为必填；敏感字段服务端加密；新增
   /// 后按自然键回读新行 ID，再写入扩展信息与监护人。全程进程内串行
   /// （见 [_createTail]），保证同键并发建档的回读唯一命中刚插入行。
-  Future<ChildArchive> create({
-    required ChildInfo child,
-    required String creatorId,
-    required String creatorName,
-    required String hospId,
-    required String hospName,
-    ChildExtInfo? ext,
-    List<ChildGuardianInfo> guardians = const [],
-  }) {
+  Future<ChildArchive> create({required ChildInfo child, required String creatorId, required String creatorName, required String hospId, required String hospName, ChildExtInfo? ext, List<ChildGuardianInfo> guardians = const []}) {
     final run =
         _createTail?.then((_) => _create(child: child, ext: ext, guardians: guardians, creatorId: creatorId, creatorName: creatorName, hospId: hospId, hospName: hospName)) ??
         _create(child: child, ext: ext, guardians: guardians, creatorId: creatorId, creatorName: creatorName, hospId: hospId, hospName: hospName);
@@ -180,15 +190,7 @@ class ChildService {
   }
 
   /// 新增执行体（经 [create] 串行调度）。
-  Future<ChildArchive> _create({
-    required ChildInfo child,
-    required String creatorId,
-    required String creatorName,
-    required String hospId,
-    required String hospName,
-    ChildExtInfo? ext,
-    List<ChildGuardianInfo> guardians = const [],
-  }) async {
+  Future<ChildArchive> _create({required ChildInfo child, required String creatorId, required String creatorName, required String hospId, required String hospName, ChildExtInfo? ext, List<ChildGuardianInfo> guardians = const []}) async {
     final scope = _toInt(hospId, '医院ID');
     final hosp = _required(hospName, '医院名称', _hospitalMaxLength);
     final creatorIdValue = _toInt(creatorId, '创建人ID');
@@ -273,13 +275,7 @@ class ChildService {
   /// 基本信息按入参全量更新（PATIENT_ID 为 HIS 回写字段不可改；归属
   /// 医院/创建人/创建时间不可改，UPDATE_TIME 由本方法统一写入）；扩展
   /// 信息与监护人先删后插全量覆盖（ext 为 null 表示清空扩展信息）。
-  Future<ChildArchive> update({
-    required String id,
-    required ChildInfo child,
-    required String hospId,
-    ChildExtInfo? ext,
-    List<ChildGuardianInfo> guardians = const [],
-  }) async {
+  Future<ChildArchive> update({required String id, required ChildInfo child, required String hospId, ChildExtInfo? ext, List<ChildGuardianInfo> guardians = const []}) async {
     final current = await _requireChild(id, hospId);
     final idValue = _toInt(id, '儿童ID');
     final scope = _toInt(hospId, '医院ID');
@@ -556,14 +552,7 @@ class ChildService {
   }
 
   /// 覆盖保存扩展信息（INSERT；调用方负责先删旧行）。
-  Future<void> _saveExt(
-    int childId,
-    ChildExtInfo? ext,
-    int creatorId,
-    String creator,
-    int hospId,
-    String hospName,
-  ) async {
+  Future<void> _saveExt(int childId, ChildExtInfo? ext, int creatorId, String creator, int hospId, String hospName) async {
     if (ext == null) {
       return;
     }
@@ -692,14 +681,7 @@ class ChildService {
   }
 
   /// 全量覆盖保存监护人列表（INSERT 逐条；调用方负责先删旧行）。
-  Future<void> _saveGuardians(
-    int childId,
-    List<ChildGuardianInfo> guardians,
-    int creatorId,
-    String creator,
-    int hospId,
-    String hospName,
-  ) async {
+  Future<void> _saveGuardians(int childId, List<ChildGuardianInfo> guardians, int creatorId, String creator, int hospId, String hospName) async {
     for (final guardian in guardians) {
       final namePlain = _requiredEnc(guardian.name, '监护人姓名', _plainNameMaxLength);
       final certPlain = _optionalEnc(guardian.certificateNo, '监护人证件号码', _plainCertMaxLength);
@@ -871,12 +853,7 @@ class ChildService {
   );
 
   /// 从数据库行解析监护人（姓名/证件/电话为调用方解密后的明文）。
-  ChildGuardianInfo _guardianFromRow(
-    Map<String, String?> row,
-    String? namePlain,
-    String? certPlain,
-    String? phonePlain,
-  ) => ChildGuardianInfo(
+  ChildGuardianInfo _guardianFromRow(Map<String, String?> row, String? namePlain, String? certPlain, String? phonePlain) => ChildGuardianInfo(
     id: row['ID'],
     childId: row['CHILD_ID'] ?? '',
     name: namePlain ?? '',

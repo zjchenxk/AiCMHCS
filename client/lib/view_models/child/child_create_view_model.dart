@@ -10,23 +10,21 @@ import 'package:flutter/foundation.dart';
 /// 档案、create-新增录入、edit-修改已载入档案。
 enum ChildFormMode { empty, browse, create, edit }
 
-/// 儿童建档视图模型：操作权限（按钮显隐）、档案检索与整档装载、
+/// 儿童建档视图模型：操作权限（按钮灰化）、整档装载与增删改流转、
 /// 新增/修改/删除流转、监护人本地工作列表（随整单保存）、五级居住
 /// 地址级联（基本信息表单用）。
 ///
-/// 数据流：页面顶部查询区检索 → [selectChild] 载入整档进入浏览态；
-/// 【新增】/【修改】进入录入态，三个 Tab 表单各自持控制器，【保存】
-/// 时由页面收集表单数据经 [save] 整单提交；监护人行的增删改仅操作
-/// 本地列表（不做权限控制），随整单保存一并入库。
+/// 数据流：主界面顶部搜索选定「当前儿童」后，建档页经 [selectChild]
+/// 自动载入整档进入浏览态；【新增】/【修改】进入录入态，三个 Tab 表单
+/// 各自持控制器，【保存】时由页面收集表单数据经 [save] 整单提交；
+/// 监护人行的增删改仅操作本地列表（不做权限控制），随整单保存一并
+/// 入库。
 class ChildCreateViewModel extends ChangeNotifier {
   /// 构造函数：可选注入服务（缺省经服务定位器取，便于测试覆写）。
-  ChildCreateViewModel({
-    ChildService? childService,
-    MenuService? menuService,
-    AdminDivisionsService? adminDivisionsService,
-  }) : _childService = childService ?? getIt<ChildService>(),
-       _menuService = menuService ?? getIt<MenuService>(),
-       _divisionsService = adminDivisionsService ?? getIt<AdminDivisionsService>();
+  ChildCreateViewModel({ChildService? childService, MenuService? menuService, AdminDivisionsService? adminDivisionsService})
+    : _childService = childService ?? getIt<ChildService>(),
+      _menuService = menuService ?? getIt<MenuService>(),
+      _divisionsService = adminDivisionsService ?? getIt<AdminDivisionsService>();
 
   final ChildService _childService;
 
@@ -63,9 +61,6 @@ class ChildCreateViewModel extends ChangeNotifier {
 
   /// 是否拥有删除操作权限。
   bool get canDelete => _operationCodes.contains(opDelete);
-
-  /// 是否显示顶部查询区（无修改/删除权限时无需检索已有档案）。
-  bool get showQueryArea => canUpdate || canDelete;
 
   /// 拉取当前角色操作权限码（进页时调用）。
   Future<void> loadPermissions() async {
@@ -131,30 +126,7 @@ class ChildCreateViewModel extends ChangeNotifier {
   /// 当前儿童档案 ID（未载入为空串）。
   String get currentChildId => _child?.id ?? '';
 
-  List<ChildInfo> _searchResults = [];
-
-  /// 查询区检索结果（简要档案列表）。
-  List<ChildInfo> get searchResults => _searchResults;
-
   String _messageOf(Object e) => e.toString().replaceFirst(RegExp(r'^\w*(Exception|Error):\s*'), '');
-
-  /// 检索本院儿童档案（姓名/就诊卡号/保健号至少一个条件）。
-  Future<bool> search({String? name, String? visitCardNo, String? healthNo}) async {
-    _loading = true;
-    _errorMsg = null;
-    notifyListeners();
-    try {
-      _searchResults = await _childService.search(name: name, visitCardNo: visitCardNo, healthNo: healthNo);
-      return true;
-    } catch (e, st) {
-      LogHelper.error('client:ChildCreateViewModel.search', e, st);
-      _errorMsg = _messageOf(e);
-      return false;
-    } finally {
-      _loading = false;
-      notifyListeners();
-    }
-  }
 
   /// 载入指定儿童整档并进入浏览态（含居住地址级联回显）。
   Future<bool> selectChild(String id) async {
@@ -184,7 +156,6 @@ class ChildCreateViewModel extends ChangeNotifier {
     _child = null;
     _ext = null;
     _guardians = [];
-    _searchResults = [];
     _mode = ChildFormMode.create;
     clearAdminDivisions();
     await getProvinces();
@@ -206,7 +177,6 @@ class ChildCreateViewModel extends ChangeNotifier {
       _child = null;
       _ext = null;
       _guardians = [];
-      _searchResults = [];
       notifyListeners();
       return;
     }
@@ -220,11 +190,7 @@ class ChildCreateViewModel extends ChangeNotifier {
   ///param ext: 扩展信息（扩展 Tab 收集，null 表示清空扩展信息）
   ///param guardians: 监护人列表（监护人 Tab 本地工作列表）
   ///returns: true 表示保存成功
-  Future<bool> save({
-    required ChildInfo child,
-    ChildExtInfo? ext,
-    List<ChildGuardianInfo>? guardians,
-  }) async {
+  Future<bool> save({required ChildInfo child, ChildExtInfo? ext, List<ChildGuardianInfo>? guardians}) async {
     _busy = true;
     _errorMsg = null;
     notifyListeners();
@@ -239,7 +205,6 @@ class ChildCreateViewModel extends ChangeNotifier {
       _child = archive.$1;
       _ext = archive.$2;
       _guardians = archive.$3;
-      _searchResults = [];
       _mode = ChildFormMode.browse;
       return true;
     } catch (e, st) {
@@ -265,7 +230,6 @@ class ChildCreateViewModel extends ChangeNotifier {
       _child = null;
       _ext = null;
       _guardians = [];
-      _searchResults = [];
       _mode = ChildFormMode.empty;
       return true;
     } catch (e, st) {
@@ -378,8 +342,14 @@ class ChildCreateViewModel extends ChangeNotifier {
   }
 
   /// 获取省/直辖市/自治区列表。
+  ///
+  /// 幂等：已加载过直接跳过（重复拉取会生成新的 Province 对象，使
+  /// 已选中的省与下拉 items 身份失配触发 DropdownButton 断言）。
   ///returns: true 表示获取成功
   Future<bool> getProvinces() async {
+    if (_provinces != null) {
+      return true;
+    }
     try {
       _addressLoading = true;
       notifyListeners();

@@ -50,6 +50,9 @@ class ChildBasicInfoFormState extends State<ChildBasicInfoForm> {
   final _birthTimeCtrl = TextEditingController();
   final _detailsCtrl = TextEditingController();
 
+  /// 居住地址编码（只读回显，随五级地址级联选择实时刷新）。
+  final _addressCodeCtrl = TextEditingController();
+
   final _checkTimeFocus = FocusNode();
   final _visitCardFocus = FocusNode();
   final _ecardFocus = FocusNode();
@@ -102,6 +105,7 @@ class ChildBasicInfoFormState extends State<ChildBasicInfoForm> {
     _birthDateCtrl.dispose();
     _birthTimeCtrl.dispose();
     _detailsCtrl.dispose();
+    _addressCodeCtrl.dispose();
     _checkTimeFocus.dispose();
     _visitCardFocus.dispose();
     _ecardFocus.dispose();
@@ -206,6 +210,13 @@ class ChildBasicInfoFormState extends State<ChildBasicInfoForm> {
     final editable = widget.editable;
     final base = vm.child;
 
+    // 居住地址编码随五级级联选择实时回填（取最深一级的行政区划编码）；
+    // 表单由页面在 VM 变化时重建，此处同步受控控制器即可刷新只读框
+    final addressCode = vm.addressCode ?? base?.addressCode ?? '';
+    if (_addressCodeCtrl.text != addressCode) {
+      _addressCodeCtrl.text = addressCode;
+    }
+
     Widget field(Widget child) => SizedBox(width: 300, child: child);
 
     return Form(
@@ -232,14 +243,6 @@ class ChildBasicInfoFormState extends State<ChildBasicInfoForm> {
             ),
             field(
               TextFormField(
-                initialValue: base?.patientId,
-                readOnly: true,
-                decoration: childGlassDecoration(theme, '病人ID（HIS回写）'),
-                style: theme.textTheme.bodyMedium,
-              ),
-            ),
-            field(
-              TextFormField(
                 controller: _visitCardCtrl,
                 enabled: editable,
                 maxLength: 100,
@@ -247,6 +250,14 @@ class ChildBasicInfoFormState extends State<ChildBasicInfoForm> {
                 textInputAction: TextInputAction.next,
                 onFieldSubmitted: (_) => _ecardFocus.requestFocus(),
                 decoration: childGlassDecoration(theme, '就诊号/就诊卡号'),
+                style: theme.textTheme.bodyMedium,
+              ),
+            ),
+            field(
+              TextFormField(
+                initialValue: base?.patientId,
+                readOnly: true,
+                decoration: childGlassDecoration(theme, '病人ID（HIS回写）'),
                 style: theme.textTheme.bodyMedium,
               ),
             ),
@@ -398,11 +409,11 @@ class ChildBasicInfoFormState extends State<ChildBasicInfoForm> {
                 keyboardType: TextInputType.phone,
                 textInputAction: TextInputAction.next,
                 onFieldSubmitted: (_) => _detailsFocus.requestFocus(),
-                decoration: childGlassDecoration(theme, '联系电话'),
+                decoration: childGlassDecoration(theme, '联系电话', required: true),
                 style: theme.textTheme.bodyMedium,
                 validator: (v) {
                   final t = v?.trim() ?? '';
-                  if (t.isEmpty) return null;
+                  if (t.isEmpty) return '请输入联系电话';
                   return RegExp(r'^[0-9+\-() ]{5,20}$').hasMatch(t) ? null : '联系电话格式不正确';
                 },
               ),
@@ -468,25 +479,25 @@ class ChildBasicInfoFormState extends State<ChildBasicInfoForm> {
             ),
             field(
               TextFormField(
-                initialValue: vm.addressCode ?? base?.addressCode,
-                readOnly: true,
-                enabled: editable,
-                maxLength: 20,
-                decoration: childGlassDecoration(theme, '居住地址编码'),
-                style: theme.textTheme.bodyMedium,
-              ),
-            ),
-            field(
-              TextFormField(
                 controller: _detailsCtrl,
                 enabled: editable,
-                maxLength: 24,
+                maxLength: 100,
                 focusNode: _detailsFocus,
                 textInputAction: TextInputAction.done,
                 onFieldSubmitted: (_) => widget.onSubmit?.call(),
                 decoration: childGlassDecoration(theme, '详细地址（路/门牌号码）', required: true),
                 style: theme.textTheme.bodyMedium,
                 validator: (v) => (v == null || v.trim().isEmpty) ? '请输入详细地址' : null,
+              ),
+            ),
+            field(
+              TextFormField(
+                controller: _addressCodeCtrl,
+                readOnly: true,
+                enabled: editable,
+                maxLength: 20,
+                decoration: childGlassDecoration(theme, '居住地址编码（随地址级联自动填入）'),
+                style: theme.textTheme.bodyMedium,
               ),
             ),
           ],
@@ -496,7 +507,8 @@ class ChildBasicInfoFormState extends State<ChildBasicInfoForm> {
   }
 
   /// 级联下拉选择框（T 为 Province/City/County/Town/Village，样式同
-  /// hospital_info_form 的 _areaDropdown）。
+  /// hospital_info_form 的 _areaDropdown）；仅在录入态且下级列表已加载
+  /// 时可编辑，浏览态灰化禁选（onChanged 置 null 即禁用，选中值仍回显）。
   Widget _areaDropdown<T>({
     required ThemeData theme,
     required String label,
@@ -508,9 +520,14 @@ class ChildBasicInfoFormState extends State<ChildBasicInfoForm> {
     String? Function(T?)? validator,
     required ValueChanged<T?> onChanged,
   }) {
+    final canEdit = widget.editable && items.isNotEmpty;
+    // 初值必须落在 items 内（行政区划对象按实例判等），否则
+    // DropdownButtonFormField 断言崩溃；失配时回退 hint（如列表重建后
+    // 选中对象尚待级联回显的过渡帧）
+    final safeValue = items.contains(value) ? value : null;
     return DropdownButtonFormField<T>(
       key: fieldKey,
-      initialValue: value,
+      initialValue: safeValue,
       isExpanded: true,
       items: items.isEmpty
           ? null
@@ -532,7 +549,7 @@ class ChildBasicInfoFormState extends State<ChildBasicInfoForm> {
       decoration: childGlassDecoration(theme, label, required: required),
       style: theme.textTheme.bodyMedium,
       validator: validator,
-      onChanged: items.isEmpty ? null : onChanged,
+      onChanged: canEdit ? onChanged : null,
     );
   }
 }

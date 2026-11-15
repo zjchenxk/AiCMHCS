@@ -21,13 +21,15 @@ class ChildService {
     return (child, ext, guardians);
   }
 
-  /// 按姓名（盲索引精确匹配）/就诊卡号/保健号检索本院儿童档案（至少
-  /// 一个条件，返回前 20 条）。
-  Future<List<ChildInfo>> search({String? name, String? visitCardNo, String? healthNo}) async {
+  /// 多条件精确检索本院儿童档案：姓名/证件号码/联系电话走盲索引精确
+  /// 匹配，就诊卡号/保健号明文精确匹配（至少一个条件，返回前 20 条）。
+  Future<List<ChildInfo>> search({String? name, String? visitCardNo, String? healthNo, String? certificateNo, String? phone}) async {
     final data = await _base.post('/api/child/query', {
       'name': name,
       'visitCardNo': visitCardNo,
       'healthNo': healthNo,
+      'certificateNo': certificateNo,
+      'phone': phone,
     });
     final list = data['children'] as List<dynamic>? ?? const [];
     return list.whereType<Map<String, dynamic>>().map(ChildInfo.fromJson).toList();
@@ -41,11 +43,7 @@ class ChildService {
 
   /// 新增儿童档案（整档保存：child 必填，ext/guardians 可选），返回
   /// 入库后的整档（child 含生成的 ID）。
-  Future<ChildArchive> create({
-    required ChildInfo child,
-    ChildExtInfo? ext,
-    List<ChildGuardianInfo> guardians = const [],
-  }) async {
+  Future<ChildArchive> create({required ChildInfo child, ChildExtInfo? ext, List<ChildGuardianInfo> guardians = const []}) async {
     final data = await _base.post('/api/child/add', {
       'child': child.toJson(),
       'ext': ext?.toJson(),
@@ -56,12 +54,7 @@ class ChildService {
 
   /// 修改儿童档案（整档保存：基本信息全量更新、病人ID不可改；ext 传
   /// null 即清空扩展信息；监护人全量覆盖）。
-  Future<ChildArchive> update({
-    required String id,
-    required ChildInfo child,
-    ChildExtInfo? ext,
-    List<ChildGuardianInfo> guardians = const [],
-  }) async {
+  Future<ChildArchive> update({required String id, required ChildInfo child, ChildExtInfo? ext, List<ChildGuardianInfo> guardians = const []}) async {
     final data = await _base.post('/api/child/update', {
       'id': id,
       'child': child.toJson(),

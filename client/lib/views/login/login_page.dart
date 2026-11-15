@@ -246,23 +246,15 @@ class _LoginPageState extends State<LoginPage> {
                                             } else {
                                               if (loginViewModel.errorMessage != null) {
                                                 //登录失败且存在错误信息，弹出 SnackBar
-                                                ScaffoldMessenger.of(
-                                                  context,
-                                                ).showSnackBar(
+                                                ScaffoldMessenger.of(context).showSnackBar(
                                                   SnackBar(
-                                                    content: Text(
-                                                      loginViewModel.errorMessage!,
-                                                    ),
+                                                    content: Text(loginViewModel.errorMessage!),
                                                     backgroundColor: theme.colorScheme.error, //错误色背景
                                                     behavior: SnackBarBehavior.floating, //浮动样式（有圆角），更扁平现代
                                                     shape: RoundedRectangleBorder(
-                                                      borderRadius: BorderRadius.circular(
-                                                        12,
-                                                      ), //与整体圆角风格统一
+                                                      borderRadius: BorderRadius.circular(12), //与整体圆角风格统一
                                                     ),
-                                                    duration: const Duration(
-                                                      seconds: 4,
-                                                    ),
+                                                    duration: const Duration(seconds: 4),
                                                   ),
                                                 );
                                               }
@@ -270,9 +262,7 @@ class _LoginPageState extends State<LoginPage> {
                                           },
                                     style: FilledButton.styleFrom(
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(
-                                          16,
-                                        ), // 现代圆角风格
+                                        borderRadius: BorderRadius.circular(16), // 现代圆角风格
                                       ),
                                     ),
                                     child: loginViewModel.isLoading

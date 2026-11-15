@@ -15877,7 +15877,7 @@
             "baseDataType": "VARCHAR",
             "bizDomainType": "",
             "dbDataType": "VARCHAR",
-            "dataLen": 100,
+            "dataLen": 250,
             "numScale": "",
             "primaryKey": 0,
             "notNull": 1,
@@ -21609,7 +21609,7 @@
           {
             "id": "2F16480C-805F-48A4-BA0C-75C09D487826",
             "defKey": "PHOTO",
-            "defName": "照片",
+            "defName": "照片（竖版720×900）",
             "intro": "",
             "baseDataType": "BLOB",
             "bizDomainType": "",
@@ -21653,9 +21653,9 @@
             "origin": "UI"
           },
           {
-            "id": "114F7324-4065-45E6-A7FF-ADCCF04983EE",
-            "defKey": "PHOTO_THUMB",
-            "defName": "照片省略图（200x200）",
+            "id": "B75BF9E7-6439-4C9D-A0E1-1EF6FD1C8B8E",
+            "defKey": "AVATAR",
+            "defName": "头像（320X320）",
             "intro": "",
             "baseDataType": "BLOB",
             "bizDomainType": "",
@@ -23212,6 +23212,6 @@
     "readonly": false,
     "allowWs": false
   },
-  "updateTime": 1794644946483,
-  "signature": "a281b5462e3c53ee7974f18d6e772057"
+  "updateTime": 1794748139759,
+  "signature": "abbdc860a7aba85cc118ec1400c721af"
 }

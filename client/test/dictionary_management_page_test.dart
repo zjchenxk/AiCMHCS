@@ -222,7 +222,7 @@ class _FakeDictService extends DictService {
 }
 
 final _testChild = CurrentChild(
-  cardNo: '',
+  visitCardNo: '',
   patientId: '',
   name: '',
   gender: '',

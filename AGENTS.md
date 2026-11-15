@@ -155,7 +155,7 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 | 顶栏品牌名 / 页面主标题 | `theme.textTheme.titleLarge`（品牌名加 `letterSpacing: 1.5`） |
 | 顶栏副标题 | `theme.textTheme.titleSmall` |
 | 登录页等展示型大标题 / 副标题 | `theme.textTheme.displayLarge` / `displaySmall` |
-| 按钮文字 | Material 默认（labelLarge），字号已随 FontProvider 缩放，勿单独覆盖 |
+| 按钮文字（FilledButton / OutlinedButton / TextButton / ElevatedButton） | **bodyMedium 字号**（`main.dart` 的四类按钮主题统一覆盖 textStyle，字重沿用 labelLarge 的 w500，随 FontProvider 缩放），勿在业务代码单独覆盖按钮字号 |
 
 ### 毛玻璃（GlassPanel）
 
@@ -223,6 +223,7 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 - 必须以仓库根目录（而非子文件夹）打开 VS Code，`.vscode/launch.json` 的 F5 全栈启动才生效：server 走生产模式（preLaunchTask 自动 `dart_frog build` + `tool/fix_build_overrides.dart` 修复产物后，调试 `build/bin/server.dart`）、client 走 Chrome。server 构建任务输出为 silent——若调试报找不到 `build/bin/server.dart`，多为构建任务中途失败留下半成品产物，查 VS Code 任务终端输出，重按 F5（会整链重建）或 `./tools/start_backend.sh` 即可恢复；
 - 提交信息：中文短句描述变更（如「接入达梦数据库登录接口」），无 conventional-commit 前缀；
 - `dmdpi.dll` 加载失败先确认 DM8 已安装且 `DM_HOME` 指向正确目录（`AICMHCS_DB_DRIVER=sqlite` 时不加载达梦库）；若自行扩展 SQL 拼接，注意绑定参数只支持 ASCII（见「数据库访问约定」）；
-- **F5 全链启动的两个已知坑（均已在 `.vscode/launch.json` / `client/web/` 落地修复，勿回退）**：
+- **F5 全链启动的三个已知坑（均已在 `.vscode/launch.json` / `client/web/` 落地修复，勿回退）**：
   1. **CanvasKit 必须本地加载**：Flutter Web 引擎默认运行时从 `www.gstatic.com` 在线下载 canvaskit，无外网/内网环境（信创）下引擎初始化挂死 → 登录页黑屏，且 fetch 错误只在浏览器 Console（F12）可见、VS Code 调试控制台无报错。修复：`client/web/canvaskit/`（随仓库分发的本地产物，约 15MB）+ `client/web/flutter_bootstrap.js`（自定义启动脚本，经 loader config 设 `canvasKitBaseUrl: '/canvaskit/'`——必须走 JS loader config，`--dart-define=FLUTTER_WEB_CANVASKIT_URL` 无效，JS 加载器在 Dart 代码运行前就已锁定 CDN URL）。dev 与 `flutter build web` 产物均生效；升级 Flutter SDK 后 canvaskit 版本变化，需从 `client/build/web/canvaskit/` 重新拷贝更新该目录；
-  2. **client 启动禁自动 pub get**：launch.json 的 client 配置带 `--no-pub`——F5 复合启动时 client 自动 `flutter pub get`（workspace 模式）会把 dart_frog build 正在使用的临时 `server/pubspec.lock` 当 stray lockfile 删除（pub 的 workspace 清理机制），撞上时间窗会使 build 崩 `PathNotFoundException`（dart_frog_cli 1.2.14 对 workspace 的已知缺陷，最新版未修）。依赖变更时在**仓库根**手动执行 `flutter pub get` 后再 F5。
+  2. **Noto 回退字体必须本地镜像**：CanvasKit 遇到内置字体（阿里巴巴普惠体，`pubspec.yaml` fonts 全量内置）缺字形时，运行时从 `fonts.gstatic.com` 按需下载 Noto 拆片（Flutter 3.32 引擎为 724 个 woff2 片段，下载完成前显示缺字形框、离线永久卡框，有外网时表现为「叉框一闪而过又恢复」）。修复：`tools/download_noto_fonts.sh` 把全部拆片镜像到 `client/web/noto/` + `client/web/flutter_bootstrap.js` 经 loader config 设 `fontFallbackBaseUrl: '/noto/'`（同一 config 机制）。升级 Flutter SDK 后拆片清单可能变化（`<SDK>/bin/cache/flutter_web_sdk/lib/ui/src/engine/font_fallback_data.dart`），重跑脚本即可增量补齐；
+  3. **client 启动禁自动 pub get**：launch.json 的 client 配置带 `--no-pub`——F5 复合启动时 client 自动 `flutter pub get`（workspace 模式）会把 dart_frog build 正在使用的临时 `server/pubspec.lock` 当 stray lockfile 删除（pub 的 workspace 清理机制），撞上时间窗会使 build 崩 `PathNotFoundException`（dart_frog_cli 1.2.14 对 workspace 的已知缺陷，最新版未修）。依赖变更时在**仓库根**手动执行 `flutter pub get` 后再 F5。
