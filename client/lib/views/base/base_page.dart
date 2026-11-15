@@ -1,10 +1,10 @@
-import 'package:client/models/child_info.dart';
+import 'package:client/models/current_child.dart';
 import 'package:common/model.dart';
 import 'package:material_ui/material_ui.dart';
 
 abstract class BasePage extends StatefulWidget {
   final LoginUser loginUser;
-  final ChildInfo child;
+  final CurrentChild child;
 
   const BasePage({
     super.key,

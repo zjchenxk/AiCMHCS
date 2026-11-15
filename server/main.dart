@@ -9,6 +9,7 @@ import 'package:server/database/migrator/schema_migrator.dart';
 import 'package:server/services/admin_division_service.dart';
 import 'package:server/services/auth_service.dart';
 import 'package:server/services/campus_service.dart';
+import 'package:server/services/child_service.dart';
 import 'package:server/services/department_service.dart';
 import 'package:server/services/dict_service.dart';
 import 'package:server/services/hospital_service.dart';
@@ -40,6 +41,7 @@ Future<HttpServer> run(Handler handler, InternetAddress ip, int port) async {
   final campuses = CampusService(db);
   final departments = DepartmentService(db);
   final dicts = DictService(db);
+  final children = ChildService(db, cipher);
   final menus = MenuService(db);
   final roles = RoleService(db);
   final users = UserService(db, cipher);
@@ -57,6 +59,7 @@ Future<HttpServer> run(Handler handler, InternetAddress ip, int port) async {
       .use(provider<CampusService>((_) => campuses))
       .use(provider<DepartmentService>((_) => departments))
       .use(provider<DictService>((_) => dicts))
+      .use(provider<ChildService>((_) => children))
       .use(provider<MenuService>((_) => menus))
       .use(provider<RoleService>((_) => roles))
       .use(provider<UserService>((_) => users))

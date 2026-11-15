@@ -1,7 +1,7 @@
 // 院区管理页面交互回归测试：加载后左侧显示本院区列表、右侧信息表单
 // 三态（未选中提示 / 编辑回填 / 新增清空）；新增走右侧表单不弹窗；
 // 删除走确认对话框；未设置所属医院时给引导提示。
-import 'package:client/models/child_info.dart';
+import 'package:client/models/current_child.dart';
 import 'package:client/services/campus_service.dart';
 import 'package:client/view_models/system/campus_management_view_model.dart';
 import 'package:client/views/system/campus_management_page.dart';
@@ -68,7 +68,7 @@ class _FakeCampusService extends CampusService {
   }
 }
 
-final _testChild = ChildInfo(
+final _testChild = CurrentChild(
   cardNo: '',
   patientId: '',
   name: '',

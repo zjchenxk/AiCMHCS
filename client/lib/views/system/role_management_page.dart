@@ -266,7 +266,7 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
                 const SizedBox(width: 8),
                 // 编码定宽列：各行同一位置右对齐（列宽覆盖 ITEM_CODE 上限 10 字符）
                 SizedBox(
-                  width: 72,
+                  width: 80,
                   child: Text(
                     node.menu.itemCode,
                     textAlign: TextAlign.right,
@@ -341,7 +341,7 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
               overflow: TextOverflow.ellipsis,
             ),
       trailing: SizedBox(
-        width: 72,
+        width: 80,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [

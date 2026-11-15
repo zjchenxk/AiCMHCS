@@ -1,5 +1,5 @@
 import 'package:client/main.dart' as app;
-import 'package:client/models/child_info.dart';
+import 'package:client/models/current_child.dart';
 import 'package:client/models/menu_item.dart';
 import 'package:client/services/account_service.dart';
 import 'package:client/utils/log_helper.dart';
@@ -41,7 +41,7 @@ class MainViewModel extends ChangeNotifier {
   }
 
   // 儿童信息（示例数据，实际可从接口获取）
-  ChildInfo child = ChildInfo(
+  CurrentChild child = CurrentChild(
     cardNo: 'JZK202601001',
     patientId: 'P00012345',
     name: '王小明',

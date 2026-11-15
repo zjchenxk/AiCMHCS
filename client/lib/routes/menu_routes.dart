@@ -1,4 +1,5 @@
-import 'package:client/models/child_info.dart';
+import 'package:client/models/current_child.dart';
+import 'package:client/views/child/child_create_page.dart';
 import 'package:client/views/system/admin_division_management_page.dart';
 import 'package:client/views/system/campus_management_page.dart';
 import 'package:client/views/system/department_management_page.dart';
@@ -16,12 +17,13 @@ typedef MenuPageBuilder =
     Widget Function(
       BuildContext context,
       LoginUser loginUser,
-      ChildInfo child,
+      CurrentChild child,
     );
 
 /// 路由注册表：key 与 MenuItem.route 一一对应
 Map<String, MenuPageBuilder> menuRoutes = {
   '/home': _buildPage(HomePage.new),
+  '/child/create': _buildPage(ChildCreatePage.new),
   '/system/hospital': _buildPage(HospitalManagementPage.new),
   '/system/campus': _buildPage(CampusManagementPage.new),
   '/system/department': _buildPage(DepartmentManagementPage.new),
@@ -34,7 +36,7 @@ Map<String, MenuPageBuilder> menuRoutes = {
 
 /// 简化注册的辅助函数（普通 function，不用 tear-off 时也可直接写 lambda）
 MenuPageBuilder _buildPage(
-  Widget Function({required LoginUser loginUser, required ChildInfo child}) ctor,
+  Widget Function({required LoginUser loginUser, required CurrentChild child}) ctor,
 ) {
   return (context, loginUser, child) => ctor(loginUser: loginUser, child: child);
 }

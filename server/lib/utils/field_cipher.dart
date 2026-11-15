@@ -82,6 +82,34 @@ class FieldCipher {
   /// 字段用途：SYS_USER.ID_CARD_NO（身份证号码）。
   static const idCardNoPurpose = 'id-card-no';
 
+  /// 字段用途：CHILD_INFO.NAME（儿童姓名）。
+  static const childNamePurpose = 'child-name';
+
+  /// 字段用途：CHILD_INFO.ECARD_ID（电子健康卡ID）。
+  static const ecardIdPurpose = 'ecard-id';
+
+  /// 字段用途：CHILD_INFO.CERTIFICATE_NO（儿童证件号码）。
+  static const certificateNoPurpose = 'certificate-no';
+
+  /// 字段用途：CHILD_INFO.ADDRESS_DETAILS（儿童居住地址-路/门牌号码，
+  /// 无盲索引列，仅加密存储）。
+  static const addressDetailsPurpose = 'address-details';
+
+  /// 字段用途：CHILD_INFO.PHONE（儿童联系电话）。
+  static const childPhonePurpose = 'child-phone';
+
+  /// 字段用途：CHILD_EXT_INFO.BIRTH_CERTIFICATE_NO（出生证号）。
+  static const birthCertificateNoPurpose = 'birth-certificate-no';
+
+  /// 字段用途：CHILD_GUARDIAN_INFO.NAME（监护人姓名）。
+  static const guardianNamePurpose = 'guardian-name';
+
+  /// 字段用途：CHILD_GUARDIAN_INFO.CERTIFICATE_NO（监护人证件号码）。
+  static const guardianCertificateNoPurpose = 'guardian-certificate-no';
+
+  /// 字段用途：CHILD_GUARDIAN_INFO.PHONE（监护人联系电话）。
+  static const guardianPhonePurpose = 'guardian-phone';
+
   /// 是否为本次自动生成的密钥文件（调用方据此提示运维单独备份密钥）。
   bool keyFileWasGenerated = false;
 

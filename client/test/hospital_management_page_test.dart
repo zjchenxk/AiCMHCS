@@ -1,7 +1,7 @@
 // 医院管理页面交互回归测试：添加下级医院不弹窗、在右侧信息表单录入
 // （与行政区划一致的交互）；页面切走再切回不重新加载树；删除走确认
 // 对话框并级联清理。
-import 'package:client/models/child_info.dart';
+import 'package:client/models/current_child.dart';
 import 'package:client/services/admin_divisions_service.dart';
 import 'package:client/services/hospital_service.dart';
 import 'package:client/view_models/system/hospital_management_view_model.dart';
@@ -175,7 +175,7 @@ class _FakeAdminDivisionsService extends AdminDivisionsService {
   Future<List<Town>?> getTownsByCounty(String countyCode) async => [];
 }
 
-final _testChild = ChildInfo(
+final _testChild = CurrentChild(
   cardNo: '',
   patientId: '',
   name: '',

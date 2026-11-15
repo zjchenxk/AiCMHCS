@@ -2,7 +2,7 @@
 // 右侧信息表单三态（未选中提示 / 编辑回填 / 新增清空带挂载说明）；
 // 顶级新增与下级新增、类型联动（菜单类型出路由、操作类型无图标）、
 // 删除走确认对话框。
-import 'package:client/models/child_info.dart';
+import 'package:client/models/current_child.dart';
 import 'package:client/services/menu_service.dart';
 import 'package:client/view_models/system/menu_management_view_model.dart';
 import 'package:client/views/system/menu_management_page.dart';
@@ -100,7 +100,7 @@ class _FakeMenuService extends MenuService {
   }
 }
 
-final _testChild = ChildInfo(
+final _testChild = CurrentChild(
   cardNo: '',
   patientId: '',
   name: '',

@@ -1,7 +1,7 @@
 // 科室管理页面交互回归测试：加载后左侧显示「医院→院区→科室→下级」树、
 // 右侧信息表单三态（未选中提示 / 编辑回填 / 新增清空带挂载说明）；
 // 从院区节点经菜单新增；删除走确认对话框；未设置所属医院时给引导提示。
-import 'package:client/models/child_info.dart';
+import 'package:client/models/current_child.dart';
 import 'package:client/services/campus_service.dart';
 import 'package:client/services/department_service.dart';
 import 'package:client/view_models/system/department_management_view_model.dart';
@@ -117,7 +117,7 @@ class _FakeDepartmentService extends DepartmentService {
   }
 }
 
-final _testChild = ChildInfo(
+final _testChild = CurrentChild(
   cardNo: '',
   patientId: '',
   name: '',

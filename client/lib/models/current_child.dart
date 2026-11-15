@@ -1,4 +1,4 @@
-class ChildInfo {
+class CurrentChild {
   final String cardNo; // 就诊卡号
   final String patientId; // 病人ID
   final String name; // 姓名
@@ -9,7 +9,7 @@ class ChildInfo {
   final String correctedAge; // 纠正年龄
   final String phone; // 联系电话
 
-  const ChildInfo({
+  const CurrentChild({
     required this.cardNo,
     required this.patientId,
     required this.name,

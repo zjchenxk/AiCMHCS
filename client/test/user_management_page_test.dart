@@ -2,7 +2,7 @@
 // （孤儿用户入「未分配科室」）、右侧表单三态（未选中提示 / 编辑回填 /
 // 新增清空）；从科室节点新增用户带角色勾选；修改保存后树同步；医院未
 // 设科室时给「未添加科室，不能新增用户」引导。
-import 'package:client/models/child_info.dart';
+import 'package:client/models/current_child.dart';
 import 'package:client/services/department_service.dart';
 import 'package:client/services/role_service.dart';
 import 'package:client/services/user_service.dart';
@@ -145,7 +145,7 @@ class _FakeUserService extends UserService {
   }
 }
 
-final _testChild = ChildInfo(
+final _testChild = CurrentChild(
   cardNo: '',
   patientId: '',
   name: '',

@@ -7,6 +7,7 @@ import 'package:client/services/admin_divisions_service.dart';
 import 'package:client/services/auth_service.dart';
 import 'package:client/services/base/base_service.dart';
 import 'package:client/services/campus_service.dart';
+import 'package:client/services/child_service.dart';
 import 'package:client/services/department_service.dart';
 import 'package:client/services/dict_service.dart';
 import 'package:client/services/hospital_service.dart';
@@ -15,6 +16,7 @@ import 'package:client/services/menu_service.dart';
 import 'package:client/services/role_service.dart';
 import 'package:client/services/user_service.dart';
 import 'package:client/utils/log_helper.dart';
+import 'package:client/view_models/child/child_create_view_model.dart';
 import 'package:client/view_models/home/home_view_model.dart';
 import 'package:client/view_models/main/main_view_model.dart';
 import 'package:client/view_models/login/login_view_model.dart';
@@ -55,6 +57,7 @@ void setupServiceLocator() {
   getIt.registerLazySingleton<CampusService>(() => CampusService());
   getIt.registerLazySingleton<DepartmentService>(() => DepartmentService());
   getIt.registerLazySingleton<DictService>(() => DictService());
+  getIt.registerLazySingleton<ChildService>(() => ChildService());
   getIt.registerLazySingleton<MenuService>(() => MenuService());
   getIt.registerLazySingleton<RoleService>(() => RoleService());
   getIt.registerLazySingleton<UserService>(() => UserService());
@@ -103,6 +106,7 @@ void main() async {
         ChangeNotifierProvider(create: (context) => RoleManagementViewModel()),
         ChangeNotifierProvider(create: (context) => UserManagementViewModel()),
         ChangeNotifierProvider(create: (context) => AdminDivisionManagementViewModel()),
+        ChangeNotifierProvider(create: (context) => ChildCreateViewModel()),
       ],
       child: const MyApp(),
     ),

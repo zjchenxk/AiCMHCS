@@ -2,7 +2,7 @@
 // 空态提示；选中字典懒加载数据项（默认徽章）；顶级/下级新增与修改
 // 走 Form 对话框；删除走确认对话框（有下级时后端阻止）；数据项设为
 // 默认与删除；操作权限显隐（仅授权的按钮可见）。
-import 'package:client/models/child_info.dart';
+import 'package:client/models/current_child.dart';
 import 'package:client/services/dict_service.dart';
 import 'package:client/services/menu_service.dart';
 import 'package:client/view_models/system/dict_management_view_model.dart';
@@ -221,7 +221,7 @@ class _FakeDictService extends DictService {
   );
 }
 
-final _testChild = ChildInfo(
+final _testChild = CurrentChild(
   cardNo: '',
   patientId: '',
   name: '',

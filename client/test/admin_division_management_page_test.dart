@@ -1,7 +1,7 @@
 // 行政区划设置页面切换回归测试：VM 为全局单例，页面切走再切回
 // （State 重建）不得重新 loadRoots 重建整棵树——否则展开与选中状态丢失，
 // 而右侧详情还指着旧树对象，出现「左侧状态清除、右侧信息残留」的不一致。
-import 'package:client/models/child_info.dart';
+import 'package:client/models/current_child.dart';
 import 'package:client/services/admin_divisions_service.dart';
 import 'package:client/view_models/system/admin_division_management_view_model.dart';
 import 'package:client/views/system/admin_division_management_page.dart';
@@ -43,7 +43,7 @@ class _FakeAdminDivisionsService extends AdminDivisionsService {
   Future<int> delete(String code) async => 1;
 }
 
-final _testChild = ChildInfo(
+final _testChild = CurrentChild(
   cardNo: '',
   patientId: '',
   name: '',
