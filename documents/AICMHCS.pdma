@@ -21611,9 +21611,9 @@
             "defKey": "PHOTO",
             "defName": "照片（竖版720×900）",
             "intro": "",
-            "baseDataType": "BLOB",
+            "baseDataType": "TEXT",
             "bizDomainType": "",
-            "dbDataType": "BLOB",
+            "dbDataType": "TEXT",
             "dataLen": "",
             "numScale": "",
             "primaryKey": 0,
@@ -21657,9 +21657,9 @@
             "defKey": "AVATAR",
             "defName": "头像（320X320）",
             "intro": "",
-            "baseDataType": "BLOB",
+            "baseDataType": "TEXT",
             "bizDomainType": "",
-            "dbDataType": "BLOB",
+            "dbDataType": "TEXT",
             "dataLen": "",
             "numScale": "",
             "primaryKey": 0,
@@ -23212,6 +23212,6 @@
     "readonly": false,
     "allowWs": false
   },
-  "updateTime": 1794748139759,
-  "signature": "abbdc860a7aba85cc118ec1400c721af"
+  "updateTime": 1794751808026,
+  "signature": "d5bf3642687f3667b0578f2e6b01189a"
 }

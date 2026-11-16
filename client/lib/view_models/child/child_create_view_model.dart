@@ -1,4 +1,6 @@
 import 'package:client/main.dart';
+import 'package:client/utils/captured_photo.dart';
+import 'package:client/utils/relative_time.dart';
 import 'package:client/services/admin_divisions_service.dart';
 import 'package:client/services/child_service.dart';
 import 'package:client/services/menu_service.dart';
@@ -126,7 +128,84 @@ class ChildCreateViewModel extends ChangeNotifier {
   /// 当前儿童档案 ID（未载入为空串）。
   String get currentChildId => _child?.id ?? '';
 
+  ChildPhoto? _latestPhoto;
+
+  /// 库内最近一次拍照记录（浏览/修改态回显头像与相对时间）。
+  ChildPhoto? get latestPhoto => _latestPhoto;
+
+  CapturedPhoto? _pendingPhoto;
+
+  /// 本次拍照的待保存结果（拍照对话框确定后写入，随【保存】一并入库；
+  /// 显示优先级高于 [latestPhoto]）。
+  CapturedPhoto? get pendingPhoto => _pendingPhoto;
+
+  /// 界面显示用头像 base64：本次拍照优先，否则取库内最近记录。
+  String? get displayAvatarBase64 => _pendingPhoto?.avatarBase64 ?? _latestPhoto?.avatarBase64;
+
+  /// 界面显示用拍照时间文案：本次拍照为「刚刚拍摄」，库内记录为相对
+  /// 时间（{d}天前/{m}月前/{y}年{m}月前），无照片为 null。
+  String? get displayPhotoTimeLabel {
+    if (_pendingPhoto != null) return '刚刚拍摄';
+    final createTime = _latestPhoto?.createTime;
+    if (createTime == null || createTime.isEmpty) return null;
+    final parsed = DateTime.tryParse(createTime);
+    return parsed == null ? null : photoAgeLabel(parsed);
+  }
+
   String _messageOf(Object e) => e.toString().replaceFirst(RegExp(r'^\w*(Exception|Error):\s*'), '');
+
+  /// 载入库内最近一次拍照记录（进浏览态/保存成功后刷新）。
+  Future<void> loadLatestPhoto() async {
+    final id = currentChildId;
+    if (id.isEmpty) {
+      _latestPhoto = null;
+      notifyListeners();
+      return;
+    }
+    try {
+      _latestPhoto = await _childService.latestPhoto(id);
+    } catch (e, st) {
+      LogHelper.error('client:ChildCreateViewModel.loadLatestPhoto', e, st);
+      _latestPhoto = null;
+    }
+    notifyListeners();
+  }
+
+  /// 记录拍照对话框的确定结果（待保存）。
+  void setPendingPhoto(CapturedPhoto photo) {
+    _pendingPhoto = photo;
+    notifyListeners();
+  }
+
+  /// 清除本次拍照的待保存结果（未入库的儿童无库记录可移除）。
+  void clearPendingPhoto() {
+    if (_pendingPhoto == null) return;
+    _pendingPhoto = null;
+    notifyListeners();
+  }
+
+  /// 移除当前儿童当天的全部拍照记录（恢复显示历史头像或空白）。
+  ///returns: 是否移除成功
+  Future<bool> removeTodayPhoto() async {
+    final id = currentChildId;
+    if (id.isEmpty) return false;
+    _busy = true;
+    _errorMsg = null;
+    notifyListeners();
+    try {
+      final (removed, latest) = await _childService.removeTodayPhotos(id);
+      _latestPhoto = latest;
+      _pendingPhoto = null;
+      return true;
+    } catch (e, st) {
+      LogHelper.error('client:ChildCreateViewModel.removeTodayPhoto', e, st);
+      _errorMsg = _messageOf(e);
+      return false;
+    } finally {
+      _busy = false;
+      notifyListeners();
+    }
+  }
 
   /// 载入指定儿童整档并进入浏览态（含居住地址级联回显）。
   Future<bool> selectChild(String id) async {
@@ -139,7 +218,9 @@ class ChildCreateViewModel extends ChangeNotifier {
       _ext = ext;
       _guardians = guardians;
       _mode = ChildFormMode.browse;
+      _pendingPhoto = null;
       await initAddressFromChild(child);
+      await loadLatestPhoto();
       return true;
     } catch (e, st) {
       LogHelper.error('client:ChildCreateViewModel.selectChild', e, st);
@@ -156,6 +237,8 @@ class ChildCreateViewModel extends ChangeNotifier {
     _child = null;
     _ext = null;
     _guardians = [];
+    _latestPhoto = null;
+    _pendingPhoto = null;
     _mode = ChildFormMode.create;
     clearAdminDivisions();
     await getProvinces();
@@ -177,6 +260,8 @@ class ChildCreateViewModel extends ChangeNotifier {
       _child = null;
       _ext = null;
       _guardians = [];
+      _latestPhoto = null;
+      _pendingPhoto = null;
       notifyListeners();
       return;
     }
@@ -196,16 +281,32 @@ class ChildCreateViewModel extends ChangeNotifier {
     notifyListeners();
     try {
       final guardianList = guardians ?? _guardians;
+      final pending = _pendingPhoto;
       final ChildArchive archive;
       if (_mode == ChildFormMode.edit) {
-        archive = await _childService.update(id: _child!.id, child: child, ext: ext, guardians: guardianList);
+        archive = await _childService.update(
+          id: _child!.id,
+          child: child,
+          ext: ext,
+          guardians: guardianList,
+          photoBase64: pending?.photoBase64,
+          avatarBase64: pending?.avatarBase64,
+        );
       } else {
-        archive = await _childService.create(child: child, ext: ext, guardians: guardianList);
+        archive = await _childService.create(
+          child: child,
+          ext: ext,
+          guardians: guardianList,
+          photoBase64: pending?.photoBase64,
+          avatarBase64: pending?.avatarBase64,
+        );
       }
       _child = archive.$1;
       _ext = archive.$2;
       _guardians = archive.$3;
       _mode = ChildFormMode.browse;
+      _pendingPhoto = null;
+      await loadLatestPhoto();
       return true;
     } catch (e, st) {
       LogHelper.error('client:ChildCreateViewModel.save', e, st);
@@ -230,6 +331,8 @@ class ChildCreateViewModel extends ChangeNotifier {
       _child = null;
       _ext = null;
       _guardians = [];
+      _latestPhoto = null;
+      _pendingPhoto = null;
       _mode = ChildFormMode.empty;
       return true;
     } catch (e, st) {

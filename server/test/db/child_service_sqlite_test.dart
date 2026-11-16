@@ -213,6 +213,19 @@ CREATE TABLE CHILD_GUARDIAN_INFO (
   CREATE_TIME TEXT NOT NULL,
   UPDATE_TIME TEXT
 )''');
+    await db.executeDirect('''
+CREATE TABLE CHILD_PHOTO (
+  ID INTEGER PRIMARY KEY AUTOINCREMENT,
+  CHILD_ID INTEGER NOT NULL,
+  PHOTO TEXT NOT NULL,
+  AVATAR TEXT NOT NULL,
+  CREATOR_ID INTEGER NOT NULL,
+  CREATOR_NAME TEXT NOT NULL,
+  HOSP_ID INTEGER NOT NULL,
+  HOSP_NAME TEXT NOT NULL,
+  CREATE_TIME TEXT NOT NULL,
+  UPDATE_TIME TEXT
+)''');
     service = ChildService(db, cipher);
   });
 
@@ -495,5 +508,109 @@ CREATE TABLE CHILD_GUARDIAN_INFO (
       ),
       throwsA(isA<ChildException>().having((e) => e.message, 'message', contains('居住地址详细超出长度限制'))),
     );
+  });
+
+  test('照片：保存历史取最近、移除当天、跨医院隔离与限长校验', () async {
+    final created = await service.create(
+      child: buildChild(),
+      creatorId: '9',
+      creatorName: '张医生',
+      hospId: '1',
+      hospName: '示例人民医院',
+    );
+    final childId = created.$1.id;
+
+    // 无记录 → null
+    expect(await service.latestPhoto(childId, '1'), isNull);
+
+    // 保存两次（历史保留），最近一条生效
+    await service.savePhoto(
+      childId: childId,
+      photoBase64: 'PHOTO-1',
+      avatarBase64: 'AVATAR-1',
+      creatorId: '9',
+      creatorName: '张医生',
+      hospId: '1',
+      hospName: '示例人民医院',
+    );
+    await service.savePhoto(
+      childId: childId,
+      photoBase64: 'PHOTO-2',
+      avatarBase64: 'AVATAR-2',
+      creatorId: '9',
+      creatorName: '张医生',
+      hospId: '1',
+      hospName: '示例人民医院',
+    );
+    final latest = await service.latestPhoto(childId, '1');
+    expect(latest?.avatarBase64, 'AVATAR-2', reason: '按创建时间/ID 倒序取最近一条');
+    expect(latest?.photoBase64, isNull, reason: '最近记录查询不含 PHOTO 大图');
+    expect(latest?.creatorName, '张医生');
+    expect(latest?.hospName, '示例人民医院');
+
+    // 跨医院不可见
+    expect(await service.latestPhoto(childId, '2'), isNull);
+    await expectLater(
+      service.savePhoto(
+        childId: childId,
+        photoBase64: 'P',
+        avatarBase64: 'A',
+        creatorId: '9',
+        creatorName: '张医生',
+        hospId: '2',
+        hospName: '示例儿童医院',
+      ),
+      throwsA(isA<ChildException>().having((e) => e.message, 'message', contains('不存在'))),
+    );
+
+    // 限长校验：空值与超 1MB 拒绝
+    await expectLater(
+      service.savePhoto(childId: childId, photoBase64: '  ', avatarBase64: 'A', creatorId: '9', creatorName: '张医生', hospId: '1', hospName: '示例人民医院'),
+      throwsA(isA<ChildException>().having((e) => e.message, 'message', contains('照片不能为空'))),
+    );
+    await expectLater(
+      service.savePhoto(childId: childId, photoBase64: 'P', avatarBase64: 'A' * (1024 * 1024 + 1), creatorId: '9', creatorName: '张医生', hospId: '1', hospName: '示例人民医院'),
+      throwsA(isA<ChildException>().having((e) => e.message, 'message', contains('头像超出长度限制'))),
+    );
+
+    // 移除当天：两条均为今天创建 → 全部删除
+    expect(await service.removeTodayPhotos(childId, '1'), 2);
+    expect(await service.latestPhoto(childId, '1'), isNull);
+
+    // 跨医院移除：儿童不属于该院 → 拒绝
+    await expectLater(
+      service.removeTodayPhotos(childId, '2'),
+      throwsA(isA<ChildException>().having((e) => e.message, 'message', contains('不存在'))),
+    );
+  });
+
+  test('照片：随档案保存一并入库（add/update 携带 photo）', () async {
+    // 新增带照片 → 插入一条拍照记录
+    final created = await service.create(
+      child: buildChild(),
+      photoBase64: 'PHOTO-NEW',
+      avatarBase64: 'AVATAR-NEW',
+      creatorId: '9',
+      creatorName: '张医生',
+      hospId: '1',
+      hospName: '示例人民医院',
+    );
+    final latest = await service.latestPhoto(created.$1.id, '1');
+    expect(latest?.avatarBase64, 'AVATAR-NEW');
+
+    // 修改再带新照片 → 追加新记录取最近
+    await service.update(
+      id: created.$1.id,
+      child: buildChild(),
+      photoBase64: 'PHOTO-EDIT',
+      avatarBase64: 'AVATAR-EDIT',
+      hospId: '1',
+    );
+    final afterEdit = await service.latestPhoto(created.$1.id, '1');
+    expect(afterEdit?.avatarBase64, 'AVATAR-EDIT');
+
+    // 删除档案 → 拍照记录连带删除
+    expect(await service.delete(created.$1.id, '1'), 1);
+    expect(await service.latestPhoto(created.$1.id, '1'), isNull);
   });
 }

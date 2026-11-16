@@ -10,6 +10,7 @@ export 'models/basic/village.dart';
 export 'models/child/child_ext_info.dart';
 export 'models/child/child_guardian_info.dart';
 export 'models/child/child_info.dart';
+export 'models/child/child_photo.dart';
 export 'models/system/campus.dart';
 export 'models/system/department.dart';
 export 'models/system/dict.dart';

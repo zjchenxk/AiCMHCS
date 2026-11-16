@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:client/utils/log_helper.dart';
 import 'package:client/view_models/child/child_create_view_model.dart';
 import 'package:client/views/child/child_form_widgets.dart';
 import 'package:client/widgets/dict_dropdown_form_field.dart';
@@ -5,12 +8,14 @@ import 'package:common/model.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
-/// 儿童「基本信息」Tab 表单：建档/出生/证件/保健号/居住地址（五级级联，
-/// 编码自动取最深一级行政区划代码）等字段，三态共用（浏览只读、新增/
-/// 修改可编辑）；暴露 [ChildBasicInfoFormState.validate] 与
-/// [ChildBasicInfoFormState.collect] 供页面整单保存。
+/// 儿童「基本信息」Tab 表单：分「基本信息」（建档/出生/证件/保健号/
+/// 居住地址五级级联，编码自动取最深一级行政区划代码）与「拍照」
+/// （320×320 头像框，点击打开拍照对话框，移除仅清除当天记录）两小节；
+/// 三态共用（浏览只读、新增/修改可编辑）；暴露
+/// [ChildBasicInfoFormState.validate] 与 [ChildBasicInfoFormState.collect]
+/// 供页面整单保存。
 class ChildBasicInfoForm extends StatefulWidget {
-  const ChildBasicInfoForm({super.key, required this.viewModel, required this.editable, this.onSubmit});
+  const ChildBasicInfoForm({super.key, required this.viewModel, required this.editable, this.onSubmit, this.onCapturePhoto, this.onRemovePhoto});
 
   final ChildCreateViewModel viewModel;
 
@@ -19,6 +24,12 @@ class ChildBasicInfoForm extends StatefulWidget {
 
   /// 末框回车提交（整单保存）。
   final VoidCallback? onSubmit;
+
+  /// 点击头像打开拍照对话框（浏览态传 null 禁用）。
+  final VoidCallback? onCapturePhoto;
+
+  /// 点击移除（浏览态传 null 禁用）。
+  final VoidCallback? onRemovePhoto;
 
   @override
   State<ChildBasicInfoForm> createState() => ChildBasicInfoFormState();
@@ -223,287 +234,375 @@ class ChildBasicInfoFormState extends State<ChildBasicInfoForm> {
       key: _formKey,
       // 小屏/低窗口下字段总高可能超过 Tab 视口，整表滚动查看
       child: SingleChildScrollView(
-        child: Wrap(
-          spacing: 16,
-          runSpacing: 16,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            field(
-              TextFormField(
-                controller: _checkTimeCtrl,
-                readOnly: true,
-                enabled: editable,
-                onTap: () => _pickDate(controller: _checkTimeCtrl, label: '建档时间', keepTime: true),
-                focusNode: _checkTimeFocus,
-                textInputAction: TextInputAction.next,
-                onFieldSubmitted: (_) => _visitCardFocus.requestFocus(),
-                decoration: childGlassDecoration(theme, '建档时间', required: true),
-                style: theme.textTheme.bodyMedium,
-                validator: (v) => (v == null || v.trim().isEmpty) ? '请选择建档时间' : null,
-              ),
+            childSectionTitle(theme, '基本信息'),
+            Wrap(
+              spacing: 16,
+              runSpacing: 16,
+              children: [
+                field(
+                  TextFormField(
+                    controller: _checkTimeCtrl,
+                    readOnly: true,
+                    enabled: editable,
+                    onTap: () => _pickDate(controller: _checkTimeCtrl, label: '建档时间', keepTime: true),
+                    focusNode: _checkTimeFocus,
+                    textInputAction: TextInputAction.next,
+                    onFieldSubmitted: (_) => _visitCardFocus.requestFocus(),
+                    decoration: childGlassDecoration(theme, '建档时间', required: true),
+                    style: theme.textTheme.bodyMedium,
+                    validator: (v) => (v == null || v.trim().isEmpty) ? '请选择建档时间' : null,
+                  ),
+                ),
+                field(
+                  TextFormField(
+                    controller: _visitCardCtrl,
+                    enabled: editable,
+                    maxLength: 100,
+                    focusNode: _visitCardFocus,
+                    textInputAction: TextInputAction.next,
+                    onFieldSubmitted: (_) => _ecardFocus.requestFocus(),
+                    decoration: childGlassDecoration(theme, '就诊号/就诊卡号'),
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ),
+                field(
+                  TextFormField(
+                    initialValue: base?.patientId,
+                    readOnly: true,
+                    decoration: childGlassDecoration(theme, '病人ID（HIS回写）'),
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ),
+                field(
+                  TextFormField(
+                    controller: _ecardCtrl,
+                    enabled: editable,
+                    maxLength: 100,
+                    focusNode: _ecardFocus,
+                    textInputAction: TextInputAction.next,
+                    onFieldSubmitted: (_) => _nameFocus.requestFocus(),
+                    decoration: childGlassDecoration(theme, '电子健康卡ID'),
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ),
+                field(
+                  TextFormField(
+                    controller: _nameCtrl,
+                    enabled: editable,
+                    maxLength: 19,
+                    focusNode: _nameFocus,
+                    textInputAction: TextInputAction.next,
+                    onFieldSubmitted: (_) => _certNoFocus.requestFocus(),
+                    decoration: childGlassDecoration(theme, '姓名', required: true),
+                    style: theme.textTheme.bodyMedium,
+                    validator: (v) => (v == null || v.trim().isEmpty) ? '请输入姓名' : null,
+                  ),
+                ),
+                field(
+                  DropdownButtonFormField<String>(
+                    key: _sexKey,
+                    initialValue: _sex,
+                    isExpanded: true,
+                    items: const {'1': '男', '2': '女'}.entries
+                        .map(
+                          (e) => DropdownMenuItem(
+                            value: e.key,
+                            child: Text(e.value, style: theme.textTheme.bodyMedium),
+                          ),
+                        )
+                        .toList(),
+                    hint: Text('请选择性别', style: theme.textTheme.bodyMedium),
+                    decoration: childGlassDecoration(theme, '性别', required: true),
+                    style: theme.textTheme.bodyMedium,
+                    validator: (v) => (v == null || v.isEmpty) ? '请选择性别' : null,
+                    onChanged: editable ? (v) => setState(() => _sex = v) : null,
+                  ),
+                ),
+                field(
+                  TextFormField(
+                    controller: _birthDateCtrl,
+                    readOnly: true,
+                    enabled: editable,
+                    onTap: () => _pickDate(controller: _birthDateCtrl, label: '出生日期'),
+                    decoration: childGlassDecoration(theme, '出生日期', required: true),
+                    style: theme.textTheme.bodyMedium,
+                    validator: (v) => (v == null || v.trim().isEmpty) ? '请选择出生日期' : null,
+                  ),
+                ),
+                field(
+                  TextFormField(
+                    controller: _birthTimeCtrl,
+                    enabled: editable,
+                    maxLength: 8,
+                    focusNode: _birthTimeFocus,
+                    keyboardType: TextInputType.datetime,
+                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9:]'))],
+                    decoration: childGlassDecoration(theme, '出生时间（HH:mm）'),
+                    style: theme.textTheme.bodyMedium,
+                    validator: (v) {
+                      final t = v?.trim() ?? '';
+                      if (t.isEmpty) return null;
+                      return RegExp(r'^\d{1,2}:\d{2}$').hasMatch(t) ? null : '出生时间格式应为 HH:mm';
+                    },
+                  ),
+                ),
+                field(
+                  DictDropdownFormField(
+                    dictCode: '0101001',
+                    label: '国籍',
+                    enabled: editable,
+                    autoSelectDefault: true,
+                    initialValue: base?.country,
+                    formFieldKey: _countryKey,
+                  ),
+                ),
+                field(
+                  DictDropdownFormField(
+                    dictCode: '0101002',
+                    label: '民族',
+                    enabled: editable,
+                    autoSelectDefault: true,
+                    initialValue: base?.nation,
+                    formFieldKey: _nationKey,
+                  ),
+                ),
+                field(
+                  DictDropdownFormField(
+                    dictCode: '0101004',
+                    label: '证件类型',
+                    enabled: editable,
+                    autoSelectDefault: true,
+                    initialValue: base?.certificateType,
+                    formFieldKey: _certTypeKey,
+                  ),
+                ),
+                field(
+                  TextFormField(
+                    controller: _certNoCtrl,
+                    enabled: editable,
+                    maxLength: 24,
+                    focusNode: _certNoFocus,
+                    textInputAction: TextInputAction.next,
+                    onFieldSubmitted: (_) => _healthFocus.requestFocus(),
+                    decoration: childGlassDecoration(theme, '证件号码'),
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ),
+                field(
+                  TextFormField(
+                    controller: _healthCtrl,
+                    enabled: editable,
+                    maxLength: 20,
+                    focusNode: _healthFocus,
+                    textInputAction: TextInputAction.next,
+                    onFieldSubmitted: (_) => _mchisHealthFocus.requestFocus(),
+                    decoration: childGlassDecoration(theme, '保健号'),
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ),
+                field(
+                  TextFormField(
+                    controller: _mchisHealthCtrl,
+                    enabled: editable,
+                    maxLength: 20,
+                    focusNode: _mchisHealthFocus,
+                    textInputAction: TextInputAction.next,
+                    onFieldSubmitted: (_) => _phoneFocus.requestFocus(),
+                    decoration: childGlassDecoration(theme, '区域妇幼保健号'),
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ),
+                field(
+                  TextFormField(
+                    controller: _phoneCtrl,
+                    enabled: editable,
+                    maxLength: 20,
+                    focusNode: _phoneFocus,
+                    keyboardType: TextInputType.phone,
+                    textInputAction: TextInputAction.next,
+                    onFieldSubmitted: (_) => _detailsFocus.requestFocus(),
+                    decoration: childGlassDecoration(theme, '联系电话', required: true),
+                    style: theme.textTheme.bodyMedium,
+                    validator: (v) {
+                      final t = v?.trim() ?? '';
+                      if (t.isEmpty) return '请输入联系电话';
+                      return RegExp(r'^[0-9+\-() ]{5,20}$').hasMatch(t) ? null : '联系电话格式不正确';
+                    },
+                  ),
+                ),
+                field(
+                  _areaDropdown<Province>(
+                    theme: theme,
+                    label: '省/直辖市/自治区',
+                    required: true,
+                    items: vm.provinces ?? const [],
+                    value: vm.selectedProvince,
+                    loading: vm.addressLoading,
+                    fieldKey: _provinceKey,
+                    validator: (v) => v == null ? '请选择省/直辖市/自治区' : null,
+                    onChanged: (v) => vm.selectProvince(v),
+                  ),
+                ),
+                field(
+                  _areaDropdown<City>(
+                    theme: theme,
+                    label: '市/自治州/地区',
+                    required: true,
+                    items: vm.cities ?? const [],
+                    value: vm.selectedCity,
+                    loading: vm.addressLoading,
+                    fieldKey: _cityKey,
+                    validator: (v) => v == null ? '请选择市/自治州/地区' : null,
+                    onChanged: (v) => vm.selectCity(v),
+                  ),
+                ),
+                field(
+                  _areaDropdown<County>(
+                    theme: theme,
+                    label: '县/区/旗',
+                    required: true,
+                    items: vm.counties ?? const [],
+                    value: vm.selectedCounty,
+                    loading: vm.addressLoading,
+                    fieldKey: _countyKey,
+                    validator: (v) => v == null ? '请选择县/区/旗' : null,
+                    onChanged: (v) => vm.selectCounty(v),
+                  ),
+                ),
+                field(
+                  _areaDropdown<Town>(
+                    theme: theme,
+                    label: '乡/镇/街道',
+                    items: vm.towns ?? const [],
+                    value: vm.selectedTown,
+                    loading: vm.addressLoading,
+                    onChanged: (v) => vm.selectTown(v),
+                  ),
+                ),
+                field(
+                  _areaDropdown<Village>(
+                    theme: theme,
+                    label: '村/居委会',
+                    items: vm.villages ?? const [],
+                    value: vm.selectedVillage,
+                    loading: vm.addressLoading,
+                    onChanged: (v) => vm.selectVillage(v),
+                  ),
+                ),
+                field(
+                  TextFormField(
+                    controller: _detailsCtrl,
+                    enabled: editable,
+                    maxLength: 100,
+                    focusNode: _detailsFocus,
+                    textInputAction: TextInputAction.done,
+                    onFieldSubmitted: (_) => widget.onSubmit?.call(),
+                    decoration: childGlassDecoration(theme, '详细地址（路/门牌号码）', required: true),
+                    style: theme.textTheme.bodyMedium,
+                    validator: (v) => (v == null || v.trim().isEmpty) ? '请输入详细地址' : null,
+                  ),
+                ),
+                field(
+                  TextFormField(
+                    controller: _addressCodeCtrl,
+                    readOnly: true,
+                    enabled: editable,
+                    maxLength: 20,
+                    decoration: childGlassDecoration(theme, '居住地址编码（随地址级联自动填入）'),
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ),
+              ],
             ),
-            field(
-              TextFormField(
-                controller: _visitCardCtrl,
-                enabled: editable,
-                maxLength: 100,
-                focusNode: _visitCardFocus,
-                textInputAction: TextInputAction.next,
-                onFieldSubmitted: (_) => _ecardFocus.requestFocus(),
-                decoration: childGlassDecoration(theme, '就诊号/就诊卡号'),
-                style: theme.textTheme.bodyMedium,
-              ),
-            ),
-            field(
-              TextFormField(
-                initialValue: base?.patientId,
-                readOnly: true,
-                decoration: childGlassDecoration(theme, '病人ID（HIS回写）'),
-                style: theme.textTheme.bodyMedium,
-              ),
-            ),
-            field(
-              TextFormField(
-                controller: _ecardCtrl,
-                enabled: editable,
-                maxLength: 100,
-                focusNode: _ecardFocus,
-                textInputAction: TextInputAction.next,
-                onFieldSubmitted: (_) => _nameFocus.requestFocus(),
-                decoration: childGlassDecoration(theme, '电子健康卡ID'),
-                style: theme.textTheme.bodyMedium,
-              ),
-            ),
-            field(
-              TextFormField(
-                controller: _nameCtrl,
-                enabled: editable,
-                maxLength: 19,
-                focusNode: _nameFocus,
-                textInputAction: TextInputAction.next,
-                onFieldSubmitted: (_) => _certNoFocus.requestFocus(),
-                decoration: childGlassDecoration(theme, '姓名', required: true),
-                style: theme.textTheme.bodyMedium,
-                validator: (v) => (v == null || v.trim().isEmpty) ? '请输入姓名' : null,
-              ),
-            ),
-            field(
-              DropdownButtonFormField<String>(
-                key: _sexKey,
-                initialValue: _sex,
-                isExpanded: true,
-                items: const {'1': '男', '2': '女'}.entries
-                    .map(
-                      (e) => DropdownMenuItem(
-                        value: e.key,
-                        child: Text(e.value, style: theme.textTheme.bodyMedium),
-                      ),
-                    )
-                    .toList(),
-                hint: Text('请选择性别', style: theme.textTheme.bodyMedium),
-                decoration: childGlassDecoration(theme, '性别', required: true),
-                style: theme.textTheme.bodyMedium,
-                validator: (v) => (v == null || v.isEmpty) ? '请选择性别' : null,
-                onChanged: editable ? (v) => setState(() => _sex = v) : null,
-              ),
-            ),
-            field(
-              TextFormField(
-                controller: _birthDateCtrl,
-                readOnly: true,
-                enabled: editable,
-                onTap: () => _pickDate(controller: _birthDateCtrl, label: '出生日期'),
-                decoration: childGlassDecoration(theme, '出生日期', required: true),
-                style: theme.textTheme.bodyMedium,
-                validator: (v) => (v == null || v.trim().isEmpty) ? '请选择出生日期' : null,
-              ),
-            ),
-            field(
-              TextFormField(
-                controller: _birthTimeCtrl,
-                enabled: editable,
-                maxLength: 8,
-                focusNode: _birthTimeFocus,
-                keyboardType: TextInputType.datetime,
-                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9:]'))],
-                decoration: childGlassDecoration(theme, '出生时间（HH:mm）'),
-                style: theme.textTheme.bodyMedium,
-                validator: (v) {
-                  final t = v?.trim() ?? '';
-                  if (t.isEmpty) return null;
-                  return RegExp(r'^\d{1,2}:\d{2}$').hasMatch(t) ? null : '出生时间格式应为 HH:mm';
-                },
-              ),
-            ),
-            field(
-              DictDropdownFormField(
-                dictCode: '0101001',
-                label: '国籍',
-                enabled: editable,
-                autoSelectDefault: true,
-                initialValue: base?.country,
-                formFieldKey: _countryKey,
-              ),
-            ),
-            field(
-              DictDropdownFormField(
-                dictCode: '0101002',
-                label: '民族',
-                enabled: editable,
-                autoSelectDefault: true,
-                initialValue: base?.nation,
-                formFieldKey: _nationKey,
-              ),
-            ),
-            field(
-              DictDropdownFormField(
-                dictCode: '0101004',
-                label: '证件类型',
-                enabled: editable,
-                autoSelectDefault: true,
-                initialValue: base?.certificateType,
-                formFieldKey: _certTypeKey,
-              ),
-            ),
-            field(
-              TextFormField(
-                controller: _certNoCtrl,
-                enabled: editable,
-                maxLength: 24,
-                focusNode: _certNoFocus,
-                textInputAction: TextInputAction.next,
-                onFieldSubmitted: (_) => _healthFocus.requestFocus(),
-                decoration: childGlassDecoration(theme, '证件号码'),
-                style: theme.textTheme.bodyMedium,
-              ),
-            ),
-            field(
-              TextFormField(
-                controller: _healthCtrl,
-                enabled: editable,
-                maxLength: 20,
-                focusNode: _healthFocus,
-                textInputAction: TextInputAction.next,
-                onFieldSubmitted: (_) => _mchisHealthFocus.requestFocus(),
-                decoration: childGlassDecoration(theme, '保健号'),
-                style: theme.textTheme.bodyMedium,
-              ),
-            ),
-            field(
-              TextFormField(
-                controller: _mchisHealthCtrl,
-                enabled: editable,
-                maxLength: 20,
-                focusNode: _mchisHealthFocus,
-                textInputAction: TextInputAction.next,
-                onFieldSubmitted: (_) => _phoneFocus.requestFocus(),
-                decoration: childGlassDecoration(theme, '区域妇幼保健号'),
-                style: theme.textTheme.bodyMedium,
-              ),
-            ),
-            field(
-              TextFormField(
-                controller: _phoneCtrl,
-                enabled: editable,
-                maxLength: 20,
-                focusNode: _phoneFocus,
-                keyboardType: TextInputType.phone,
-                textInputAction: TextInputAction.next,
-                onFieldSubmitted: (_) => _detailsFocus.requestFocus(),
-                decoration: childGlassDecoration(theme, '联系电话', required: true),
-                style: theme.textTheme.bodyMedium,
-                validator: (v) {
-                  final t = v?.trim() ?? '';
-                  if (t.isEmpty) return '请输入联系电话';
-                  return RegExp(r'^[0-9+\-() ]{5,20}$').hasMatch(t) ? null : '联系电话格式不正确';
-                },
-              ),
-            ),
-            field(
-              _areaDropdown<Province>(
-                theme: theme,
-                label: '省/直辖市/自治区',
-                required: true,
-                items: vm.provinces ?? const [],
-                value: vm.selectedProvince,
-                loading: vm.addressLoading,
-                fieldKey: _provinceKey,
-                validator: (v) => v == null ? '请选择省/直辖市/自治区' : null,
-                onChanged: (v) => vm.selectProvince(v),
-              ),
-            ),
-            field(
-              _areaDropdown<City>(
-                theme: theme,
-                label: '市/自治州/地区',
-                required: true,
-                items: vm.cities ?? const [],
-                value: vm.selectedCity,
-                loading: vm.addressLoading,
-                fieldKey: _cityKey,
-                validator: (v) => v == null ? '请选择市/自治州/地区' : null,
-                onChanged: (v) => vm.selectCity(v),
-              ),
-            ),
-            field(
-              _areaDropdown<County>(
-                theme: theme,
-                label: '县/区/旗',
-                required: true,
-                items: vm.counties ?? const [],
-                value: vm.selectedCounty,
-                loading: vm.addressLoading,
-                fieldKey: _countyKey,
-                validator: (v) => v == null ? '请选择县/区/旗' : null,
-                onChanged: (v) => vm.selectCounty(v),
-              ),
-            ),
-            field(
-              _areaDropdown<Town>(
-                theme: theme,
-                label: '乡/镇/街道',
-                items: vm.towns ?? const [],
-                value: vm.selectedTown,
-                loading: vm.addressLoading,
-                onChanged: (v) => vm.selectTown(v),
-              ),
-            ),
-            field(
-              _areaDropdown<Village>(
-                theme: theme,
-                label: '村/居委会',
-                items: vm.villages ?? const [],
-                value: vm.selectedVillage,
-                loading: vm.addressLoading,
-                onChanged: (v) => vm.selectVillage(v),
-              ),
-            ),
-            field(
-              TextFormField(
-                controller: _detailsCtrl,
-                enabled: editable,
-                maxLength: 100,
-                focusNode: _detailsFocus,
-                textInputAction: TextInputAction.done,
-                onFieldSubmitted: (_) => widget.onSubmit?.call(),
-                decoration: childGlassDecoration(theme, '详细地址（路/门牌号码）', required: true),
-                style: theme.textTheme.bodyMedium,
-                validator: (v) => (v == null || v.trim().isEmpty) ? '请输入详细地址' : null,
-              ),
-            ),
-            field(
-              TextFormField(
-                controller: _addressCodeCtrl,
-                readOnly: true,
-                enabled: editable,
-                maxLength: 20,
-                decoration: childGlassDecoration(theme, '居住地址编码（随地址级联自动填入）'),
-                style: theme.textTheme.bodyMedium,
-              ),
-            ),
+            childSectionTitle(theme, '拍照'),
+            _buildPhotoSection(theme),
+            const SizedBox(height: 8),
           ],
         ),
       ),
     );
+  }
+
+  /// 拍照小节：320×320 头像框（空白占位/最近拍照头像），点击打开拍照
+  /// 对话框；头像下方标注拍摄相对时间与【移除】按钮（样式同
+  /// user_info_form）；浏览态点击与移除均禁用（由页面传 null 回调控制）。
+  Widget _buildPhotoSection(ThemeData theme) {
+    final vm = widget.viewModel;
+    final avatarBytes = vm.pendingPhoto?.avatarBytes ?? _safeDecode(vm.displayAvatarBase64);
+    final timeLabel = vm.displayPhotoTimeLabel;
+    final hasPhoto = vm.pendingPhoto != null || avatarBytes != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          onTap: widget.onCapturePhoto,
+          child: Container(
+            width: 320,
+            height: 320,
+            decoration: BoxDecoration(
+              border: Border.all(color: theme.colorScheme.outlineVariant),
+              borderRadius: BorderRadius.circular(12),
+              color: theme.colorScheme.surface,
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: avatarBytes != null
+                ? Image.memory(
+                    avatarBytes,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => Icon(
+                      Icons.broken_image_outlined,
+                      size: 48,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  )
+                : Icon(
+                    Icons.photo_camera_outlined,
+                    size: 64,
+                    color: theme.colorScheme.onSurfaceVariant.withValues(alpha: widget.onCapturePhoto != null ? 0.7 : 0.35),
+                  ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          widget.onCapturePhoto != null ? '点击头像拍照（320×320）' : '拍照（320×320）',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
+        ),
+        if (timeLabel != null && hasPhoto) ...[
+          const SizedBox(height: 2),
+          Text(
+            '拍摄时间：$timeLabel',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
+          ),
+        ],
+        if (hasPhoto) ...[
+          const SizedBox(height: 4),
+          TextButton.icon(
+            icon: const Icon(Icons.delete_outline, size: 16),
+            label: Text('移除', style: theme.textTheme.bodyMedium),
+            onPressed: widget.onRemovePhoto,
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// 头像 base64 解码（存量脏数据防红屏，解码失败回退 null）。
+  Uint8List? _safeDecode(String? base64Str) {
+    if (base64Str == null || base64Str.isEmpty) return null;
+    try {
+      return base64Decode(base64Str);
+    } catch (e, st) {
+      LogHelper.error('client:ChildBasicInfoForm._safeDecode', e, st);
+      return null;
+    }
   }
 
   /// 级联下拉选择框（T 为 Province/City/County/Town/Village，样式同

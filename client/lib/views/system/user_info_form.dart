@@ -60,8 +60,8 @@ class _UserInfoFormState extends State<UserInfoForm> {
   static const int _signatureMaxWidth = 200;
   static const int _signatureMaxHeight = 100;
 
-  /// 头像图片分辨率上限（正方形 200x200，与医院管理 Logo 同限）。
-  static const int _avatarMaxSize = 200;
+  /// 头像图片分辨率上限（正方形 320x320，与儿童建档拍照头像统一）。
+  static const int _avatarMaxSize = 320;
 
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _userCodeCtrl;
@@ -538,15 +538,15 @@ class _UserInfoFormState extends State<UserInfoForm> {
       child: Column(
         children: [
           Text(
-            '头像（不超过 $_avatarMaxSize x$_avatarMaxSize）',
+            '头像（320 x 320）',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
             ),
           ),
           const SizedBox(height: 6),
           Container(
-            width: 120,
-            height: 120,
+            width: 320,
+            height: 320,
             decoration: BoxDecoration(
               border: Border.all(color: theme.colorScheme.outlineVariant),
               borderRadius: BorderRadius.circular(12),

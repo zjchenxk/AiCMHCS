@@ -1,0 +1,63 @@
+import 'package:server/database/migrator/migrations/base/migration.dart';
+
+/// v17：儿童照片表 CHILD_PHOTO。
+///
+/// 经 CHILD_ID 逻辑关联儿童 CHILD_INFO（不建物理外键，CHILD_ID 上建
+/// 索引加速最近一次照片查询），按医院隔离（HOSP_ID 匹配登录用户所属
+/// 医院）；同一儿童可保留多次拍照历史，界面与服务端均取「创建时间最
+/// 近」的一条生效，当天记录可整批移除（服务层按 CREATE_TIME 落在当天
+/// 删除）。PHOTO（竖版 720×900）与 AVATAR（320×320）存 JPEG 的
+/// base64 文本（TEXT 列，与 SYS_USER.AVATAR_IMAGE 等图片列同范式：
+/// 网关 DbResult 契约为字符串列、base64 纯 ASCII 可直接经
+/// dpi_bind_param 绑定；单值服务层限长 1MB——720×900 JPEG 实际
+/// 约 100-200KB）。说明：设计文档原建模为 BLOB，但网关现状不支持
+/// 二进制绑定与读取（达梦 DPI 无 LOB 读取 API、DbResult 契约为
+/// String 列），故按既有图片列范式改用 TEXT 存 base64。
+const dbMigration_202611152210 = DbMigration(
+  version: 17,
+  description: '儿童建档：CHILD_PHOTO 儿童照片表（PHOTO/AVATAR 存 JPEG base64）',
+  dm: [
+    '''
+CREATE TABLE IF NOT EXISTS CHILD_PHOTO(
+    ID BIGINT NOT NULL IDENTITY(1,1),
+    CHILD_ID BIGINT NOT NULL,
+    PHOTO TEXT NOT NULL,
+    AVATAR TEXT NOT NULL,
+    CREATOR_ID BIGINT NOT NULL,
+    CREATOR_NAME VARCHAR(30) NOT NULL,
+    HOSP_ID BIGINT NOT NULL,
+    HOSP_NAME VARCHAR(100) NOT NULL,
+    CREATE_TIME TIMESTAMP NOT NULL,
+    UPDATE_TIME TIMESTAMP,
+    PRIMARY KEY (ID)
+)''',
+    "COMMENT ON TABLE CHILD_PHOTO IS '儿童照片表'",
+    "COMMENT ON COLUMN CHILD_PHOTO.ID IS '主键'",
+    "COMMENT ON COLUMN CHILD_PHOTO.CHILD_ID IS '儿童ID'",
+    "COMMENT ON COLUMN CHILD_PHOTO.PHOTO IS '照片（竖版720×900，JPEG base64 文本）'",
+    "COMMENT ON COLUMN CHILD_PHOTO.AVATAR IS '头像（320X320，JPEG base64 文本）'",
+    "COMMENT ON COLUMN CHILD_PHOTO.CREATOR_ID IS '创建人ID'",
+    "COMMENT ON COLUMN CHILD_PHOTO.CREATOR_NAME IS '创建人姓名'",
+    "COMMENT ON COLUMN CHILD_PHOTO.HOSP_ID IS '医院ID'",
+    "COMMENT ON COLUMN CHILD_PHOTO.HOSP_NAME IS '医院名称'",
+    "COMMENT ON COLUMN CHILD_PHOTO.CREATE_TIME IS '创建时间'",
+    "COMMENT ON COLUMN CHILD_PHOTO.UPDATE_TIME IS '更新时间'",
+    'CREATE INDEX IF NOT EXISTS IDX_CHILD_PHOTO_CHILD ON CHILD_PHOTO (CHILD_ID)',
+  ],
+  sqlite: [
+    '''
+CREATE TABLE IF NOT EXISTS CHILD_PHOTO (
+  ID INTEGER PRIMARY KEY AUTOINCREMENT, -- 主键
+  CHILD_ID INTEGER NOT NULL, -- 儿童ID
+  PHOTO TEXT NOT NULL, -- 照片（竖版720×900，JPEG base64 文本）
+  AVATAR TEXT NOT NULL, -- 头像（320X320，JPEG base64 文本）
+  CREATOR_ID INTEGER NOT NULL, -- 创建人ID
+  CREATOR_NAME TEXT NOT NULL, -- 创建人姓名
+  HOSP_ID INTEGER NOT NULL, -- 医院ID
+  HOSP_NAME TEXT NOT NULL, -- 医院名称
+  CREATE_TIME TEXT NOT NULL, -- 创建时间
+  UPDATE_TIME TEXT -- 更新时间
+)''',
+    'CREATE INDEX IF NOT EXISTS IDX_CHILD_PHOTO_CHILD ON CHILD_PHOTO (CHILD_ID)',
+  ],
+);

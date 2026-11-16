@@ -40,6 +40,8 @@ class FakeChildService extends ChildService {
     required ChildInfo child,
     ChildExtInfo? ext,
     List<ChildGuardianInfo> guardians = const [],
+    String? photoBase64,
+    String? avatarBase64,
   }) async {
     createCalls++;
     final id = '${nextId++}';
@@ -54,6 +56,8 @@ class FakeChildService extends ChildService {
     required ChildInfo child,
     ChildExtInfo? ext,
     List<ChildGuardianInfo> guardians = const [],
+    String? photoBase64,
+    String? avatarBase64,
   }) async {
     updateCalls++;
     lastUpdatedId = id;

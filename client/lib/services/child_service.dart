@@ -41,33 +41,63 @@ class ChildService {
     return _parseArchive(data);
   }
 
-  /// 新增儿童档案（整档保存：child 必填，ext/guardians 可选），返回
-  /// 入库后的整档（child 含生成的 ID）。
-  Future<ChildArchive> create({required ChildInfo child, ChildExtInfo? ext, List<ChildGuardianInfo> guardians = const []}) async {
+  /// 新增儿童档案（整档保存：child 必填，ext/guardians/photo 可选），
+  /// 返回入库后的整档（child 含生成的 ID）；photo 两字段同时非空时随
+  /// 档案一并插入一条拍照记录。
+  Future<ChildArchive> create({required ChildInfo child, ChildExtInfo? ext, List<ChildGuardianInfo> guardians = const [], String? photoBase64, String? avatarBase64}) async {
     final data = await _base.post('/api/child/add', {
       'child': child.toJson(),
       'ext': ext?.toJson(),
       'guardians': guardians.map((g) => g.toJson()).toList(),
+      'photo': buildPhotoPayload(photoBase64, avatarBase64),
     });
     return _parseArchive(data);
   }
 
   /// 修改儿童档案（整档保存：基本信息全量更新、病人ID不可改；ext 传
-  /// null 即清空扩展信息；监护人全量覆盖）。
-  Future<ChildArchive> update({required String id, required ChildInfo child, ChildExtInfo? ext, List<ChildGuardianInfo> guardians = const []}) async {
+  /// null 即清空扩展信息；监护人全量覆盖；photo 同新增）。
+  Future<ChildArchive> update({required String id, required ChildInfo child, ChildExtInfo? ext, List<ChildGuardianInfo> guardians = const [], String? photoBase64, String? avatarBase64}) async {
     final data = await _base.post('/api/child/update', {
       'id': id,
       'child': child.toJson(),
       'ext': ext?.toJson(),
       'guardians': guardians.map((g) => g.toJson()).toList(),
+      'photo': buildPhotoPayload(photoBase64, avatarBase64),
     });
     return _parseArchive(data);
   }
 
-  /// 删除儿童档案（连带删除扩展信息与监护人）。
+  /// 组装照片负载（两字段齐备才携带，避免服务端只收到半截数据）。
+  Map<String, dynamic>? buildPhotoPayload(String? photoBase64, String? avatarBase64) {
+    if (photoBase64 == null || photoBase64.isEmpty || avatarBase64 == null || avatarBase64.isEmpty) {
+      return null;
+    }
+    return {'photoBase64': photoBase64, 'avatarBase64': avatarBase64};
+  }
+
+  /// 删除儿童档案（连带删除扩展信息、监护人与全部拍照记录）。
   ///returns: 删除的行数
   Future<int> delete(String id) async {
     final data = await _base.post('/api/child/delete', {'id': id});
     return data['deleted'] as int;
+  }
+
+  /// 查询儿童最近一次拍照记录（仅回显头像，不含照片大图），无记录返回
+  /// null。
+  Future<ChildPhoto?> latestPhoto(String childId) async {
+    final data = await _base.post('/api/child/photoQuery', {'childId': childId});
+    final photo = data['photo'];
+    return photo is Map<String, dynamic> ? ChildPhoto.fromJson(photo) : null;
+  }
+
+  /// 移除儿童当天全部拍照记录，返回 (移除条数, 移除后的最近记录——null
+  /// 表示已无任何记录，界面恢复空白占位)。
+  Future<(int, ChildPhoto?)> removeTodayPhotos(String childId) async {
+    final data = await _base.post('/api/child/photoRemoveToday', {'childId': childId});
+    final photo = data['photo'];
+    return (
+      data['removed'] as int? ?? 0,
+      photo is Map<String, dynamic> ? ChildPhoto.fromJson(photo) : null,
+    );
   }
 }

@@ -40,6 +40,8 @@ Future<Response> onRequest(RequestContext context) async {
       child: ChildInfo.fromJson(childJson),
       ext: parseExt(body['ext']),
       guardians: parseGuardians(body['guardians']),
+      photoBase64: parsePhotoField(body['photo'], 'photoBase64'),
+      avatarBase64: parsePhotoField(body['photo'], 'avatarBase64'),
       hospId: hospId,
     );
     return Response.json(
@@ -74,6 +76,18 @@ List<ChildGuardianInfo> parseGuardians(Object? value) {
     return const [];
   }
   return value.whereType<Map<String, dynamic>>().map(ChildGuardianInfo.fromJson).toList();
+}
+
+/// 解析拍照对象中的 base64 字段（photo 缺失或字段缺失时为 null，表示
+/// 本次保存不带照片）。
+String? parsePhotoField(Object? value, String field) {
+  if (value is Map<String, dynamic>) {
+    final v = value[field];
+    if (v is String && v.trim().isNotEmpty) {
+      return v.trim();
+    }
+  }
+  return null;
 }
 
 Response _error(int status, int code, String message) => Response.json(

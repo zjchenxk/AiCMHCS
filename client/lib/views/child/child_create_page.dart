@@ -1,9 +1,11 @@
+import 'package:client/utils/captured_photo.dart';
 import 'package:client/view_models/child/child_create_view_model.dart';
 import 'package:client/view_models/main/main_view_model.dart';
 import 'package:client/views/base/base_page.dart';
 import 'package:client/views/child/child_basic_info_form.dart';
 import 'package:client/views/child/child_ext_info_form.dart';
 import 'package:client/views/child/child_guardian_panel.dart';
+import 'package:client/widgets/camera_capture_dialog.dart';
 import 'package:client/widgets/glass_panel.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -110,6 +112,66 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
     );
+  }
+
+  /// 打开拍照对话框（基本信息 Tab 拍照区点击头像触发；浏览态由表单侧
+  /// 禁用入口），确定后把 720×900 照片与 320×320 头像记为待保存结果。
+  Future<void> _startCapture() async {
+    final result = await CameraCaptureDialog.show(context);
+    if (result != null && mounted) {
+      _viewModel.setPendingPhoto(
+        CapturedPhoto(photoBase64: result.photoBase64, avatarBase64: result.avatarBase64),
+      );
+    }
+  }
+
+  /// 移除头像：新增态（未入库）仅清除本次拍照；修改态删除当天全部拍照
+  /// 记录并恢复显示历史头像（带确认）。
+  Future<void> _removePhoto() async {
+    if (_viewModel.currentChildId.isEmpty) {
+      _viewModel.clearPendingPhoto();
+      return;
+    }
+    final theme = Theme.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: Colors.transparent,
+        content: GlassPanel(
+          blur: 24,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('移除今日拍照', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                Text('将删除今天拍摄的全部记录，头像恢复显示为历史拍照；确定移除吗？', style: theme.textTheme.bodyMedium),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('取消')),
+                    const SizedBox(width: 12),
+                    FilledButton(
+                      style: FilledButton.styleFrom(backgroundColor: theme.colorScheme.error),
+                      onPressed: () => Navigator.of(dialogContext).pop(true),
+                      child: const Text('移除'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final ok = await _viewModel.removeTodayPhoto();
+    if (ok && mounted) {
+      _showToast('已移除今日拍照记录');
+    }
   }
 
   /// 整单保存：依次校验基本/扩展 Tab，失败切到首个出错 Tab 并滚动定位。
@@ -243,6 +305,8 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
                                     viewModel: vm,
                                     editable: editing,
                                     onSubmit: editing ? _submit : null,
+                                    onCapturePhoto: editing ? _startCapture : null,
+                                    onRemovePhoto: editing ? _removePhoto : null,
                                   ),
                                 ),
                                 Padding(

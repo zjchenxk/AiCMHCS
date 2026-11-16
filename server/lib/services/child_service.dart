@@ -181,16 +181,36 @@ class ChildService {
   /// BIRTH_DATE/三级居住地址/详细地址为必填；敏感字段服务端加密；新增
   /// 后按自然键回读新行 ID，再写入扩展信息与监护人。全程进程内串行
   /// （见 [_createTail]），保证同键并发建档的回读唯一命中刚插入行。
-  Future<ChildArchive> create({required ChildInfo child, required String creatorId, required String creatorName, required String hospId, required String hospName, ChildExtInfo? ext, List<ChildGuardianInfo> guardians = const []}) {
+  Future<ChildArchive> create({
+    required ChildInfo child,
+    required String creatorId,
+    required String creatorName,
+    required String hospId,
+    required String hospName,
+    ChildExtInfo? ext,
+    List<ChildGuardianInfo> guardians = const [],
+    String? photoBase64,
+    String? avatarBase64,
+  }) {
     final run =
-        _createTail?.then((_) => _create(child: child, ext: ext, guardians: guardians, creatorId: creatorId, creatorName: creatorName, hospId: hospId, hospName: hospName)) ??
-        _create(child: child, ext: ext, guardians: guardians, creatorId: creatorId, creatorName: creatorName, hospId: hospId, hospName: hospName);
+        _createTail?.then((_) => _create(child: child, ext: ext, guardians: guardians, photoBase64: photoBase64, avatarBase64: avatarBase64, creatorId: creatorId, creatorName: creatorName, hospId: hospId, hospName: hospName)) ??
+        _create(child: child, ext: ext, guardians: guardians, photoBase64: photoBase64, avatarBase64: avatarBase64, creatorId: creatorId, creatorName: creatorName, hospId: hospId, hospName: hospName);
     _createTail = run.then<void>((_) {}, onError: (_) {});
     return run;
   }
 
   /// 新增执行体（经 [create] 串行调度）。
-  Future<ChildArchive> _create({required ChildInfo child, required String creatorId, required String creatorName, required String hospId, required String hospName, ChildExtInfo? ext, List<ChildGuardianInfo> guardians = const []}) async {
+  Future<ChildArchive> _create({
+    required ChildInfo child,
+    required String creatorId,
+    required String creatorName,
+    required String hospId,
+    required String hospName,
+    ChildExtInfo? ext,
+    List<ChildGuardianInfo> guardians = const [],
+    String? photoBase64,
+    String? avatarBase64,
+  }) async {
     final scope = _toInt(hospId, '医院ID');
     final hosp = _required(hospName, '医院名称', _hospitalMaxLength);
     final creatorIdValue = _toInt(creatorId, '创建人ID');
@@ -267,6 +287,9 @@ class ChildService {
     final newIdValue = ids.last;
     await _saveExt(newIdValue, ext, creatorIdValue, creator, scope, hosp);
     await _saveGuardians(newIdValue, guardians, creatorIdValue, creator, scope, hosp);
+    if (photoBase64 != null || avatarBase64 != null) {
+      await _savePhoto(newIdValue, photoBase64, avatarBase64, creatorIdValue, creator, scope, hosp);
+    }
     return load('$newIdValue', hospId);
   }
 
@@ -274,8 +297,10 @@ class ChildService {
   ///
   /// 基本信息按入参全量更新（PATIENT_ID 为 HIS 回写字段不可改；归属
   /// 医院/创建人/创建时间不可改，UPDATE_TIME 由本方法统一写入）；扩展
-  /// 信息与监护人先删后插全量覆盖（ext 为 null 表示清空扩展信息）。
-  Future<ChildArchive> update({required String id, required ChildInfo child, required String hospId, ChildExtInfo? ext, List<ChildGuardianInfo> guardians = const []}) async {
+  /// 信息与监护人先删后插全量覆盖（ext 为 null 表示清空扩展信息）；
+  /// photoBase64/avatarBase64 同时提供时追加一条拍照记录（随档案保存
+  /// 一并入库）。
+  Future<ChildArchive> update({required String id, required ChildInfo child, required String hospId, ChildExtInfo? ext, List<ChildGuardianInfo> guardians = const [], String? photoBase64, String? avatarBase64}) async {
     final current = await _requireChild(id, hospId);
     final idValue = _toInt(id, '儿童ID');
     final scope = _toInt(hospId, '医院ID');
@@ -337,17 +362,156 @@ class ChildService {
       await _saveExt(idValue, ext, creatorIdValue, creator, scope, hosp);
     }
     await _saveGuardians(idValue, guardians, creatorIdValue, creator, scope, hosp);
+    if (photoBase64 != null || avatarBase64 != null) {
+      await _savePhoto(idValue, photoBase64, avatarBase64, creatorIdValue, creator, scope, hosp);
+    }
     return load(id, hospId);
   }
 
-  /// 删除儿童档案（连带删除扩展信息与监护人），返回删除行数（0 或 1）。
+  /// 删除儿童档案（连带删除扩展信息、监护人与全部拍照记录），返回删除
+  /// 行数（0 或 1）。
   Future<int> delete(String id, String hospId) async {
     await _requireChild(id, hospId);
     final idValue = _toInt(id, '儿童ID');
     final scope = _toInt(hospId, '医院ID');
     await _db.execute('DELETE FROM CHILD_GUARDIAN_INFO WHERE CHILD_ID = ?', [idValue]);
     await _db.execute('DELETE FROM CHILD_EXT_INFO WHERE CHILD_ID = ?', [idValue]);
+    await _db.execute('DELETE FROM CHILD_PHOTO WHERE CHILD_ID = ?', [idValue]);
     return _db.execute('DELETE FROM CHILD_INFO WHERE ID = ? AND HOSP_ID = ?', [idValue, scope]);
+  }
+
+  // ---------------- 儿童照片（CHILD_PHOTO） ----------------
+
+  /// 单张照片 base64 限长（1MB 字符，与 SYS_USER.AVATAR_IMAGE 服务层
+  /// 限长先例一致；720×900 JPEG 实际约 100-200KB）。
+  static const int _photoBase64MaxLength = 1024 * 1024;
+
+  /// 查询儿童最近一次拍照记录（按创建时间/ID 倒序取第一条；不含 PHOTO
+  /// 大图字段，仅回显头像），无记录返回 null。
+  Future<ChildPhoto?> latestPhoto(String childId, String hospId) async {
+    final scope = hospId.trim();
+    if (scope.isEmpty) {
+      return null;
+    }
+    final result = await _db.query(
+      'SELECT ID, CHILD_ID, AVATAR, CREATOR_ID, CREATOR_NAME, HOSP_ID, '
+      'HOSP_NAME, CREATE_TIME, UPDATE_TIME FROM CHILD_PHOTO '
+      'WHERE CHILD_ID = ? AND HOSP_ID = ? ORDER BY CREATE_TIME DESC, ID DESC',
+      [_toInt(childId, '儿童ID'), _toInt(scope, '医院ID')],
+    );
+    if (result.rows.isEmpty) {
+      return null;
+    }
+    final row = result.rowsAsMaps.first;
+    return ChildPhoto(
+      id: row['ID'],
+      childId: row['CHILD_ID'] ?? '',
+      avatarBase64: row['AVATAR'],
+      creatorId: row['CREATOR_ID'] ?? '',
+      creatorName: row['CREATOR_NAME'] ?? '',
+      hospId: row['HOSP_ID'] ?? '',
+      hospName: row['HOSP_NAME'] ?? '',
+      createTime: row['CREATE_TIME'],
+      updateTime: row['UPDATE_TIME'],
+    );
+  }
+
+  /// 保存一次拍照记录（追加历史行，最近一条生效），返回该记录。
+  ///
+  /// 儿童必须存在且属本院；photo/avatar 为 JPEG base64 文本（纯 ASCII，
+  /// 直走 dpi_bind_param 绑定路径），服务层限长 1MB。
+  Future<ChildPhoto> savePhoto({
+    required String childId,
+    required String photoBase64,
+    required String avatarBase64,
+    required String creatorId,
+    required String creatorName,
+    required String hospId,
+    required String hospName,
+  }) async {
+    final child = await _requireChild(childId, hospId);
+    final childIdValue = _toInt(childId, '儿童ID');
+    final scope = _toInt(hospId, '医院ID');
+    final photo = _requiredPhotoBase64(photoBase64, '照片');
+    final avatar = _requiredPhotoBase64(avatarBase64, '头像');
+    await _db.execute(
+      'INSERT INTO CHILD_PHOTO (CHILD_ID, PHOTO, AVATAR, CREATOR_ID, '
+      'CREATOR_NAME, HOSP_ID, HOSP_NAME, CREATE_TIME) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        childIdValue,
+        photo,
+        avatar,
+        _toInt(creatorId, '创建人ID'),
+        _required(creatorName, '创建人姓名', _creatorNameMaxLength),
+        scope,
+        _required(hospName, '医院名称', _hospitalMaxLength),
+        formatTimestamp(DateTime.now()),
+      ],
+    );
+    return (await latestPhoto(child.id, hospId))!;
+  }
+
+  /// 移除儿童当天（本地时区日期）的全部拍照记录，返回删除条数。
+  ///
+  /// CREATE_TIME 由 formatTimestamp 写入（'YYYY-MM-DD HH:MM:SS' 文本
+  /// 口径，两库一致），直接以当日零点/末秒范围绑定比较。
+  Future<int> removeTodayPhotos(String childId, String hospId) async {
+    await _requireChild(childId, hospId);
+    final childIdValue = _toInt(childId, '儿童ID');
+    final scope = _toInt(hospId, '医院ID');
+    final today = formatTimestamp(DateTime.now()).substring(0, 10);
+    return _db.execute(
+      'DELETE FROM CHILD_PHOTO WHERE CHILD_ID = ? AND HOSP_ID = ? '
+      'AND CREATE_TIME >= ? AND CREATE_TIME <= ?',
+      [childIdValue, scope, '$today 00:00:00', '$today 23:59:59'],
+    );
+  }
+
+  /// 必填照片 base64 校验：去空格、非空、长度不超上限（base64 为纯
+  /// ASCII，字符数即字节数）。
+  String _requiredPhotoBase64(String? value, String label) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) {
+      throw ChildException(400, 40002, '$label不能为空');
+    }
+    if (v.length > _photoBase64MaxLength) {
+      throw ChildException(400, 40002, '$label超出长度限制（$_photoBase64MaxLength 字符）');
+    }
+    return v;
+  }
+
+  /// 覆盖保存一次拍照记录（INSERT；调用方负责业务时机，保存档案时随
+  /// 档案一并落库）。
+  Future<void> _savePhoto(
+    int childId,
+    String? photoBase64,
+    String? avatarBase64,
+    int creatorId,
+    String creator,
+    int hospId,
+    String hospName,
+  ) async {
+    if (photoBase64 == null || avatarBase64 == null) {
+      return;
+    }
+    final photo = _requiredPhotoBase64(photoBase64, '照片');
+    final avatar = _requiredPhotoBase64(avatarBase64, '头像');
+    await _db.execute(
+      'INSERT INTO CHILD_PHOTO (CHILD_ID, PHOTO, AVATAR, CREATOR_ID, '
+      'CREATOR_NAME, HOSP_ID, HOSP_NAME, CREATE_TIME) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        childId,
+        photo,
+        avatar,
+        creatorId,
+        creator,
+        hospId,
+        hospName,
+        formatTimestamp(DateTime.now()),
+      ],
+    );
   }
 
   // ---------------- 内部辅助 ----------------
