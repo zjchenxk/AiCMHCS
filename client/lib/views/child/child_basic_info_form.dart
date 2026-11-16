@@ -536,7 +536,7 @@ class ChildBasicInfoFormState extends State<ChildBasicInfoForm> {
     final hasPhoto = vm.pendingPhoto != null || avatarBytes != null;
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         GestureDetector(
           onTap: widget.onCapturePhoto,

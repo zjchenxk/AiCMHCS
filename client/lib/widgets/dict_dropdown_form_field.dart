@@ -116,7 +116,13 @@ class _DictDropdownFormFieldState extends State<DictDropdownFormField> {
       decoration: _glassDecoration(theme, widget.label, required: widget.required),
       style: theme.textTheme.bodyMedium,
       validator: widget.validator ?? (widget.required ? (v) => (v == null || v.trim().isEmpty) ? '请选择${widget.label}' : null : null),
-      onChanged: enabled ? widget.onChanged : null,
+      // 可编辑性仅由 enabled 决定：调用方可以不传 onChanged（值经
+      // formFieldKey 在提交时统一收集），此时下拉同样可正常选择
+      onChanged: enabled
+          ? (v) {
+              widget.onChanged?.call(v);
+            }
+          : null,
     );
   }
 

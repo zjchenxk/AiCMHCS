@@ -27,23 +27,32 @@ class WebCamera {
 
   /// 申请摄像头权限（未授权时枚举设备拿不到名称），返回设备清单
   /// （仅 videoinput，无名称的按序号兜底命名）。
+  ///
+  /// getTracks/enumerateDevices 走 dynamic 调用：3.32 的 dart:html 在
+  /// DDC 运行时对这两个列表返回值声明的元素类型与实际 JSArray<dynamic>
+  /// 不符，直调会触发隐式转换崩溃（List is not a subtype of
+  /// List<MediaStreamTrack>）。
   Future<List<WebCameraDevice>> listCameras() async {
-    final probe = await html.window.navigator.mediaDevices!.getUserMedia({
+    final mediaDevices = html.window.navigator.mediaDevices!;
+    final probe = await (mediaDevices as dynamic).getUserMedia({
       'video': true,
       'audio': false,
     });
-    probe.getTracks().forEach((track) => track.stop());
+    for (final track in probe.getTracks()) {
+      (track as dynamic).stop();
+    }
 
-    final devices = await html.window.navigator.mediaDevices!.enumerateDevices();
+    final devices = await (mediaDevices as dynamic).enumerateDevices();
     final cameras = <WebCameraDevice>[];
     for (final device in devices) {
-      if (device.kind != 'videoinput') {
+      final d = device as dynamic;
+      if (d.kind != 'videoinput') {
         continue;
       }
-      final label = device.label ?? '';
+      final label = (d.label as String?) ?? '';
       cameras.add(
         WebCameraDevice(
-          device.deviceId ?? '',
+          (d.deviceId as String?) ?? '',
           label.isEmpty ? '摄像头 ${cameras.length + 1}' : label,
         ),
       );
@@ -114,9 +123,15 @@ class WebCamera {
     return (photo, avatar);
   }
 
-  /// 关闭摄像头并释放预览流。
+  /// 关闭摄像头并释放预览流（getTracks 走 dynamic 调用，理由同
+  /// [listCameras]）。
   Future<void> close() async {
-    _stream?.getTracks().forEach((track) => track.stop());
+    final stream = _stream;
+    if (stream != null) {
+      for (final track in (stream as dynamic).getTracks()) {
+        (track as dynamic).stop();
+      }
+    }
     _stream = null;
     _video?.srcObject = null;
     _video = null;
