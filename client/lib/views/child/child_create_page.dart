@@ -30,6 +30,11 @@ class ChildCreatePage extends BasePage {
 class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   late final ChildCreateViewModel _viewModel;
+  late final MainViewModel _mainViewModel;
+
+  /// 正在载入的外部选定儿童 ID（防重入：载入过程中 MainViewModel 的
+  /// 通知可能再次触发监听）。
+  String? _syncingExternalId;
 
   /// 表单键：模式/目标档案变化时整体换新（新 GlobalKey 不会复用旧
   /// State，等效于普通 ValueKey 的重建语义，确保各表单控制器从最新
@@ -56,7 +61,76 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
     _tabController.addListener(_onTabChanged);
     _viewModel = context.read<ChildCreateViewModel>();
     _viewModel.addListener(_onViewModelChanged);
+    // 主界面顶部搜索选定的儿童写入 MainViewModel.child 时，本页已挂载
+    // 不会重建——监听上下文变化，把新选定儿童即时载入本页展示
+    _mainViewModel = context.read<MainViewModel>();
+    _mainViewModel.addListener(_onMainChildChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) => _init());
+  }
+
+  /// 主界面顶部搜索选定新儿童（页面已打开）→ 载入该儿童整档并进入浏览态。
+  ///
+  /// 与本页自身写入（保存成功/查重选中后 setCurrentChild）以档案 ID 去重：
+  /// ID 与该页当前档案一致时忽略，不会重复载入。
+  void _onMainChildChanged() {
+    final selectedId = _mainViewModel.child.id;
+    if (selectedId.isEmpty) return;
+    if (selectedId == _viewModel.currentChildId) return;
+    if (selectedId == _syncingExternalId) return;
+    _loadExternalChild(selectedId);
+  }
+
+  /// 载入外部选定的儿童档案；录入态（新增/修改）可能有未保存内容，
+  /// 先确认再覆盖。
+  Future<void> _loadExternalChild(String id) async {
+    _syncingExternalId = id;
+    try {
+      if (!mounted) return;
+      if (_viewModel.creating || _viewModel.editing) {
+        final theme = Theme.of(context);
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            backgroundColor: Colors.transparent,
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: GlassPanel(
+                blur: 24,
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('切换当前儿童', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 12),
+                      Text('当前有未保存的录入内容，浏览新选定的儿童将放弃这些内容。是否继续？', style: theme.textTheme.bodyMedium),
+                      const SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('取消')),
+                          const SizedBox(width: 12),
+                          FilledButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: const Text('继续')),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        if (confirmed != true) return;
+      }
+      final ok = await _viewModel.selectChild(id);
+      // 载入成功后切回基本信息 Tab，便于直接浏览
+      if (ok && mounted) {
+        _tabController.animateTo(0);
+      }
+    } finally {
+      _syncingExternalId = null;
+    }
   }
 
   /// Tab 切换落地时重建（动画过渡中的中间事件忽略）。
@@ -67,7 +141,7 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
 
   Future<void> _init() async {
     // await 前先取齐依赖（避免跨异步使用 BuildContext）
-    final mainViewModel = context.read<MainViewModel>();
+    final mainViewModel = _mainViewModel;
     await _viewModel.loadPermissions();
     // 主界面已选定当前儿童（顶部搜索写入的上下文）→ 自动载入整档进
     // 浏览态，默认展示基本信息/扩展信息/监护人（selectChild 内部的
@@ -87,6 +161,7 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
 
   @override
   void dispose() {
+    _mainViewModel.removeListener(_onMainChildChanged);
     _viewModel.removeListener(_onViewModelChanged);
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();

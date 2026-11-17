@@ -9,8 +9,9 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// 儿童「扩展信息」Tab 表单：出生情况/母亲孕产史/母亲妊娠情况/母亲
-/// 孕期情况/家族史/母亲住院信息六组字段。0/1 布尔列统一无/有下拉；
-/// 条件灰化联动（灰化即清空对应值，随整单保存不落脏数据）：
+/// 孕期情况/母亲分娩信息/家族史/过敏史/儿童死亡信息八组字段。0/1 布尔
+/// 列统一无/有下拉；条件灰化联动（灰化即清空对应值，随整单保存不落
+/// 脏数据）：
 /// - Apgar 三项评分自动判定有无出生窒息（任一 ≤6 置有、全部 ≥7 置无、
 ///   均未填不变），无窒息时灰化出生窒息程度；
 /// - 无颅内出血灰化级别；无出生缺陷灰化缺陷下拉与「其他」框（选中含
@@ -476,14 +477,8 @@ class ChildExtInfoFormState extends State<ChildExtInfoForm> {
               _flag('hasBirthDefect728d', '7-28天内出生缺陷'),
               _dict('birthDefect728d', '7-28天内出生缺陷', _dictDefect, enabled: _gate('hasBirthDefect728d')),
               _text('otherBirthDefect728d', '7-28天内其他出生缺陷', enabled: _gate('hasBirthDefect728d') && DictOptions.isOther(_v['birthDefect728d'])),
-              _flag('hasAllergyHistory', '有无过敏史', entries: const {'0': '无', '1': '有', '2': '不详'}),
-              _dict('allergen', '过敏原', _dictAllergen, enabled: _gate('hasAllergyHistory')),
-              _text('otherAllergen', '其他过敏原', enabled: _gate('hasAllergyHistory') && DictOptions.isOther(_v['allergen'])),
               _flag('isSga', '是否小于胎龄儿', entries: const {'0': '否', '1': '是'}),
               _flag('sgaType', 'SGA分型', entries: const {'轻度SGA': '轻度SGA', '重度SGA': '重度SGA'}, enabled: _gate('isSga')),
-              _flag('isDead', '是否死亡', entries: const {'0': '否', '1': '是'}),
-              _date('deathDate', '儿童死亡日期', enabled: _gate('isDead')),
-              _dict('deathCause', '儿童死亡原因', _dictDeathCause, enabled: _gate('isDead')),
             ]),
             _section(theme, '母亲孕产史', [
               _flag('hasSpontaneousAbortionHistory', '有无自然流产'),
@@ -529,6 +524,10 @@ class ChildExtInfoFormState extends State<ChildExtInfoForm> {
               _flag('hasSyphilisInfection', '有无梅毒感染'),
               _text('otherDiseasesInPregnancy', '其他孕期疾病', maxLength: 250),
             ]),
+            _section(theme, '母亲分娩信息', [
+              _text('maternalInpatientNo', '母亲住院号', maxLength: 20),
+              _num('maternalAgeAtDelivery', '母亲生育年龄'),
+            ]),
             _section(theme, '家族史', [
               _flag('hasParentalMentalIllnessHistory', '父母亲有无精神病史'),
               _flag('hasParentalDrugAbuseHistory', '父母亲有无吸毒史'),
@@ -536,9 +535,15 @@ class ChildExtInfoFormState extends State<ChildExtInfoForm> {
               _flag('hasParentalConsanguineousMarriage', '父母亲是否近亲结婚'),
               _text('otherFamilyHistory', '家族史-其他情况', maxLength: 250),
             ]),
-            _section(theme, '母亲住院信息', [
-              _text('maternalInpatientNo', '母亲住院号', maxLength: 20),
-              _num('maternalAgeAtDelivery', '母亲生育年龄'),
+            _section(theme, '过敏史', [
+              _flag('hasAllergyHistory', '有无过敏史', entries: const {'0': '无', '1': '有', '2': '不详'}),
+              _dict('allergen', '过敏原', _dictAllergen, enabled: _gate('hasAllergyHistory')),
+              _text('otherAllergen', '其他过敏原', enabled: _gate('hasAllergyHistory') && DictOptions.isOther(_v['allergen'])),
+            ]),
+            _section(theme, '儿童死亡信息', [
+              _flag('isDead', '是否死亡', entries: const {'0': '否', '1': '是'}),
+              _date('deathDate', '儿童死亡日期', enabled: _gate('isDead')),
+              _dict('deathCause', '儿童死亡原因', _dictDeathCause, enabled: _gate('isDead')),
             ]),
             if (!editable)
               Padding(
