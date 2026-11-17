@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:common/model.dart';
 import 'package:server/database/engine/database_gateway.dart';
 import 'package:server/utils/field_cipher.dart';
+import 'package:server/utils/uuid_util.dart';
 
 /// 儿童建档业务异常：httpStatus / code / message 直接映射到 HTTP 响应
 /// （模式同 DictException / UserException）。
@@ -26,22 +27,28 @@ final class ChildException implements Exception {
 /// 儿童整档：基本信息 + 扩展信息（可空）+ 监护人列表。
 typedef ChildArchive = (ChildInfo, ChildExtInfo?, List<ChildGuardianInfo>);
 
+/// 整档归属上下文（医院 + 科室/院区）：新增时取自创建人令牌会话，
+/// 修改时沿用档案原值；随整档写入 CHILD_* 各表的 *_ID/*_NAME 归属列。
+typedef _ArchiveScope = ({String hospId, String hospName, String? deptId, String? deptName, String? campusId, String? campusName});
+
 /// 儿童建档服务：儿童档案的检索、整档装载、新增、修改与删除。
 ///
 /// 经 DatabaseGateway 访问 CHILD_INFO / CHILD_EXT_INFO /
-/// CHILD_GUARDIAN_INFO 三表，按医院隔离（HOSP_ID 匹配登录用户所属
-/// 医院，由路由层从令牌会话推导后传入，不信任客户端上报；名称含中文
-/// 时由达梦网关参数改写自动内联，业务层直接写参数化 SQL）。敏感个人
-/// 信息列（姓名/证件号码/联系电话/电子健康卡ID/居住地址详细/出生证号/
+/// CHILD_GUARDIAN_INFO / CHILD_PHOTO 四表，按医院隔离（HOSP_ID 匹配
+/// 登录用户所属医院，由路由层从令牌会话推导后传入，不信任客户端上报；
+/// 名称含中文时由达梦网关参数改写自动内联，业务层直接写参数化 SQL）。
+/// 主键为应用侧生成的 UUID v7（CHAR(36)，见 newUuid），INSERT 前置
+/// 生成、无自增回读环节，多进程 / 多 isolate 并发写入无冲突。科室/院区
+/// 归属（DEPT_ID/DEPT_NAME/CAMPUS_ID/CAMPUS_NAME）随创建人上下文由
+/// 路由层从令牌会话推导传入，新建时写入、修改时不更新。敏感个人信息
+/// 列（姓名/证件号码/联系电话/电子健康卡ID/居住地址详细/出生证号/
 /// 监护人姓名证件电话）经 FieldCipher 加密存储并配套 *_HMAC 盲索引列，
 /// 写入 seal+mac 成对、读取 open 解密（日志与异常信息不得输出解密后
-/// 明文）。CHILD_INFO 的 ID 为自增主键，两库网关无 last-insert-id
-/// 通道，新增后按「HOSP_ID+NAME_HMAC+BIRTH_DATE+CREATE_TIME」自然键
-/// 回读新行 ID。扩展信息与监护人随整档保存：先删后插全量覆盖（网关
-/// 无事务通道、每条语句自动提交，清插非原子——保存中断后重新保存即
-/// 自愈，与 SYS_USER_ROLE 全量覆盖同策略）。PATIENT_ID 为 HIS 系统回
-/// 写字段，仅新增时可写入、修改时不更新。删除儿童档案时按监护人 →
-/// 扩展信息 → 基本信息顺序连带删除。时间列统一 Dart 侧 formatTimestamp
+/// 明文）。扩展信息与监护人随整档保存：先删后插全量覆盖（网关无事务
+/// 通道、每条语句自动提交，清插非原子——保存中断后重新保存即自愈，
+/// 与 SYS_USER_ROLE 全量覆盖同策略）。PATIENT_ID 为 HIS 系统回写字段，
+/// 仅新增时可写入、修改时不更新。删除儿童档案时按监护人 → 扩展信息 →
+/// 基本信息 → 拍照记录顺序连带删除。时间列统一 Dart 侧 formatTimestamp
 /// 生成后绑定。
 class ChildService {
   /// 构造函数：注入数据库网关与字段加密工具。
@@ -50,12 +57,6 @@ class ChildService {
   final DatabaseGateway _db;
 
   final FieldCipher _cipher;
-
-  /// 新增串行锁尾（进程内排队）：INSERT 与自然键回读之间可能被并发的
-  /// 其他新增交错——同院同名同生日同秒建档时回读键完全相同，串行化后
-  /// 「回读取最大自增 ID」才能唯一命中刚插入的行（HTTP 事件循环单线程，
-  /// 排队仅让新增成对原子，无跨进程需求）。
-  Future<void>? _createTail;
 
   /// 检索结果上限（防止无条件大结果集，页面查询区下拉展示用）。
   static const int searchLimit = 20;
@@ -72,6 +73,7 @@ class ChildService {
   static const int _provinceMaxLength = 50;
   static const int _hospitalMaxLength = 100;
   static const int _creatorNameMaxLength = 30;
+  static const int _deptNameMaxLength = 50;
   static const int _dictValueMaxLength = 50;
   static const int _defectMaxLength = 500;
   static const int _otherTextMaxLength = 100;
@@ -116,7 +118,7 @@ class ChildService {
     }
 
     final conditions = <String>[];
-    final params = <Object?>[_toInt(scope, '医院ID')];
+    final params = <Object?>[scope];
     if (namePlain != null) {
       conditions.add('NAME_HMAC = ?');
       params.add(await _cipher.mac(FieldCipher.childNamePurpose, namePlain));
@@ -153,6 +155,55 @@ class ChildService {
     return children;
   }
 
+  /// 重复建档检查：按「姓名 + 性别 + 出生日期」三键 AND 精确匹配本院
+  /// 已有档案（区别于 [search] 的多条件 OR 检索），返回解密后的完整
+  /// 档案列表（对话框展示联系电话/居住地址）。
+  ///
+  /// 姓名经 HMAC 盲索引等值匹配；`excludeId` 非空时排除自身（修改态
+  /// 保存，姓名未改时不会命中自己）；上限复用 [searchLimit]。
+  Future<List<ChildInfo>> findDuplicates({
+    required String hospId,
+    required String name,
+    required String sex,
+    required String birthDate,
+    String? excludeId,
+  }) async {
+    final scope = hospId.trim();
+    if (scope.isEmpty) {
+      return const [];
+    }
+    final namePlain = _requiredEnc(name, '姓名', _plainNameMaxLength);
+    final sexValue = _requiredSex(sex);
+    final birthDateValue = _requiredDate(birthDate, '出生日期');
+
+    final conditions = <String>['NAME_HMAC = ?', 'SEX = ?', 'BIRTH_DATE = ?'];
+    final params = <Object?>[
+      scope,
+      await _cipher.mac(FieldCipher.childNamePurpose, namePlain),
+      sexValue,
+      birthDateValue,
+    ];
+    final exclude = _optionalId(excludeId, '儿童ID');
+    if (exclude != null) {
+      conditions.add('ID <> ?');
+      params.add(exclude);
+    }
+
+    final result = await _db.query(
+      'SELECT ${_childColumns.join(', ')} FROM CHILD_INFO '
+      'WHERE HOSP_ID = ? AND (${conditions.join(' AND ')}) '
+      'ORDER BY CREATE_TIME DESC, ID DESC',
+      params,
+    );
+    final rows = result.rowsAsMaps;
+    final children = <ChildInfo>[];
+    for (final row in rows) {
+      if (children.length >= searchLimit) break;
+      children.add(await _childFromRow(row));
+    }
+    return children;
+  }
+
   /// 检索条件归一：空值或超长（对密文列即明文字节超限，该字段不可能
   /// 命中）时返回 null 并跳过该条件，不抛错（多条件组合检索容错）。
   String? _searchCond(String? value, int maxBytes) {
@@ -167,7 +218,7 @@ class ChildService {
   /// 档案时抛业务异常。
   Future<ChildArchive> load(String id, String hospId) async {
     final child = await _requireChild(id, hospId);
-    final idValue = _toInt(id, '儿童ID');
+    final idValue = _requireId(id, '儿童ID');
     final ext = await _loadExt(idValue);
     final guardians = await _loadGuardians(idValue);
     return (child, ext, guardians);
@@ -175,46 +226,38 @@ class ChildService {
 
   // ---------------- 新增 / 修改 / 删除 ----------------
 
-  /// 新增儿童档案（基本信息 + 可选扩展信息 + 监护人列表），返回整档。
+  /// 新增儿童档案（基本信息 + 可选扩展信息 + 监护人列表 + 可选首次
+  /// 拍照记录），返回整档。
   ///
-  /// 归属医院与创建人由路由层从令牌会话推导传入；CHECK_TIME/NAME/SEX/
-  /// BIRTH_DATE/三级居住地址/详细地址为必填；敏感字段服务端加密；新增
-  /// 后按自然键回读新行 ID，再写入扩展信息与监护人。全程进程内串行
-  /// （见 [_createTail]），保证同键并发建档的回读唯一命中刚插入行。
+  /// 归属医院、创建人与科室/院区上下文由路由层从令牌会话推导传入；
+  /// CHECK_TIME/NAME/SEX/BIRTH_DATE/三级居住地址/详细地址为必填；敏感
+  /// 字段服务端加密；主键为应用侧 UUID v7（[newUuid]），INSERT 前置
+  /// 生成、无自增回读环节，多进程 / 多 isolate 并发建档无冲突。
   Future<ChildArchive> create({
     required ChildInfo child,
     required String creatorId,
     required String creatorName,
     required String hospId,
     required String hospName,
-    ChildExtInfo? ext,
-    List<ChildGuardianInfo> guardians = const [],
-    String? photoBase64,
-    String? avatarBase64,
-  }) {
-    final run =
-        _createTail?.then((_) => _create(child: child, ext: ext, guardians: guardians, photoBase64: photoBase64, avatarBase64: avatarBase64, creatorId: creatorId, creatorName: creatorName, hospId: hospId, hospName: hospName)) ??
-        _create(child: child, ext: ext, guardians: guardians, photoBase64: photoBase64, avatarBase64: avatarBase64, creatorId: creatorId, creatorName: creatorName, hospId: hospId, hospName: hospName);
-    _createTail = run.then<void>((_) {}, onError: (_) {});
-    return run;
-  }
-
-  /// 新增执行体（经 [create] 串行调度）。
-  Future<ChildArchive> _create({
-    required ChildInfo child,
-    required String creatorId,
-    required String creatorName,
-    required String hospId,
-    required String hospName,
+    String? deptId,
+    String? deptName,
+    String? campusId,
+    String? campusName,
     ChildExtInfo? ext,
     List<ChildGuardianInfo> guardians = const [],
     String? photoBase64,
     String? avatarBase64,
   }) async {
-    final scope = _toInt(hospId, '医院ID');
-    final hosp = _required(hospName, '医院名称', _hospitalMaxLength);
-    final creatorIdValue = _toInt(creatorId, '创建人ID');
-    final creator = _required(creatorName, '创建人姓名', _creatorNameMaxLength);
+    final scope = (
+      hospId: _requireId(hospId, '医院ID'),
+      hospName: _required(hospName, '医院名称', _hospitalMaxLength),
+      deptId: _optionalId(deptId, '科室ID'),
+      deptName: _optional(deptName, '科室名称', _deptNameMaxLength),
+      campusId: _optionalId(campusId, '院区ID'),
+      campusName: _optional(campusName, '院区名称', _deptNameMaxLength),
+    );
+    final creator = _requireId(creatorId, '创建人ID');
+    final creatorText = _required(creatorName, '创建人姓名', _creatorNameMaxLength);
     final now = formatTimestamp(DateTime.now());
 
     // 敏感字段先算明文校验值，再加密成对写入
@@ -224,16 +267,19 @@ class ChildService {
     final addressPlain = _requiredEnc(child.addressDetails, '居住地址详细', _addressPlainMaxLength);
     final phonePlain = _optionalEnc(child.phone, '联系电话', _plainPhoneMaxLength);
 
+    final newId = newUuid();
     await _db.execute(
-      'INSERT INTO CHILD_INFO (CHECK_TIME, VISIT_CARD_NO, PATIENT_ID, '
+      'INSERT INTO CHILD_INFO (ID, CHECK_TIME, VISIT_CARD_NO, PATIENT_ID, '
       'ECARD_ID, ECARD_ID_HMAC, NAME, NAME_HMAC, SEX, BIRTH_DATE, BIRTH_TIME, '
       'COUNTRY, NATION, CERTIFICATE_TYPE, CERTIFICATE_NO, CERTIFICATE_NO_HMAC, '
       'HEALTH_NO, MCHIS_HEALTH_NO, ADDRESS_PROVINCE, ADDRESS_CITY, '
       'ADDRESS_COUNTY, ADDRESS_TOWN, ADDRESS_VILLAGE, ADDRESS_DETAILS, '
-      'ADDRESS_CODE, PHONE, PHONE_HMAC, CREATOR_ID, CREATOR_NAME, HOSP_ID, '
+      'ADDRESS_CODE, PHONE, PHONE_HMAC, CREATOR_ID, CREATOR_NAME, '
+      'DEPT_ID, DEPT_NAME, CAMPUS_ID, CAMPUS_NAME, HOSP_ID, '
       'HOSP_NAME, CREATE_TIME) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'VALUES (${List.filled(36, '?').join(', ')})',
       [
+        newId,
         _requiredDate(child.checkTime, '建档时间'),
         _optional(child.visitCardNo, '就诊卡号', _cardNoMaxLength),
         _optional(child.patientId, '病人ID', _patientIdMaxLength),
@@ -260,53 +306,47 @@ class ChildService {
         _optional(child.addressCode, '居住地址编码', _addressCodeMaxLength),
         await _cipher.seal(FieldCipher.childPhonePurpose, phonePlain),
         await _cipher.mac(FieldCipher.childPhonePurpose, phonePlain),
-        creatorIdValue,
         creator,
-        scope,
-        hosp,
+        creatorText,
+        scope.deptId,
+        scope.deptName,
+        scope.campusId,
+        scope.campusName,
+        scope.hospId,
+        scope.hospName,
         now,
       ],
     );
-    // 自增 ID 经「医院ID+姓名盲索引+出生日期+创建时间」自然键回读
-    // （网关无 last-insert-id 通道）；同秒内同键建档时多行命中，取
-    // 最大自增 ID 即本次插入行（配合 [_createTail] 串行保证）。
-    final row = await _db.query(
-      'SELECT ID FROM CHILD_INFO WHERE HOSP_ID = ? AND NAME_HMAC = ? '
-      'AND BIRTH_DATE = ? AND CREATE_TIME = ?',
-      [
-        scope,
-        await _cipher.mac(FieldCipher.childNamePurpose, namePlain),
-        _requiredDate(child.birthDate, '出生日期'),
-        now,
-      ],
-    );
-    if (row.rows.isEmpty) {
-      throw const ChildException(500, 50000, '新增儿童档案后回读失败');
-    }
-    final ids = row.rows.map((r) => int.parse(r[0]!)).toList()..sort();
-    final newIdValue = ids.last;
-    await _saveExt(newIdValue, ext, creatorIdValue, creator, scope, hosp);
-    await _saveGuardians(newIdValue, guardians, creatorIdValue, creator, scope, hosp);
+    await _saveExt(newId, ext, creator, creatorText, scope);
+    await _saveGuardians(newId, guardians, creator, creatorText, scope);
     if (photoBase64 != null || avatarBase64 != null) {
-      await _savePhoto(newIdValue, photoBase64, avatarBase64, creatorIdValue, creator, scope, hosp);
+      await _savePhoto(newId, photoBase64, avatarBase64, creator, creatorText, scope);
     }
-    return load('$newIdValue', hospId);
+    return load(newId, hospId);
   }
 
   /// 修改儿童档案（整档保存），返回整档。
   ///
   /// 基本信息按入参全量更新（PATIENT_ID 为 HIS 回写字段不可改；归属
-  /// 医院/创建人/创建时间不可改，UPDATE_TIME 由本方法统一写入）；扩展
-  /// 信息与监护人先删后插全量覆盖（ext 为 null 表示清空扩展信息）；
-  /// photoBase64/avatarBase64 同时提供时追加一条拍照记录（随档案保存
-  /// 一并入库）。
+  /// 医院/科室/院区/创建人/创建时间不可改，UPDATE_TIME 由本方法统一
+  /// 写入）；扩展信息与监护人先删后插全量覆盖（ext 为 null 表示清空
+  /// 扩展信息），重插行沿用档案原科室/院区归属；photoBase64/
+  /// avatarBase64 同时提供时追加一条拍照记录（随档案保存一并入库，
+  /// 同样沿用档案归属）。
   Future<ChildArchive> update({required String id, required ChildInfo child, required String hospId, ChildExtInfo? ext, List<ChildGuardianInfo> guardians = const [], String? photoBase64, String? avatarBase64}) async {
     final current = await _requireChild(id, hospId);
-    final idValue = _toInt(id, '儿童ID');
-    final scope = _toInt(hospId, '医院ID');
-    final creatorIdValue = _toInt(current.creatorId, '创建人ID');
-    final creator = _required(current.creatorName, '创建人姓名', _creatorNameMaxLength);
-    final hosp = _required(current.hospName, '医院名称', _hospitalMaxLength);
+    final idValue = _requireId(id, '儿童ID');
+    final creator = _requireId(current.creatorId, '创建人ID');
+    final creatorText = _required(current.creatorName, '创建人姓名', _creatorNameMaxLength);
+    // 重插行沿用档案原科室/院区归属（归属不可改）。
+    final scope = (
+      hospId: _requireId(hospId, '医院ID'),
+      hospName: _required(current.hospName, '医院名称', _hospitalMaxLength),
+      deptId: current.deptId,
+      deptName: current.deptName,
+      campusId: current.campusId,
+      campusName: current.campusName,
+    );
 
     final namePlain = _requiredEnc(child.name, '姓名', _plainNameMaxLength);
     final ecardPlain = _optionalEnc(child.ecardId, '电子健康卡ID', 124);
@@ -352,18 +392,18 @@ class ChildService {
         await _cipher.mac(FieldCipher.childPhonePurpose, phonePlain),
         formatTimestamp(DateTime.now()),
         idValue,
-        scope,
+        scope.hospId,
       ],
     );
     // 扩展信息 / 监护人全量覆盖（先删后插，非原子、中断重保存自愈）
     await _db.execute('DELETE FROM CHILD_GUARDIAN_INFO WHERE CHILD_ID = ?', [idValue]);
     await _db.execute('DELETE FROM CHILD_EXT_INFO WHERE CHILD_ID = ?', [idValue]);
     if (ext != null) {
-      await _saveExt(idValue, ext, creatorIdValue, creator, scope, hosp);
+      await _saveExt(idValue, ext, creator, creatorText, scope);
     }
-    await _saveGuardians(idValue, guardians, creatorIdValue, creator, scope, hosp);
+    await _saveGuardians(idValue, guardians, creator, creatorText, scope);
     if (photoBase64 != null || avatarBase64 != null) {
-      await _savePhoto(idValue, photoBase64, avatarBase64, creatorIdValue, creator, scope, hosp);
+      await _savePhoto(idValue, photoBase64, avatarBase64, creator, creatorText, scope);
     }
     return load(id, hospId);
   }
@@ -372,8 +412,8 @@ class ChildService {
   /// 行数（0 或 1）。
   Future<int> delete(String id, String hospId) async {
     await _requireChild(id, hospId);
-    final idValue = _toInt(id, '儿童ID');
-    final scope = _toInt(hospId, '医院ID');
+    final idValue = _requireId(id, '儿童ID');
+    final scope = _requireId(hospId, '医院ID');
     await _db.execute('DELETE FROM CHILD_GUARDIAN_INFO WHERE CHILD_ID = ?', [idValue]);
     await _db.execute('DELETE FROM CHILD_EXT_INFO WHERE CHILD_ID = ?', [idValue]);
     await _db.execute('DELETE FROM CHILD_PHOTO WHERE CHILD_ID = ?', [idValue]);
@@ -394,32 +434,24 @@ class ChildService {
       return null;
     }
     final result = await _db.query(
-      'SELECT ID, CHILD_ID, AVATAR, CREATOR_ID, CREATOR_NAME, HOSP_ID, '
+      'SELECT ID, CHILD_ID, AVATAR, CREATOR_ID, CREATOR_NAME, '
+      'DEPT_ID, DEPT_NAME, CAMPUS_ID, CAMPUS_NAME, HOSP_ID, '
       'HOSP_NAME, CREATE_TIME, UPDATE_TIME FROM CHILD_PHOTO '
       'WHERE CHILD_ID = ? AND HOSP_ID = ? ORDER BY CREATE_TIME DESC, ID DESC',
-      [_toInt(childId, '儿童ID'), _toInt(scope, '医院ID')],
+      [childId, scope],
     );
     if (result.rows.isEmpty) {
       return null;
     }
     final row = result.rowsAsMaps.first;
-    return ChildPhoto(
-      id: row['ID'],
-      childId: row['CHILD_ID'] ?? '',
-      avatarBase64: row['AVATAR'],
-      creatorId: row['CREATOR_ID'] ?? '',
-      creatorName: row['CREATOR_NAME'] ?? '',
-      hospId: row['HOSP_ID'] ?? '',
-      hospName: row['HOSP_NAME'] ?? '',
-      createTime: row['CREATE_TIME'],
-      updateTime: row['UPDATE_TIME'],
-    );
+    return _photoFromRow(row, row['AVATAR']);
   }
 
   /// 保存一次拍照记录（追加历史行，最近一条生效），返回该记录。
   ///
   /// 儿童必须存在且属本院；photo/avatar 为 JPEG base64 文本（纯 ASCII，
-  /// 直走 dpi_bind_param 绑定路径），服务层限长 1MB。
+  /// 直走 dpi_bind_param 绑定路径），服务层限长 1MB；科室/院区归属沿用
+  /// 档案归属。
   Future<ChildPhoto> savePhoto({
     required String childId,
     required String photoBase64,
@@ -430,24 +462,20 @@ class ChildService {
     required String hospName,
   }) async {
     final child = await _requireChild(childId, hospId);
-    final childIdValue = _toInt(childId, '儿童ID');
-    final scope = _toInt(hospId, '医院ID');
-    final photo = _requiredPhotoBase64(photoBase64, '照片');
-    final avatar = _requiredPhotoBase64(avatarBase64, '头像');
-    await _db.execute(
-      'INSERT INTO CHILD_PHOTO (CHILD_ID, PHOTO, AVATAR, CREATOR_ID, '
-      'CREATOR_NAME, HOSP_ID, HOSP_NAME, CREATE_TIME) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [
-        childIdValue,
-        photo,
-        avatar,
-        _toInt(creatorId, '创建人ID'),
-        _required(creatorName, '创建人姓名', _creatorNameMaxLength),
-        scope,
-        _required(hospName, '医院名称', _hospitalMaxLength),
-        formatTimestamp(DateTime.now()),
-      ],
+    await _savePhoto(
+      child.id,
+      photoBase64,
+      avatarBase64,
+      _requireId(creatorId, '创建人ID'),
+      _required(creatorName, '创建人姓名', _creatorNameMaxLength),
+      (
+        hospId: _requireId(hospId, '医院ID'),
+        hospName: _required(hospName, '医院名称', _hospitalMaxLength),
+        deptId: child.deptId,
+        deptName: child.deptName,
+        campusId: child.campusId,
+        campusName: child.campusName,
+      ),
     );
     return (await latestPhoto(child.id, hospId))!;
   }
@@ -455,11 +483,11 @@ class ChildService {
   /// 移除儿童当天（本地时区日期）的全部拍照记录，返回删除条数。
   ///
   /// CREATE_TIME 由 formatTimestamp 写入（'YYYY-MM-DD HH:MM:SS' 文本
-  /// 口径，两库一致），直接以当日零点/末秒范围绑定比较。
+  /// 口径，各库一致），直接以当日零点/末秒范围绑定比较。
   Future<int> removeTodayPhotos(String childId, String hospId) async {
     await _requireChild(childId, hospId);
-    final childIdValue = _toInt(childId, '儿童ID');
-    final scope = _toInt(hospId, '医院ID');
+    final childIdValue = _requireId(childId, '儿童ID');
+    final scope = _requireId(hospId, '医院ID');
     final today = formatTimestamp(DateTime.now()).substring(0, 10);
     return _db.execute(
       'DELETE FROM CHILD_PHOTO WHERE CHILD_ID = ? AND HOSP_ID = ? '
@@ -482,33 +510,31 @@ class ChildService {
   }
 
   /// 覆盖保存一次拍照记录（INSERT；调用方负责业务时机，保存档案时随
-  /// 档案一并落库）。
-  Future<void> _savePhoto(
-    int childId,
-    String? photoBase64,
-    String? avatarBase64,
-    int creatorId,
-    String creator,
-    int hospId,
-    String hospName,
-  ) async {
+  /// 档案一并落库，科室/院区沿用档案归属）。
+  Future<void> _savePhoto(String childId, String? photoBase64, String? avatarBase64, String creatorId, String creator, _ArchiveScope scope) async {
     if (photoBase64 == null || avatarBase64 == null) {
       return;
     }
     final photo = _requiredPhotoBase64(photoBase64, '照片');
     final avatar = _requiredPhotoBase64(avatarBase64, '头像');
     await _db.execute(
-      'INSERT INTO CHILD_PHOTO (CHILD_ID, PHOTO, AVATAR, CREATOR_ID, '
-      'CREATOR_NAME, HOSP_ID, HOSP_NAME, CREATE_TIME) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO CHILD_PHOTO (ID, CHILD_ID, PHOTO, AVATAR, CREATOR_ID, '
+      'CREATOR_NAME, DEPT_ID, DEPT_NAME, CAMPUS_ID, CAMPUS_NAME, HOSP_ID, '
+      'HOSP_NAME, CREATE_TIME) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
+        newUuid(),
         childId,
         photo,
         avatar,
         creatorId,
         creator,
-        hospId,
-        hospName,
+        scope.deptId,
+        scope.deptName,
+        scope.campusId,
+        scope.campusName,
+        scope.hospId,
+        scope.hospName,
         formatTimestamp(DateTime.now()),
       ],
     );
@@ -547,6 +573,10 @@ class ChildService {
     'PHONE_HMAC',
     'CREATOR_ID',
     'CREATOR_NAME',
+    'DEPT_ID',
+    'DEPT_NAME',
+    'CAMPUS_ID',
+    'CAMPUS_NAME',
     'HOSP_ID',
     'HOSP_NAME',
     'CREATE_TIME',
@@ -638,6 +668,10 @@ class ChildService {
     'MATERNAL_AGE_AT_DELIVERY',
     'CREATOR_ID',
     'CREATOR_NAME',
+    'DEPT_ID',
+    'DEPT_NAME',
+    'CAMPUS_ID',
+    'CAMPUS_NAME',
     'HOSP_ID',
     'HOSP_NAME',
     'CREATE_TIME',
@@ -667,6 +701,10 @@ class ChildService {
     'GUARDIAN_ORDER',
     'CREATOR_ID',
     'CREATOR_NAME',
+    'DEPT_ID',
+    'DEPT_NAME',
+    'CAMPUS_ID',
+    'CAMPUS_NAME',
     'HOSP_ID',
     'HOSP_NAME',
     'CREATE_TIME',
@@ -677,7 +715,7 @@ class ChildService {
   Future<ChildInfo> _requireChild(String id, String hospId) async {
     final result = await _db.query(
       'SELECT ${_childColumns.join(', ')} FROM CHILD_INFO WHERE ID = ? AND HOSP_ID = ?',
-      [_toInt(id, '儿童ID'), _toInt(hospId, '医院ID')],
+      [id, hospId],
     );
     if (result.rows.isEmpty) {
       throw ChildException(400, 40001, '儿童档案不存在：$id');
@@ -686,7 +724,7 @@ class ChildService {
   }
 
   /// 装载扩展信息（无行返回 null）。
-  Future<ChildExtInfo?> _loadExt(int childId) async {
+  Future<ChildExtInfo?> _loadExt(String childId) async {
     final result = await _db.query(
       'SELECT ${_extColumns.join(', ')} FROM CHILD_EXT_INFO WHERE CHILD_ID = ?',
       [childId],
@@ -699,8 +737,8 @@ class ChildService {
     return _extFromRow(row, birthCertPlain);
   }
 
-  /// 装载监护人列表（按创建顺序）。
-  Future<List<ChildGuardianInfo>> _loadGuardians(int childId) async {
+  /// 装载监护人列表（按创建顺序；UUID v7 主键字符串序即创建序）。
+  Future<List<ChildGuardianInfo>> _loadGuardians(String childId) async {
     final result = await _db.query(
       'SELECT ${_guardianColumns.join(', ')} FROM CHILD_GUARDIAN_INFO WHERE CHILD_ID = ? ORDER BY ID',
       [childId],
@@ -715,8 +753,9 @@ class ChildService {
     return guardians;
   }
 
-  /// 覆盖保存扩展信息（INSERT；调用方负责先删旧行）。
-  Future<void> _saveExt(int childId, ChildExtInfo? ext, int creatorId, String creator, int hospId, String hospName) async {
+  /// 覆盖保存扩展信息（INSERT；调用方负责先删旧行，科室/院区沿用档案
+  /// 归属）。
+  Future<void> _saveExt(String childId, ChildExtInfo? ext, String creatorId, String creator, _ArchiveScope scope) async {
     if (ext == null) {
       return;
     }
@@ -751,8 +790,9 @@ class ChildService {
       'HAS_PARENTAL_MENTAL_ILLNESS_HISTORY, HAS_PARENTAL_DRUG_ABUSE_HISTORY, '
       'HAS_FAMILY_HEARING_LOSS_HISTORY, HAS_PARENTAL_CONSANGUINEOUS_MARRIAGE, '
       'OTHER_FAMILY_HISTORY, MATERNAL_INPATIENT_NO, MATERNAL_AGE_AT_DELIVERY, '
-      'CREATOR_ID, CREATOR_NAME, HOSP_ID, HOSP_NAME, CREATE_TIME) '
-      'VALUES (${List.filled(86, '?').join(', ')})',
+      'CREATOR_ID, CREATOR_NAME, DEPT_ID, DEPT_NAME, CAMPUS_ID, CAMPUS_NAME, '
+      'HOSP_ID, HOSP_NAME, CREATE_TIME) '
+      'VALUES (${List.filled(90, '?').join(', ')})',
       [
         childId,
         _optionalSmall(ext.gestationalWeek, '出生孕周'),
@@ -837,27 +877,34 @@ class ChildService {
         _optionalSmall(ext.maternalAgeAtDelivery, '母亲生育年龄'),
         creatorId,
         creator,
-        hospId,
-        hospName,
+        scope.deptId,
+        scope.deptName,
+        scope.campusId,
+        scope.campusName,
+        scope.hospId,
+        scope.hospName,
         formatTimestamp(DateTime.now()),
       ],
     );
   }
 
-  /// 全量覆盖保存监护人列表（INSERT 逐条；调用方负责先删旧行）。
-  Future<void> _saveGuardians(int childId, List<ChildGuardianInfo> guardians, int creatorId, String creator, int hospId, String hospName) async {
+  /// 全量覆盖保存监护人列表（INSERT 逐条；调用方负责先删旧行，科室/
+  /// 院区沿用档案归属）。
+  Future<void> _saveGuardians(String childId, List<ChildGuardianInfo> guardians, String creatorId, String creator, _ArchiveScope scope) async {
     for (final guardian in guardians) {
       final namePlain = _requiredEnc(guardian.name, '监护人姓名', _plainNameMaxLength);
       final certPlain = _optionalEnc(guardian.certificateNo, '监护人证件号码', _plainCertMaxLength);
       final phonePlain = _optionalEnc(guardian.phone, '监护人联系电话', _plainPhoneMaxLength);
       await _db.execute(
-        'INSERT INTO CHILD_GUARDIAN_INFO (CHILD_ID, NAME, NAME_HMAC, '
+        'INSERT INTO CHILD_GUARDIAN_INFO (ID, CHILD_ID, NAME, NAME_HMAC, '
         'BIRTH_DATE, CERTIFICATE_TYPE, CERTIFICATE_NO, CERTIFICATE_NO_HMAC, '
         'COUNTRY, NATION, EDUCATION_LEVEL, OCCUPATION, PHONE, PHONE_HMAC, '
         'HEIGHT, WEIGHT, EMPLOYER, GUARDIAN_RELATIONSHIP, GUARDIAN_ORDER, '
-        'CREATOR_ID, CREATOR_NAME, HOSP_ID, HOSP_NAME, CREATE_TIME) '
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'CREATOR_ID, CREATOR_NAME, DEPT_ID, DEPT_NAME, CAMPUS_ID, '
+        'CAMPUS_NAME, HOSP_ID, HOSP_NAME, CREATE_TIME) '
+        'VALUES (${List.filled(28, '?').join(', ')})',
         [
+          newUuid(),
           childId,
           await _cipher.seal(FieldCipher.guardianNamePurpose, namePlain),
           await _cipher.mac(FieldCipher.guardianNamePurpose, namePlain),
@@ -878,8 +925,12 @@ class ChildService {
           _optionalGuardianOrder(guardian.guardianOrder),
           creatorId,
           creator,
-          hospId,
-          hospName,
+          scope.deptId,
+          scope.deptName,
+          scope.campusId,
+          scope.campusName,
+          scope.hospId,
+          scope.hospName,
           formatTimestamp(DateTime.now()),
         ],
       );
@@ -919,6 +970,10 @@ class ChildService {
       phone: phonePlain,
       creatorId: row['CREATOR_ID'] ?? '',
       creatorName: row['CREATOR_NAME'] ?? '',
+      deptId: row['DEPT_ID'],
+      deptName: row['DEPT_NAME'],
+      campusId: row['CAMPUS_ID'],
+      campusName: row['CAMPUS_NAME'],
       hospId: row['HOSP_ID'] ?? '',
       hospName: row['HOSP_NAME'] ?? '',
       createTime: row['CREATE_TIME'],
@@ -1010,6 +1065,10 @@ class ChildService {
     maternalAgeAtDelivery: row['MATERNAL_AGE_AT_DELIVERY'],
     creatorId: row['CREATOR_ID'] ?? '',
     creatorName: row['CREATOR_NAME'] ?? '',
+    deptId: row['DEPT_ID'],
+    deptName: row['DEPT_NAME'],
+    campusId: row['CAMPUS_ID'],
+    campusName: row['CAMPUS_NAME'],
     hospId: row['HOSP_ID'] ?? '',
     hospName: row['HOSP_NAME'] ?? '',
     createTime: row['CREATE_TIME'],
@@ -1036,6 +1095,27 @@ class ChildService {
     guardianOrder: row['GUARDIAN_ORDER'],
     creatorId: row['CREATOR_ID'] ?? '',
     creatorName: row['CREATOR_NAME'] ?? '',
+    deptId: row['DEPT_ID'],
+    deptName: row['DEPT_NAME'],
+    campusId: row['CAMPUS_ID'],
+    campusName: row['CAMPUS_NAME'],
+    hospId: row['HOSP_ID'] ?? '',
+    hospName: row['HOSP_NAME'] ?? '',
+    createTime: row['CREATE_TIME'],
+    updateTime: row['UPDATE_TIME'],
+  );
+
+  /// 从数据库行解析拍照记录（avatarBase64 为调用方取好的头像列值）。
+  ChildPhoto _photoFromRow(Map<String, String?> row, String? avatarBase64) => ChildPhoto(
+    id: row['ID'],
+    childId: row['CHILD_ID'] ?? '',
+    avatarBase64: avatarBase64,
+    creatorId: row['CREATOR_ID'] ?? '',
+    creatorName: row['CREATOR_NAME'] ?? '',
+    deptId: row['DEPT_ID'],
+    deptName: row['DEPT_NAME'],
+    campusId: row['CAMPUS_ID'],
+    campusName: row['CAMPUS_NAME'],
     hospId: row['HOSP_ID'] ?? '',
     hospName: row['HOSP_NAME'] ?? '',
     createTime: row['CREATE_TIME'],
@@ -1110,16 +1190,16 @@ class ChildService {
     return v;
   }
 
-  /// 必填日期/时间校验（CHECK_TIME 等 DATETIME 列，接受
-  /// yyyy-MM-dd 或 yyyy-MM-dd HH:mm:ss）。
+  /// 必填日期校验（CHECK_TIME/BIRTH_DATE 等 DATE 列，须为 yyyy-MM-dd；
+  /// 时间部分由 TIME 类列承载，DATE 列不再接收带时刻的值）。
   String _requiredDate(String? value, String label) {
     final v = value?.trim() ?? '';
     if (v.isEmpty) {
       throw ChildException(400, 40002, '$label不能为空');
     }
-    final ok = RegExp(r'^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}(:\d{2})?)?$').hasMatch(v) && DateTime.tryParse(v) != null;
+    final ok = RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(v) && DateTime.tryParse(v) != null;
     if (!ok) {
-      throw ChildException(400, 40002, '$label格式不正确：$value');
+      throw ChildException(400, 40002, '$label格式应为 yyyy-MM-dd：$value');
     }
     return v;
   }
@@ -1177,13 +1257,19 @@ class ChildService {
     return v;
   }
 
-  /// 数字 ID 字符串转 int（网关列值均为字符串，绑定 int 避免两库隐式
-  /// 转换差异）。
-  int _toInt(String id, String label) {
-    final v = int.tryParse(id.trim());
-    if (v == null) {
-      throw ChildException(400, 40002, '$label格式不正确：$id');
+  /// 必填 ID 校验：UUID 主键经网关以字符串取回，仅需去空格、非空。
+  String _requireId(String id, String label) {
+    final v = id.trim();
+    if (v.isEmpty) {
+      throw ChildException(400, 40002, '$label不能为空');
     }
+    return v;
+  }
+
+  /// 可空 ID 校验：空值归一为 null。
+  String? _optionalId(String? id, String label) {
+    final v = id?.trim() ?? '';
+    if (v.isEmpty) return null;
     return v;
   }
 }

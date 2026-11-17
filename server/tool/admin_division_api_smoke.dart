@@ -11,11 +11,20 @@ const baseUrl = 'http://localhost:8080';
 Future<void> main() async {
   final client = http.Client();
 
-  // 1. 明文登录拿 token + sessionKey
+  // 1. 明文登录拿 token + sessionKey（登录须携带所选角色 ID——主键为
+  // UUID v7，先经白名单明文接口 /api/auth/roles 拉取该用户角色列表）
+  final rolesResp = await client.get(
+    Uri.parse('$baseUrl/api/auth/roles?usercode=admin'),
+  );
+  final roles = ((jsonDecode(rolesResp.body) as Map<String, dynamic>)['data'] as Map<String, dynamic>)['roles'] as List<dynamic>;
+  if (roles.isEmpty) {
+    throw StateError('admin 无可选角色，请先执行 seed_demo_data');
+  }
+  final roleId = (roles.first as Map<String, dynamic>)['id'] as String;
   final loginResp = await client.post(
     Uri.parse('$baseUrl/api/auth/login'),
     headers: {'Content-Type': 'application/json'},
-    body: jsonEncode({'usercode': 'admin', 'password': 'Admin@123'}),
+    body: jsonEncode({'usercode': 'admin', 'password': 'Admin@123', 'role': roleId}),
   );
   final loginData = _unwrapPlain(loginResp);
   final token = loginData['token'] as String;

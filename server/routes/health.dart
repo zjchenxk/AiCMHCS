@@ -26,6 +26,7 @@ Future<Response> onRequest(RequestContext context) async {
         'database': switch (db.dialect) {
           DbDialect.dm => 'DM8',
           DbDialect.sqlite => 'SQLite',
+          DbDialect.postgres => 'PostgreSQL',
         },
         'latencyMs': stopwatch.elapsedMilliseconds,
       },

@@ -14,4 +14,10 @@ const dbMigration_202611151657 = DbMigration(
   dm: [
     'ALTER TABLE CHILD_INFO MODIFY ADDRESS_DETAILS VARCHAR(250) NOT NULL',
   ],
+  // PostgreSQL 方言：与达梦同构，逐句对应（差异句已注释标注）。
+  postgres: [
+    // 列改型语法差异：MODIFY → ALTER COLUMN ... TYPE（该列建表时即
+    // NOT NULL，PostgreSQL 改型不改空值约束，无需重复声明）
+    'ALTER TABLE CHILD_INFO ALTER COLUMN ADDRESS_DETAILS TYPE VARCHAR(250)',
+  ],
 );

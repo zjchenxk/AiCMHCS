@@ -16,11 +16,15 @@ class ChildPhoto {
     this.id,
     this.photoBase64,
     this.avatarBase64,
+    this.deptId,
+    this.deptName,
+    this.campusId,
+    this.campusName,
     this.createTime,
     this.updateTime,
   });
 
-  /// 主键（自增 ID 的字符串形式；未入库时为 null）。
+  /// 主键（UUID v7 字符串形式；未入库时为 null）。
   final String? id;
 
   /// 儿童 ID（CHILD_INFO.ID 的字符串形式）。
@@ -31,6 +35,18 @@ class ChildPhoto {
 
   /// 头像（320×320，JPEG base64）。
   final String? avatarBase64;
+
+  /// 归属科室 ID（拍摄时所属儿童档案的科室归属）。
+  final String? deptId;
+
+  /// 归属科室名称。
+  final String? deptName;
+
+  /// 归属院区 ID（拍摄时所属儿童档案的院区归属）。
+  final String? campusId;
+
+  /// 归属院区名称。
+  final String? campusName;
 
   /// 创建人 ID。
   final String creatorId;
@@ -56,6 +72,10 @@ class ChildPhoto {
       childId: json['childId'] as String? ?? '',
       photoBase64: json['photoBase64'] as String?,
       avatarBase64: json['avatarBase64'] as String?,
+      deptId: json['deptId'] as String?,
+      deptName: json['deptName'] as String?,
+      campusId: json['campusId'] as String?,
+      campusName: json['campusName'] as String?,
       creatorId: json['creatorId'] as String? ?? '',
       creatorName: json['creatorName'] as String? ?? '',
       hospId: json['hospId'] as String? ?? '',
@@ -71,6 +91,10 @@ class ChildPhoto {
       'childId': childId,
       'photoBase64': photoBase64,
       'avatarBase64': avatarBase64,
+      'deptId': deptId,
+      'deptName': deptName,
+      'campusId': campusId,
+      'campusName': campusName,
       'creatorId': creatorId,
       'creatorName': creatorName,
       'hospId': hospId,

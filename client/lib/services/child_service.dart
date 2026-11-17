@@ -35,6 +35,20 @@ class ChildService {
     return list.whereType<Map<String, dynamic>>().map(ChildInfo.fromJson).toList();
   }
 
+  /// 重复建档检查：按「姓名+性别+出生日期」三键 AND 精确匹配本院已有
+  /// 档案（excludeId 用于修改态排除自身），返回解密后的相似儿童列表
+  /// （含联系电话/居住地址，供确认对话框展示）。
+  Future<List<ChildInfo>> duplicateCheck({required String name, required String sex, required String birthDate, String? excludeId}) async {
+    final data = await _base.post('/api/child/duplicateCheck', {
+      'name': name,
+      'sex': sex,
+      'birthDate': birthDate,
+      'excludeId': excludeId,
+    });
+    final list = data['children'] as List<dynamic>? ?? const [];
+    return list.whereType<Map<String, dynamic>>().map(ChildInfo.fromJson).toList();
+  }
+
   /// 装载儿童整档（基本信息 + 扩展信息 + 监护人列表）。
   Future<ChildArchive> load(String id) async {
     final data = await _base.post('/api/child/query', {'id': id});

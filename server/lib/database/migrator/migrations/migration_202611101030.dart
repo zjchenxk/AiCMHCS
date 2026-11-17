@@ -9,6 +9,11 @@ const dbMigration_202611101030 = DbMigration(
     'ALTER TABLE SYS_USER ADD COLUMN AVATAR_IMAGE TEXT',
     "COMMENT ON COLUMN SYS_USER.AVATAR_IMAGE IS '用户头像图片BASE64'",
   ],
+  // PostgreSQL 方言：与达梦同构，逐句对应（差异句已注释标注）。
+  postgres: [
+    'ALTER TABLE SYS_USER ADD COLUMN AVATAR_IMAGE TEXT',
+    "COMMENT ON COLUMN SYS_USER.AVATAR_IMAGE IS '用户头像图片BASE64'",
+  ],
   sqlite: [
     '-- 用户头像图片BASE64\nALTER TABLE SYS_USER ADD COLUMN AVATAR_IMAGE TEXT',
   ],

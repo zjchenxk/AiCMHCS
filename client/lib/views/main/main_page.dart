@@ -4,6 +4,7 @@ import 'package:client/utils/log_helper.dart';
 import 'package:client/utils/theme_color_mapper.dart';
 import 'package:client/utils/theme_data.dart';
 import 'package:client/views/help/help_center_page.dart';
+import 'package:client/widgets/child_pick_dialog.dart';
 import 'package:client/widgets/glass_panel.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:common/model.dart';
@@ -258,97 +259,11 @@ class _MainPageState extends State<MainPage> {
       _toast('已选定儿童：${results.first.name}');
       return;
     }
-    final selected = await _showChildPickDialog(results);
+    final selected = await showChildPickDialog(context, results, title: '共找到儿童，请选择');
     if (selected != null) {
       mainViewModel.setCurrentChild(selected);
       _toast('已选定儿童：${selected.name}');
     }
-  }
-
-  /// 多命中选择弹窗：可滚动列表展示姓名/性别/出生日期/联系电话/居住
-  /// 地址，点选即返回该儿童档案。
-  Future<ChildInfo?> _showChildPickDialog(List<ChildInfo> results) async {
-    final theme = Theme.of(context);
-    return showDialog<ChildInfo>(
-      context: context,
-      builder: (dialogContext) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560),
-          child: GlassPanel(
-            blur: 24,
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.person_search_outlined, color: theme.colorScheme.primary, size: 22),
-                      const SizedBox(width: 10),
-                      Text(
-                        '共找到 ${results.length} 名儿童，请选择',
-                        style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  // 多条命中可超出一屏：限制最大高度并支持滚动
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 360),
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: results.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 8),
-                      itemBuilder: (context, index) {
-                        final c = results[index];
-                        final sex = switch (c.sex) {
-                          '1' => '男',
-                          '2' => '女',
-                          _ => '',
-                        };
-                        final address = [
-                          c.addressProvince,
-                          c.addressCity,
-                          c.addressCounty,
-                          c.addressTown,
-                          c.addressVillage,
-                          c.addressDetails,
-                        ].whereType<String>().where((s) => s.isNotEmpty).join();
-                        return GlassPanel(
-                          blur: 12,
-                          borderRadius: 12,
-                          child: ListTile(
-                            dense: true,
-                            onTap: () => Navigator.of(dialogContext).pop(c),
-                            title: Text(
-                              '${c.name}${sex.isEmpty ? '' : '  $sex'}  ${c.birthDate}',
-                              style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
-                            ),
-                            subtitle: Text(
-                              [
-                                if (c.phone != null && c.phone!.isNotEmpty) '电话 ${c.phone!}',
-                                if (address.isNotEmpty) address,
-                              ].join(' · '),
-                              style: theme.textTheme.bodySmall,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            trailing: Icon(Icons.chevron_right, color: theme.colorScheme.onSurfaceVariant, size: 18),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 
   /// 高级搜索条件弹窗（查询逻辑暂未实现，仅展示条件输入框）。

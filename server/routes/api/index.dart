@@ -48,6 +48,8 @@ Response onRequest(RequestContext context) {
           {'method': 'POST', 'path': '/api/child/delete', 'desc': '删除儿童档案（连带删除扩展信息、监护人与全部拍照记录）'},
           {'method': 'POST', 'path': '/api/child/photoQuery', 'desc': '儿童最近一次拍照记录查询（仅回显头像，不含照片大图）'},
           {'method': 'POST', 'path': '/api/child/photoRemoveToday', 'desc': '移除儿童当天全部拍照记录（返回移除条数与最近的剩余记录）'},
+          {'method': 'POST', 'path': '/api/child/duplicateCheck', 'desc': '重复建档检查（按姓名+性别+出生日期三键 AND 精确匹配本院已有档案，excludeId 排除自身）'},
+          {'method': 'GET', 'path': '/api/time', 'desc': '全局时间服务（返回服务器当前时间，供客户端时钟校准，登录前明文可用）'},
           {'method': 'GET', 'path': '/health', 'desc': '健康检查（含数据库探活）'},
         ],
       },

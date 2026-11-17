@@ -7,7 +7,8 @@ import 'package:server/services/child_service.dart';
 /// POST /api/child/add
 /// 请求体：{child: {...}, ext?: {...}, guardians?: [...]}
 /// （姓名/性别/出生日期/三级居住地址/详细地址/建档时间必填；敏感字段
-/// 服务端加密；归属医院与创建人从令牌会话推导，不信任客户端上报）。
+/// 服务端加密；归属医院/科室/院区与创建人从令牌会话推导，不信任客户端
+/// 上报）。
 Future<Response> onRequest(RequestContext context) async {
   if (context.request.method != HttpMethod.post) {
     return _error(405, 40500, '该接口仅支持 POST 请求');
@@ -41,6 +42,10 @@ Future<Response> onRequest(RequestContext context) async {
       creatorName: user.userName,
       hospId: hospId,
       hospName: user.hospName ?? '',
+      deptId: user.deptId,
+      deptName: user.deptName,
+      campusId: user.campusId,
+      campusName: user.campusName,
     );
     return Response.json(
       body: {

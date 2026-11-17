@@ -1,11 +1,13 @@
 import 'package:server/app_config.dart';
 import 'package:server/database/engine/database_gateway.dart';
 import 'package:server/database/engine/dm/dm_gateway.dart';
+import 'package:server/database/engine/postgres/postgres_gateway.dart';
 import 'package:server/database/engine/sqlite/sqlite_gateway.dart';
 
 /// 按配置打开数据库网关：driver=dm → 达梦（DPI），driver=sqlite →
-/// SQLite 数据文件。启动脚本（main.dart）与工具（tool/）统一经此入口，
-/// 保证两种发行档（网络版 / 单机版）走同一套初始化逻辑。
+/// SQLite 数据文件，driver=postgres → PostgreSQL（非信创医院可选）。
+/// 启动脚本（main.dart）与工具（tool/）统一经此入口，保证各发行档
+/// （网络版 / 单机版 / 开源库版）走同一套初始化逻辑。
 Future<DatabaseGateway> openDatabaseGateway(AppConfig config) async {
   switch (config.dbDriver) {
     case 'dm':
@@ -18,9 +20,17 @@ Future<DatabaseGateway> openDatabaseGateway(AppConfig config) async {
       );
     case 'sqlite':
       return SqliteGateway.start(config.dbFile);
+    case 'postgres':
+      return PostgresGateway.start(
+        host: config.dbHost,
+        port: config.dbPort,
+        database: config.dbName,
+        user: config.dbUser,
+        password: config.dbPassword,
+      );
     default:
       throw FormatException(
-        '未知的 AICMHCS_DB_DRIVER 取值：${config.dbDriver}（可选 dm / sqlite）',
+        '未知的 AICMHCS_DB_DRIVER 取值：${config.dbDriver}（可选 dm / sqlite / postgres）',
       );
   }
 }

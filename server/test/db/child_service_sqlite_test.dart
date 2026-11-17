@@ -6,8 +6,13 @@ import 'package:server/services/child_service.dart';
 import 'package:server/utils/field_cipher.dart';
 import 'package:test/test.dart';
 
+/// 36 位标准 UUID v7 断言（时间位版本 7、合法变体位）。
+Matcher matchesRegexpUuid() => matches(
+  RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'),
+);
+
 /// 儿童建档服务集成测试（SQLite :memory:）：新增整档（敏感字段加密落库
-/// + 自然键回读自增 ID）、整档装载解密、姓名盲索引/就诊卡号/保健号检索、
+/// + 应用侧 UUID v7 主键前置生成）、整档装载解密、姓名盲索引/就诊卡号/保健号检索、
 /// 医院隔离、修改（病人ID不可改、扩展信息与监护人全量覆盖）、删除级联
 /// 与必填/格式校验。
 void main() {
@@ -29,7 +34,7 @@ void main() {
     String addressDetails = '景山前街4号',
   }) => ChildInfo(
     id: '',
-    checkTime: '2026-11-14 09:30:00',
+    checkTime: '2026-11-14',
     visitCardNo: visitCardNo,
     patientId: patientId,
     ecardId: ecardId,
@@ -58,10 +63,11 @@ void main() {
 
   setUp(() async {
     db = await SqliteGateway.start(':memory:');
-    // 建表语句与 v15 迁移 SQLite 段一致（测试只建所需最小结构）。
+    // 建表语句与 v15/v17 迁移 SQLite 段一致（TEXT 主键 + 科室/院区
+    // 归属列，测试只建所需最小结构）。
     await db.executeDirect('''
 CREATE TABLE CHILD_INFO (
-  ID INTEGER PRIMARY KEY AUTOINCREMENT,
+  ID TEXT PRIMARY KEY NOT NULL,
   CHECK_TIME TEXT NOT NULL,
   VISIT_CARD_NO TEXT,
   PATIENT_ID TEXT,
@@ -88,16 +94,20 @@ CREATE TABLE CHILD_INFO (
   ADDRESS_CODE TEXT,
   PHONE TEXT,
   PHONE_HMAC TEXT,
-  CREATOR_ID INTEGER NOT NULL,
+  CREATOR_ID TEXT NOT NULL,
   CREATOR_NAME TEXT NOT NULL,
-  HOSP_ID INTEGER NOT NULL,
+  DEPT_ID TEXT,
+  DEPT_NAME TEXT,
+  CAMPUS_ID TEXT,
+  CAMPUS_NAME TEXT,
+  HOSP_ID TEXT NOT NULL,
   HOSP_NAME TEXT NOT NULL,
   CREATE_TIME TEXT NOT NULL,
   UPDATE_TIME TEXT
 )''');
     await db.executeDirect('''
 CREATE TABLE CHILD_EXT_INFO (
-  CHILD_ID INTEGER NOT NULL PRIMARY KEY,
+  CHILD_ID TEXT NOT NULL PRIMARY KEY,
   GESTATIONAL_WEEK INTEGER,
   GESTATIONAL_DAY INTEGER,
   BIRTH_WEIGHT INTEGER,
@@ -178,17 +188,21 @@ CREATE TABLE CHILD_EXT_INFO (
   OTHER_FAMILY_HISTORY TEXT,
   MATERNAL_INPATIENT_NO TEXT,
   MATERNAL_AGE_AT_DELIVERY INTEGER,
-  CREATOR_ID INTEGER NOT NULL,
+  CREATOR_ID TEXT NOT NULL,
   CREATOR_NAME TEXT NOT NULL,
-  HOSP_ID INTEGER NOT NULL,
+  DEPT_ID TEXT,
+  DEPT_NAME TEXT,
+  CAMPUS_ID TEXT,
+  CAMPUS_NAME TEXT,
+  HOSP_ID TEXT NOT NULL,
   HOSP_NAME TEXT NOT NULL,
   CREATE_TIME TEXT NOT NULL,
   UPDATE_TIME TEXT
 )''');
     await db.executeDirect('''
 CREATE TABLE CHILD_GUARDIAN_INFO (
-  ID INTEGER PRIMARY KEY AUTOINCREMENT,
-  CHILD_ID INTEGER NOT NULL,
+  ID TEXT PRIMARY KEY NOT NULL,
+  CHILD_ID TEXT NOT NULL,
   NAME TEXT NOT NULL,
   NAME_HMAC TEXT NOT NULL,
   BIRTH_DATE TEXT,
@@ -206,22 +220,30 @@ CREATE TABLE CHILD_GUARDIAN_INFO (
   EMPLOYER TEXT,
   GUARDIAN_RELATIONSHIP TEXT NOT NULL,
   GUARDIAN_ORDER INTEGER,
-  CREATOR_ID INTEGER NOT NULL,
+  CREATOR_ID TEXT NOT NULL,
   CREATOR_NAME TEXT NOT NULL,
-  HOSP_ID INTEGER NOT NULL,
+  DEPT_ID TEXT,
+  DEPT_NAME TEXT,
+  CAMPUS_ID TEXT,
+  CAMPUS_NAME TEXT,
+  HOSP_ID TEXT NOT NULL,
   HOSP_NAME TEXT NOT NULL,
   CREATE_TIME TEXT NOT NULL,
   UPDATE_TIME TEXT
 )''');
     await db.executeDirect('''
 CREATE TABLE CHILD_PHOTO (
-  ID INTEGER PRIMARY KEY AUTOINCREMENT,
-  CHILD_ID INTEGER NOT NULL,
+  ID TEXT PRIMARY KEY NOT NULL,
+  CHILD_ID TEXT NOT NULL,
   PHOTO TEXT NOT NULL,
   AVATAR TEXT NOT NULL,
-  CREATOR_ID INTEGER NOT NULL,
+  CREATOR_ID TEXT NOT NULL,
   CREATOR_NAME TEXT NOT NULL,
-  HOSP_ID INTEGER NOT NULL,
+  DEPT_ID TEXT,
+  DEPT_NAME TEXT,
+  CAMPUS_ID TEXT,
+  CAMPUS_NAME TEXT,
+  HOSP_ID TEXT NOT NULL,
   HOSP_NAME TEXT NOT NULL,
   CREATE_TIME TEXT NOT NULL,
   UPDATE_TIME TEXT
@@ -298,7 +320,8 @@ CREATE TABLE CHILD_PHOTO (
       hospId: '1',
       hospName: '示例人民医院',
     );
-    expect(child.id, '1');
+    // 主键为应用侧 UUID v7（36 位标准格式），INSERT 前置生成
+    expect(child.id, matchesRegexpUuid());
     expect(child.name, '王小明');
     expect(child.ecardId, 'EC123456');
     expect(child.certificateNo, '110101202601011234');
@@ -323,7 +346,7 @@ CREATE TABLE CHILD_PHOTO (
     expect(guardians.first.height, '175.5');
 
     // 直查数据库：敏感列均为密文（v1: 前缀）且盲索引列为 64 位十六进制
-    final raw = (await db.query('SELECT NAME, NAME_HMAC, PHONE, ADDRESS_DETAILS FROM CHILD_INFO WHERE ID = 1')).rowsAsMaps.first;
+    final raw = (await db.query('SELECT NAME, NAME_HMAC, PHONE, ADDRESS_DETAILS FROM CHILD_INFO WHERE ID = ?', [child.id])).rowsAsMaps.first;
     expect(raw['NAME'], startsWith('v1:'));
     expect(raw['NAME'], isNot(contains('王小明')));
     expect(raw['ADDRESS_DETAILS'], startsWith('v1:'));
@@ -331,7 +354,7 @@ CREATE TABLE CHILD_PHOTO (
     expect(nameHmac.length, 64);
     expect(RegExp(r'^[0-9a-f]{64}$').hasMatch(nameHmac), isTrue, reason: '盲索引列为十六进制');
 
-    // 复建同名同生日档案（不同秒创建）→ 自然键回读各归各行
+    // 复建同名同生日档案 → 各自独立主键（UUID 无自然键冲突概念）
     final second = await service.create(
       child: buildChild(),
       creatorId: '9',
@@ -339,7 +362,8 @@ CREATE TABLE CHILD_PHOTO (
       hospId: '1',
       hospName: '示例人民医院',
     );
-    expect(second.$1.id, '2');
+    expect(second.$1.id, matchesRegexpUuid());
+    expect(second.$1.id, isNot(child.id));
   });
 
   test('search：姓名盲索引精确匹配、就诊卡号、保健号或条件检索并解密', () async {
@@ -612,5 +636,50 @@ CREATE TABLE CHILD_PHOTO (
     // 删除档案 → 拍照记录连带删除
     expect(await service.delete(created.$1.id, '1'), 1);
     expect(await service.latestPhoto(created.$1.id, '1'), isNull);
+  });
+
+  test('findDuplicates：姓名+性别+出生日期三键 AND 查重、excludeId 排除自身、跨院隔离', () async {
+    // 同名同性别同生日两条（医院 1）
+    final first = await service.create(
+      child: buildChild(),
+      creatorId: '9',
+      creatorName: '张医生',
+      hospId: '1',
+      hospName: '示例人民医院',
+    );
+    final second = await service.create(
+      child: buildChild(visitCardNo: 'JZK202601002'),
+      creatorId: '9',
+      creatorName: '张医生',
+      hospId: '1',
+      hospName: '示例人民医院',
+    );
+
+    // 三键全中 → 命中两条（按创建时间倒序，后者在前）
+    final both = await service.findDuplicates(hospId: '1', name: '王小明', sex: '1', birthDate: '2026-01-01');
+    expect(both, hasLength(2));
+    expect(both.map((c) => c.id), [second.$1.id, first.$1.id]);
+    expect(both.first.phone, '13800138000', reason: '返回解密后的完整档案供对话框展示');
+
+    // excludeId 排除自身（修改态保存）
+    final excludingSelf = await service.findDuplicates(hospId: '1', name: '王小明', sex: '1', birthDate: '2026-01-01', excludeId: second.$1.id);
+    expect(excludingSelf.map((c) => c.id), [first.$1.id]);
+
+    // 性别/出生日期不同 → 不命中
+    expect(await service.findDuplicates(hospId: '1', name: '王小明', sex: '2', birthDate: '2026-01-01'), isEmpty);
+    expect(await service.findDuplicates(hospId: '1', name: '王小明', sex: '1', birthDate: '2026-02-01'), isEmpty);
+
+    // 跨医院不可见
+    expect(await service.findDuplicates(hospId: '2', name: '王小明', sex: '1', birthDate: '2026-01-01'), isEmpty);
+
+    // 校验：非法性别/日期报错
+    await expectLater(
+      service.findDuplicates(hospId: '1', name: '王小明', sex: '3', birthDate: '2026-01-01'),
+      throwsA(isA<ChildException>().having((e) => e.message, 'message', contains('性别应为'))),
+    );
+    await expectLater(
+      service.findDuplicates(hospId: '1', name: '王小明', sex: '1', birthDate: '20260101'),
+      throwsA(isA<ChildException>().having((e) => e.message, 'message', contains('出生日期'))),
+    );
   });
 }

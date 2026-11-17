@@ -1,3 +1,5 @@
+import 'package:client/main.dart';
+import 'package:client/services/time_service.dart';
 import 'package:client/utils/dict_options.dart';
 import 'package:client/view_models/child/child_create_view_model.dart';
 import 'package:client/views/child/child_form_widgets.dart';
@@ -454,7 +456,7 @@ class ChildGuardianPanelState extends State<ChildGuardianPanel> {
 
   Future<void> _pickDate(TextEditingController controller, String label) async {
     if (!widget.editable) return;
-    final current = DateTime.tryParse(controller.text.trim()) ?? DateTime.now();
+    final current = DateTime.tryParse(controller.text.trim()) ?? getIt<TimeService>().now();
     final picked = await showDatePicker(context: context, initialDate: current, firstDate: DateTime(1900), lastDate: DateTime(2100), helpText: '选择$label');
     if (picked == null) return;
     setState(() {

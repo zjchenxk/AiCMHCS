@@ -1,5 +1,6 @@
 import 'package:common/model.dart';
 import 'package:server/database/engine/database_gateway.dart';
+import 'package:server/utils/uuid_util.dart';
 
 /// 科室类业务异常：httpStatus / code / message 直接映射到 HTTP 响应
 /// （模式同 AuthException / CampusException）。
@@ -26,8 +27,8 @@ final class DepartmentException implements Exception {
 /// CAMPUS_ID 可选关联 SYS_CAMPUS、PARENT_ID 自关联）。科室规模有限
 /// （医院百级以内），列表接口整表返回、由前端构建「医院→院区→科室」树；
 /// 名称含中文时由达梦网关参数改写自动内联，业务层直接写参数化 SQL。
-/// ID 为自增主键，两库网关无 last-insert-id 通道，新增后按唯一 CODE
-/// 回读确定新行 ID（并发下不受会话级自增值串扰）。
+/// 主键为应用侧生成的 UUID v7（CHAR(36)，见 newUuid），INSERT 前置
+/// 生成、无自增回读环节。
 ///
 /// 挂载规则（服务层为准，前端入口同步约束）：医院下已设置院区时顶级
 /// 科室必须挂院区下（CAMPUS_ID 非空），未设置院区时直接挂医院下；
@@ -62,7 +63,7 @@ class DepartmentService {
     final result = await _db.query(
       'SELECT ID, HOSP_ID, CAMPUS_ID, PARENT_ID, CODE, NAME, ADDRESS, TEL '
       'FROM SYS_DEPARTMENT WHERE ID = ?',
-      [_toInt(id, '科室ID')],
+      [_id(id, '科室ID')],
     );
     if (result.rows.isEmpty) {
       throw DepartmentException(400, 40001, '科室不存在：$id');
@@ -84,11 +85,11 @@ class DepartmentService {
     final parent = parentId?.trim() ?? '';
     final campus = campusId?.trim() ?? '';
 
-    int? campusValue;
-    int? parentValue;
+    String? campusValue;
+    String? parentValue;
     if (parent.isNotEmpty) {
       // 下级科室：上级必须存在且属同一医院，CAMPUS_ID 继承上级
-      parentValue = _toInt(parent, '上级科室ID');
+      parentValue = _id(parent, '上级科室ID');
       final parentRow = await _db.query(
         'SELECT HOSP_ID, CAMPUS_ID FROM SYS_DEPARTMENT WHERE ID = ?',
         [parentValue],
@@ -97,7 +98,7 @@ class DepartmentService {
         throw DepartmentException(400, 40001, '上级科室不存在：$parent');
       }
       final row = parentRow.rowsAsMaps.first;
-      if (row['HOSP_ID'] != hospValue.toString()) {
+      if (row['HOSP_ID'] != hospValue) {
         throw const DepartmentException(
           400,
           40001,
@@ -105,10 +106,10 @@ class DepartmentService {
         );
       }
       final parentCampus = row['CAMPUS_ID'];
-      campusValue = parentCampus == null || parentCampus.isEmpty ? null : int.parse(parentCampus);
+      campusValue = parentCampus == null || parentCampus.isEmpty ? null : parentCampus;
     } else if (campus.isNotEmpty) {
       // 院区下的顶级科室：院区必须存在且属该医院
-      final campusValueById = _toInt(campus, '院区ID');
+      final campusValueById = _id(campus, '院区ID');
       final campusRow = await _db.query(
         'SELECT ID FROM SYS_CAMPUS WHERE ID = ? AND HOSP_ID = ?',
         [campusValueById, hospValue],
@@ -141,10 +142,12 @@ class DepartmentService {
       name: n,
     );
 
+    final newId = newUuid();
     await _db.execute(
-      'INSERT INTO SYS_DEPARTMENT (HOSP_ID, CAMPUS_ID, PARENT_ID, CODE, NAME, '
-      'ADDRESS, TEL, CREATE_TIME) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO SYS_DEPARTMENT (ID, HOSP_ID, CAMPUS_ID, PARENT_ID, CODE, '
+      'NAME, ADDRESS, TEL, CREATE_TIME) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
+        newId,
         hospValue,
         campusValue,
         parentValue,
@@ -155,15 +158,7 @@ class DepartmentService {
         formatTimestamp(DateTime.now()),
       ],
     );
-    // 自增 ID 经唯一 CODE 回读（网关无 last-insert-id 通道）
-    final row = await _db.query(
-      'SELECT ID FROM SYS_DEPARTMENT WHERE CODE = ?',
-      [c],
-    );
-    if (row.rows.isEmpty) {
-      throw const DepartmentException(500, 50000, '新增科室后回读失败');
-    }
-    return getById(row.rows.first[0]!);
+    return getById(newId);
   }
 
   /// 修改科室（changes 为本次要更新的字段集合，键与 JSON 契约一致；
@@ -177,7 +172,7 @@ class DepartmentService {
       }
     }
     final current = await getById(id);
-    final idValue = _toInt(id, '科室ID');
+    final idValue = _id(id, '科室ID');
 
     // 先解析目标值并完成唯一性校验（判重按当前挂载点 + 目标名称）
     final code = changes.containsKey('code') ? _required(changes['code']?.toString(), '科室代码', _codeMaxLength) : null;
@@ -187,9 +182,9 @@ class DepartmentService {
     final name = changes.containsKey('name') ? _required(changes['name']?.toString(), '科室名称', _nameMaxLength) : null;
     if (name != null) {
       await _ensureNameUnique(
-        _toInt(current.hospId, '医院ID'),
-        campusValue: current.campusId == null ? null : _toInt(current.campusId!, '院区ID'),
-        parentId: current.parentId == null ? null : _toInt(current.parentId!, '上级科室ID'),
+        current.hospId,
+        campusValue: current.campusId,
+        parentId: current.parentId,
         name: name,
         excludeId: idValue,
       );
@@ -234,7 +229,7 @@ class DepartmentService {
   /// 防止下级科室沦为孤儿数据。
   Future<int> delete(String id) async {
     await getById(id);
-    final idValue = _toInt(id, '科室ID');
+    final idValue = _id(id, '科室ID');
     final dup = await _db.query(
       'SELECT COUNT(*) AS CNT FROM SYS_DEPARTMENT WHERE PARENT_ID = ?',
       [idValue],
@@ -257,9 +252,9 @@ class DepartmentService {
     tel: row['TEL'],
   );
 
-  /// 校验医院存在，返回其 int 形式 ID。
-  Future<int> _ensureHospital(String hospId) async {
-    final value = _toInt(hospId, '医院ID');
+  /// 校验医院存在，返回其 ID。
+  Future<String> _ensureHospital(String hospId) async {
+    final value = _id(hospId, '医院ID');
     final result = await _db.query(
       'SELECT ID FROM SYS_HOSPITAL WHERE ID = ?',
       [value],
@@ -271,7 +266,7 @@ class DepartmentService {
   }
 
   /// 校验科室代码全表唯一（excludeId 用于修改时排除自身）。
-  Future<void> _ensureCodeUnique(String code, {int? excludeId}) async {
+  Future<void> _ensureCodeUnique(String code, {String? excludeId}) async {
     final sql = excludeId == null ? 'SELECT COUNT(*) AS CNT FROM SYS_DEPARTMENT WHERE CODE = ?' : 'SELECT COUNT(*) AS CNT FROM SYS_DEPARTMENT WHERE CODE = ? AND ID <> ?';
     final params = excludeId == null ? <Object?>[code] : <Object?>[code, excludeId];
     final dup = await _db.query(sql, params);
@@ -284,7 +279,7 @@ class DepartmentService {
   /// 顶级科室按同一挂载根（同院区，或同医院且均无院区）判重
   /// （excludeId 用于修改时排除自身）。可空挂载条件的 null 匹配以
   /// IS NULL 字面量写进 SQL、不经参数绑定（两库对 null 绑定行为不一致）。
-  Future<void> _ensureNameUnique(int hospId, {required int? campusValue, required int? parentId, required String name, int? excludeId}) async {
+  Future<void> _ensureNameUnique(String hospId, {required String? campusValue, required String? parentId, required String name, String? excludeId}) async {
     String where;
     List<Object?> params;
     if (parentId != null) {
@@ -330,12 +325,11 @@ class DepartmentService {
     return v;
   }
 
-  /// 数字 ID 字符串转 int（网关列值均为字符串，绑定 int 避免两库隐式
-  /// 转换差异）。
-  int _toInt(String id, String label) {
-    final v = int.tryParse(id.trim());
-    if (v == null) {
-      throw DepartmentException(400, 40002, '$label格式不正确：$id');
+  /// 必填 ID 校验：UUID 主键经网关以字符串取回，仅需去空格、非空。
+  String _id(String id, String label) {
+    final v = id.trim();
+    if (v.isEmpty) {
+      throw DepartmentException(400, 40002, '$label不能为空');
     }
     return v;
   }

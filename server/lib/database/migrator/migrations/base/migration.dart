@@ -17,12 +17,12 @@ typedef MigrationSeed = Future<void> Function(DatabaseGateway db);
 
 /// 单个结构迁移：一个版本号对应一次结构变更。
 ///
-/// 语句按方言分组：[common] 为两库通用语句（如多数 ALTER TABLE ADD
-/// COLUMN），[dm] / [sqlite] 为方言专属语句（建表类型、COMMENT ON 等），
-/// 执行顺序为 common → 对应方言组。
+/// 语句按方言分组：[common] 为各库通用语句（如多数 ALTER TABLE ADD
+/// COLUMN），[dm] / [sqlite] / [postgres] 为方言专属语句（建表类型、
+/// COMMENT ON、列改型语法差异等），执行顺序为 common → 对应方言组。
 final class DbMigration {
   /// 构造函数：版本号、描述、语句组、可选数据订正与基础数据加载。
-  const DbMigration({required this.version, required this.description, this.common = const [], this.dm = const [], this.sqlite = const [], this.dataFix, this.seed});
+  const DbMigration({required this.version, required this.description, this.common = const [], this.dm = const [], this.sqlite = const [], this.postgres = const [], this.dataFix, this.seed});
 
   /// 版本号，全库唯一且必须严格递增。
   final int version;
@@ -30,7 +30,7 @@ final class DbMigration {
   /// 中文描述（写入 SYS_SCHEMA_VERSION 版本历史）。
   final String description;
 
-  /// 两库通用语句。
+  /// 各库通用语句。
   final List<String> common;
 
   /// 仅达梦执行的语句。
@@ -38,6 +38,9 @@ final class DbMigration {
 
   /// 仅 SQLite 执行的语句。
   final List<String> sqlite;
+
+  /// 仅 PostgreSQL 执行的语句。
+  final List<String> postgres;
 
   /// 语句执行成功后运行的数据订正（可选）。声明了本回调的迁移，
   /// SchemaMigrator 必须注入 FieldCipher，否则启动即报错。
@@ -52,6 +55,7 @@ final class DbMigration {
     ...switch (dialect) {
       DbDialect.dm => dm,
       DbDialect.sqlite => sqlite,
+      DbDialect.postgres => postgres,
     },
   ];
 }

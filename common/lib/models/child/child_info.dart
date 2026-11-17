@@ -20,6 +20,10 @@ class ChildInfo {
     required this.creatorName,
     required this.hospId,
     required this.hospName,
+    this.deptId,
+    this.deptName,
+    this.campusId,
+    this.campusName,
     this.visitCardNo,
     this.patientId,
     this.ecardId,
@@ -38,7 +42,7 @@ class ChildInfo {
     this.updateTime,
   });
 
-  /// 主键（自增 ID 的字符串形式；客户端新建时为空串）。
+  /// 主键（UUID v7 字符串形式；客户端新建时为空串）。
   final String id;
 
   /// 建档时间。
@@ -119,6 +123,18 @@ class ChildInfo {
   /// 所属医院名称。
   final String hospName;
 
+  /// 归属科室 ID（建档人所属科室，建档时随会话写入、不可修改）。
+  final String? deptId;
+
+  /// 归属科室名称。
+  final String? deptName;
+
+  /// 归属院区 ID（建档人所属院区，建档时随会话写入、不可修改）。
+  final String? campusId;
+
+  /// 归属院区名称。
+  final String? campusName;
+
   /// 创建时间。
   final String? createTime;
 
@@ -154,6 +170,10 @@ class ChildInfo {
       creatorName: json['creatorName'] as String? ?? '',
       hospId: json['hospId'] as String? ?? '',
       hospName: json['hospName'] as String? ?? '',
+      deptId: json['deptId'] as String?,
+      deptName: json['deptName'] as String?,
+      campusId: json['campusId'] as String?,
+      campusName: json['campusName'] as String?,
       createTime: json['createTime'] as String?,
       updateTime: json['updateTime'] as String?,
     );
@@ -186,6 +206,10 @@ class ChildInfo {
       'phone': phone,
       'creatorId': creatorId,
       'creatorName': creatorName,
+      'deptId': deptId,
+      'deptName': deptName,
+      'campusId': campusId,
+      'campusName': campusName,
       'hospId': hospId,
       'hospName': hospName,
       'createTime': createTime,

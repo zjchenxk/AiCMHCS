@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:client/main.dart';
+import 'package:client/services/time_service.dart';
 import 'package:client/utils/log_helper.dart';
 import 'package:client/view_models/child/child_create_view_model.dart';
 import 'package:client/views/child/child_form_widgets.dart';
@@ -82,7 +84,9 @@ class ChildBasicInfoFormState extends State<ChildBasicInfoForm> {
   void initState() {
     super.initState();
     final child = widget.viewModel.child;
-    _checkTimeCtrl.text = child?.checkTime ?? _formatDateTime(DateTime.now());
+    // 建档时间默认值取全局时间服务（服务端口径，避免终端本地时钟
+    // 不一致导致建档时间失真）
+    _checkTimeCtrl.text = _dateOnly(child?.checkTime) ?? _formatDateTime(getIt<TimeService>().now()).substring(0, 10);
     _visitCardCtrl.text = child?.visitCardNo ?? '';
     _ecardCtrl.text = child?.ecardId ?? '';
     _nameCtrl.text = child?.name ?? '';
@@ -191,27 +195,34 @@ class ChildBasicInfoFormState extends State<ChildBasicInfoForm> {
     }
   }
 
+  /// 取 yyyy-MM-dd 部分（CHECK_TIME 为 DATE 列；兼容存量带时刻的值）。
+  String? _dateOnly(String? value) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) return null;
+    return v.length >= 10 ? v.substring(0, 10) : v;
+  }
+
   /// yyyy-MM-dd HH:mm:ss（本地时间，与服务端 formatTimestamp 同格式）。
   String _formatDateTime(DateTime t) {
     String two(int n) => n.toString().padLeft(2, '0');
     return '${t.year}-${two(t.month)}-${two(t.day)} ${two(t.hour)}:${two(t.minute)}:${two(t.second)}';
   }
 
-  /// 只读日期框点击弹出日期选择（建档时间保留时分秒、出生日期纯日期）。
-  Future<void> _pickDate({required TextEditingController controller, required String label, bool keepTime = false}) async {
+  /// 只读日期框点击弹出日期选择（建档时间与出生日期均为纯日期）。
+  Future<void> _pickDate({required TextEditingController controller, required String label}) async {
     if (!widget.editable) return;
-    final current = DateTime.tryParse(controller.text.trim()) ?? DateTime.now();
+    // 已填值（兼容存量带时刻格式）解析失败时回退当天，保证弹窗可用。
+    final text = controller.text.trim();
+    final initial = DateTime.tryParse(text.length >= 10 ? text.substring(0, 10) : text) ?? getIt<TimeService>().now();
     final picked = await showDatePicker(
       context: context,
-      initialDate: current,
+      initialDate: initial,
       firstDate: DateTime(1900),
       lastDate: DateTime(2100),
       helpText: '选择$label',
     );
     if (picked == null) return;
-    final base = picked;
-    final text = keepTime ? _formatDateTime(DateTime(base.year, base.month, base.day, current.hour, current.minute, current.second)) : _formatDateTime(DateTime(base.year, base.month, base.day)).substring(0, 10);
-    setState(() => controller.text = text);
+    setState(() => controller.text = _formatDateTime(picked).substring(0, 10));
   }
 
   @override
@@ -247,7 +258,7 @@ class ChildBasicInfoFormState extends State<ChildBasicInfoForm> {
                     controller: _checkTimeCtrl,
                     readOnly: true,
                     enabled: editable,
-                    onTap: () => _pickDate(controller: _checkTimeCtrl, label: '建档时间', keepTime: true),
+                    onTap: () => _pickDate(controller: _checkTimeCtrl, label: '建档时间'),
                     focusNode: _checkTimeFocus,
                     textInputAction: TextInputAction.next,
                     onFieldSubmitted: (_) => _visitCardFocus.requestFocus(),

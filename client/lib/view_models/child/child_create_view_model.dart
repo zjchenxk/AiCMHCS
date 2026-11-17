@@ -154,6 +154,23 @@ class ChildCreateViewModel extends ChangeNotifier {
 
   String _messageOf(Object e) => e.toString().replaceFirst(RegExp(r'^\w*(Exception|Error):\s*'), '');
 
+  /// 重复建档检查：按「姓名+性别+出生日期」查本院已有档案（修改态自动
+  /// 排除自身）。失败时返回空列表并记日志（查重是保存前的辅助确认，
+  /// 查询异常不应阻断保存流程）。
+  Future<List<ChildInfo>> checkDuplicate(ChildInfo child) async {
+    try {
+      return await _childService.duplicateCheck(
+        name: child.name,
+        sex: child.sex,
+        birthDate: child.birthDate,
+        excludeId: editing ? _child?.id : null,
+      );
+    } catch (e, st) {
+      LogHelper.error('client:ChildCreateViewModel.checkDuplicate', e, st);
+      return const [];
+    }
+  }
+
   /// 载入库内最近一次拍照记录（进浏览态/保存成功后刷新）。
   Future<void> loadLatestPhoto() async {
     final id = currentChildId;

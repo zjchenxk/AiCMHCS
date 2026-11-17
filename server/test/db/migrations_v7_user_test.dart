@@ -8,6 +8,7 @@ import 'package:server/database/migrator/migrations/migration_202611071500.dart'
 import 'package:server/database/migrator/migrations/migrations.dart';
 import 'package:server/database/migrator/schema_migrator.dart';
 import 'package:server/utils/field_cipher.dart';
+import 'package:server/utils/uuid_util.dart';
 import 'package:test/test.dart';
 
 import '../support/test_divisions.dart';
@@ -36,11 +37,12 @@ void main() {
     clearTestDivisionsCsv(divisionsDir);
   });
 
+  // 主键 ID 为 CHAR(36) UUID v7、无自增/默认值，直插必须显式携带。
   Future<void> insertUser(String userCode, String roleCode) => db.execute(
     'INSERT INTO SYS_USER '
-    '(USER_CODE, PASSWORD, USER_NAME, ROLE_CODE, STATUS, CREATED_AT, '
-    'UPDATED_AT) VALUES (?, ?, ?, ?, 1, ?, ?)',
-    [userCode, 'salt:hash', '用户', roleCode, '2026-01-01 08:00:00', '2026-01-02 09:00:00'],
+    '(ID, USER_CODE, PASSWORD, USER_NAME, ROLE_CODE, STATUS, CREATED_AT, '
+    'UPDATED_AT) VALUES (?, ?, ?, ?, ?, 1, ?, ?)',
+    [newUuid(), userCode, 'salt:hash', '用户', roleCode, '2026-01-01 08:00:00', '2026-01-02 09:00:00'],
   );
 
   /// 查询 SYS_USER 当前的全部列名。
@@ -96,12 +98,14 @@ void main() {
     expect(idx.rowsAsMaps.first['CNT'], '1');
 
     // 身份证号按等保口径 seal/mac 成对写入（独立 purpose 派生子钥）。
+    // 主键 ID 为 CHAR(36) UUID v7，直插显式携带。
     await db.execute(
       'INSERT INTO SYS_USER '
-      '(USER_CODE, PASSWORD, USER_NAME, USER_TYPE, PERMISSION_LEVEL, '
+      '(ID, USER_CODE, PASSWORD, USER_NAME, USER_TYPE, PERMISSION_LEVEL, '
       'ID_CARD_NO, ID_CARD_NO_HMAC, STATUS, CREATE_TIME) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)',
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)',
       [
+        newUuid(),
         'nurse01',
         'salt:hash',
         '护士',

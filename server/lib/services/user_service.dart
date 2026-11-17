@@ -3,6 +3,7 @@ import 'package:common/utils/password_policy.dart';
 import 'package:server/database/engine/database_gateway.dart';
 import 'package:server/utils/field_cipher.dart';
 import 'package:server/utils/password_helper.dart';
+import 'package:server/utils/uuid_util.dart';
 
 /// 用户类业务异常：httpStatus / code / message 直接映射到 HTTP 响应
 /// （模式同 AuthException / RoleException）。
@@ -31,10 +32,12 @@ final class UserException implements Exception {
 /// ID_CARD_NO 为 FieldCipher 密文存储并配 *_HMAC 盲索引列（本服务不提供
 /// 按敏感字段查询，盲索引仅随写入同步维护）。USER_CODE 全局唯一（表上
 /// 有 UK 约束兜底，本层先 COUNT 判重给出友好错误）。口令散列复用
-/// PasswordUtil.makeStoredPassword，PASSWORD 任何接口不下发。角色保存为
-/// 全量覆盖（先清后插，网关 execute 不重试、无重复写入风险；网关无事务
-/// 通道，清插非原子——中断重保存可自愈，不影响其他数据）。名称等含
-/// 中文参数由达梦网关参数改写自动内联，业务层直接写参数化 SQL。
+/// PasswordUtil.makeStoredPassword，PASSWORD 任何接口不下发。主键为
+/// 应用侧生成的 UUID v7（CHAR(36)，见 newUuid），INSERT 前置生成、无
+/// 自增回读环节。角色保存为全量覆盖（先清后插，网关 execute 不重试、
+/// 无重复写入风险；网关无事务通道，清插非原子——中断重保存可自愈，
+/// 不影响其他数据）。名称等含中文参数由达梦网关参数改写自动内联，
+/// 业务层直接写参数化 SQL。
 class UserService {
   /// 构造函数：注入数据库网关与字段加密器。
   UserService(this._db, this._cipher);
@@ -61,7 +64,7 @@ class UserService {
 
   /// 查询指定医院下的全部用户（按创建顺序），携带各自拥有的角色 ID。
   Future<List<User>> listByHospital(String hospId) async {
-    final hospValue = _toInt(hospId, '医院ID');
+    final hospValue = _id(hospId, '医院ID');
     final result = await _db.query(
       'SELECT $_columns FROM SYS_USER WHERE HOSP_ID = ? ORDER BY ID',
       [hospValue],
@@ -79,7 +82,7 @@ class UserService {
   Future<User> getById(String id) async {
     final result = await _db.query(
       'SELECT $_columns FROM SYS_USER WHERE ID = ?',
-      [_toInt(id, '用户ID')],
+      [_id(id, '用户ID')],
     );
     if (result.rows.isEmpty) {
       throw UserException(400, 40001, '用户不存在：$id');
@@ -91,7 +94,7 @@ class UserService {
   /// 新增用户，返回新增后的对象。
   ///
   /// 校验：所属医院必须存在、挂载科室必须存在且属于该医院、登录账号
-  /// 必填且全局唯一（回读新行 ID 的自然键）、姓名必填、用户类别与权限
+  /// 必填且全局唯一、姓名必填、用户类别与权限
   /// 级别必填、口令须满足等保三级复杂度（8-32 位、不含与账号相同的
   /// 口令、至少三类字符）、角色必须存在且属于该医院；手机号 / 身份证号
   /// 经 FieldCipher 加密并同步盲索引列。角色关联可为空。
@@ -131,13 +134,15 @@ class UserService {
     final statusValue = _parseStatus(status ?? '1');
     final roleValues = await _ensureRolesExist(hospValue, roleIds);
 
+    final newId = newUuid();
     await _db.execute(
-      'INSERT INTO SYS_USER (USER_CODE, PASSWORD, USER_NAME, USER_TYPE, '
+      'INSERT INTO SYS_USER (ID, USER_CODE, PASSWORD, USER_NAME, USER_TYPE, '
       'PERMISSION_LEVEL, PHONE, PHONE_HMAC, ID_CARD_NO, ID_CARD_NO_HMAC, '
       'HIS_USER_CODE, MCHIS_USER_CODE, CERT_ID, AVATAR_IMAGE, '
       'SIGNATURE_IMAGE, DEPT_ID, HOSP_ID, STATUS, CREATE_TIME) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
+        newId,
         code,
         PasswordHelper.makeStoredPassword(pwd),
         name,
@@ -158,15 +163,6 @@ class UserService {
         formatTimestamp(DateTime.now()),
       ],
     );
-    // 自增 ID 经全局唯一的登录账号回读（网关无 last-insert-id 通道）
-    final row = await _db.query(
-      'SELECT ID FROM SYS_USER WHERE USER_CODE = ?',
-      [code],
-    );
-    if (row.rows.isEmpty) {
-      throw const UserException(500, 50000, '新增用户后回读失败');
-    }
-    final newId = row.rows.first[0]!;
     await _saveRoles(newId, roleValues);
     return getById(newId);
   }
@@ -200,7 +196,7 @@ class UserService {
       }
     }
     final current = await getById(id);
-    final idValue = _toInt(id, '用户ID');
+    final idValue = _id(id, '用户ID');
 
     // 先解析目标值（含敏感字段重算密文与盲索引）
     final name = changes.containsKey('userName') ? _required(changes['userName']?.toString(), '姓名', _nameMaxLength) : null;
@@ -228,7 +224,7 @@ class UserService {
         : null;
     final statusValue = changes.containsKey('status') ? _parseStatus(changes['status']?.toString() ?? '') : null;
     final pwd = password == null || password.trim().isEmpty ? null : _requiredPassword(password, userCode: current.userCode);
-    final roleValues = roleIds == null ? null : await _ensureRolesExist(_toInt(current.hospId, '医院ID'), roleIds);
+    final roleValues = roleIds == null ? null : await _ensureRolesExist(current.hospId, roleIds);
 
     // 构建更新语句（键序即 changes 传入序）
     final setters = <String>[];
@@ -364,7 +360,7 @@ class UserService {
 
   /// 批量查询用户拥有的角色 ID（按 USER_ID 分组、ROLE_ID 升序）。
   Future<Map<String, List<String>>> _loadRoleIds(Iterable<String> userIds) async {
-    final ids = userIds.map((v) => _toInt(v, '用户ID')).toSet().toList(growable: false);
+    final ids = userIds.map((v) => v.trim()).where((v) => v.isNotEmpty).toSet().toList(growable: false);
     if (ids.isEmpty) return {};
     final placeholders = List.filled(ids.length, '?').join(', ');
     final result = await _db.query(
@@ -383,8 +379,8 @@ class UserService {
   }
 
   /// 全量覆盖保存用户角色（先清空既有关联再逐条插入，空列表即清空）。
-  Future<void> _saveRoles(String userId, List<int> roleIds) async {
-    final idValue = _toInt(userId, '用户ID');
+  Future<void> _saveRoles(String userId, List<String> roleIds) async {
+    final idValue = _id(userId, '用户ID');
     await _db.execute(
       'DELETE FROM SYS_USER_ROLE WHERE USER_ID = ?',
       [idValue],
@@ -397,9 +393,9 @@ class UserService {
     }
   }
 
-  /// 校验医院存在，返回其 int 形式 ID。
-  Future<int> _ensureHospital(String hospId) async {
-    final value = _toInt(hospId, '医院ID');
+  /// 校验医院存在，返回其 ID。
+  Future<String> _ensureHospital(String hospId) async {
+    final value = _id(hospId, '医院ID');
     final result = await _db.query(
       'SELECT ID FROM SYS_HOSPITAL WHERE ID = ?',
       [value],
@@ -410,9 +406,9 @@ class UserService {
     return value;
   }
 
-  /// 校验挂载科室存在且属于指定医院，返回其 int 形式 ID。
-  Future<int> _ensureDepartment(int hospId, String deptId) async {
-    final value = _toInt(deptId, '科室ID');
+  /// 校验挂载科室存在且属于指定医院，返回其 ID。
+  Future<String> _ensureDepartment(String hospId, String deptId) async {
+    final value = _id(deptId, '科室ID');
     final result = await _db.query(
       'SELECT HOSP_ID FROM SYS_DEPARTMENT WHERE ID = ?',
       [value],
@@ -420,19 +416,18 @@ class UserService {
     if (result.rows.isEmpty) {
       throw UserException(400, 40001, '挂载科室不存在：$deptId');
     }
-    final deptHosp = int.tryParse(result.rowsAsMaps.first['HOSP_ID'] ?? '');
-    if (deptHosp != hospId) {
+    if (result.rowsAsMaps.first['HOSP_ID'] != hospId) {
       throw const UserException(400, 40001, '挂载科室不属于当前医院');
     }
     return value;
   }
 
   /// 校验角色 ID 全部存在于 SYS_ROLE 且属于指定医院，返回去重后的
-  /// int 形式列表（防止跨医院绑定角色）。
-  Future<List<int>> _ensureRolesExist(int hospId, List<String> roleIds) async {
-    final values = <int>{};
+  /// ID 列表（防止跨医院绑定角色）。
+  Future<List<String>> _ensureRolesExist(String hospId, List<String> roleIds) async {
+    final values = <String>{};
     for (final roleId in roleIds) {
-      values.add(_toInt(roleId, '角色ID'));
+      values.add(_id(roleId, '角色ID'));
     }
     if (values.isEmpty) return [];
     final placeholders = List.filled(values.length, '?').join(', ');
@@ -516,12 +511,11 @@ class UserService {
     return v;
   }
 
-  /// 数字 ID 字符串转 int（网关列值均为字符串，绑定 int 避免两库隐式
-  /// 转换差异）。
-  int _toInt(String id, String label) {
-    final v = int.tryParse(id.trim());
-    if (v == null) {
-      throw UserException(400, 40002, '$label格式不正确：$id');
+  /// 必填 ID 校验：UUID 主键经网关以字符串取回，仅需去空格、非空。
+  String _id(String id, String label) {
+    final v = id.trim();
+    if (v.isEmpty) {
+      throw UserException(400, 40002, '$label不能为空');
     }
     return v;
   }

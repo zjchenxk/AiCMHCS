@@ -15,6 +15,17 @@ const dbMigration_202610231703 = DbMigration(
     "COMMENT ON COLUMN SYS_USER.PHONE IS '联系电话（AES-256-GCM 密文，v1: 前缀）'",
     "COMMENT ON COLUMN SYS_USER.PHONE_HMAC IS '联系电话 HMAC-SHA256 盲索引（应用侧密钥，供精确查询）'",
   ],
+  // PostgreSQL 方言：与达梦同构，逐句对应（差异句已注释标注）。
+  postgres: [
+    'ALTER TABLE SYS_USER ADD COLUMN PHONE_HMAC VARCHAR(64)',
+    // 扩宽容纳密文（11 位号码密文约 55 字符；达梦 VARCHAR 按字节计，
+    // 预留充足）。
+    // 列改型语法差异：MODIFY → ALTER COLUMN ... TYPE
+    'ALTER TABLE SYS_USER ALTER COLUMN PHONE TYPE VARCHAR(256)',
+    'CREATE INDEX IDX_SYS_USER_PHONE_HMAC ON SYS_USER (PHONE_HMAC)',
+    "COMMENT ON COLUMN SYS_USER.PHONE IS '联系电话（AES-256-GCM 密文，v1: 前缀）'",
+    "COMMENT ON COLUMN SYS_USER.PHONE_HMAC IS '联系电话 HMAC-SHA256 盲索引（应用侧密钥，供精确查询）'",
+  ],
   sqlite: [
     '''
 -- 联系电话 HMAC-SHA256 盲索引（应用侧密钥，供精确查询）
@@ -29,13 +40,8 @@ ALTER TABLE SYS_USER ADD COLUMN PHONE_HMAC TEXT
 ///
 /// 幂等：已是密文（`v<N>:` 前缀）或 PHONE 为空的行跳过，中断后重跑
 /// 不会重复处理；行级 UPDATE 走 execute（网关约定不重试，无重复写）。
-Future<void> encryptExistingPhones(
-  DatabaseGateway db,
-  FieldCipher cipher,
-) async {
-  final rows = await db.query(
-    'SELECT ID, PHONE FROM SYS_USER WHERE PHONE IS NOT NULL',
-  );
+Future<void> encryptExistingPhones(DatabaseGateway db, FieldCipher cipher) async {
+  final rows = await db.query('SELECT ID, PHONE FROM SYS_USER WHERE PHONE IS NOT NULL');
   for (final row in rows.rowsAsMaps) {
     final id = row['ID'];
     final phone = row['PHONE'];

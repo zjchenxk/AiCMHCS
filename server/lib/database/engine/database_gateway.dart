@@ -5,14 +5,19 @@ enum DbDialect {
 
   /// SQLite（单机版内嵌数据库）。
   sqlite,
+
+  /// PostgreSQL（开源数据库，非信创医院可选发行档；纯 Dart 驱动）。
+  postgres,
 }
 
-/// 格式化为两库通用的时间戳文本（`YYYY-MM-DD HH:MM:SS`，本地时间）。
+/// 格式化为各库通用的时间戳文本（`YYYY-MM-DD HH:MM:SS`，本地时间）。
 ///
 /// 时间列的值统一由写入方在 Dart 侧生成并作为参数绑定，不使用 SQL 端
 /// 时间函数：达梦绑定字符串可隐式写入 TIMESTAMP(0)，而 SQLite 各发行
 /// 构建对 `'localtime'` 修饰符支持不一（Windows 系统 winsqlite3.dll
-/// 直接返回 NULL），其 CURRENT_TIMESTAMP 又是 UTC。
+/// 直接返回 NULL），其 CURRENT_TIMESTAMP 又是 UTC；PostgreSQL 的时间
+/// 列同样接受字符串隐式转换（参数以 unspecified OID 下发、由服务端
+/// 按目标列推断）。
 String formatTimestamp(DateTime time) {
   String two(int n) => n.toString().padLeft(2, '0');
   return '${time.year.toString().padLeft(4, '0')}-${two(time.month)}-'
@@ -49,9 +54,10 @@ final class DbResult {
       .toList(growable: false);
 }
 
-/// 数据库网关抽象。业务服务统一依赖本接口，不感知底层是达梦还是
-/// SQLite；实现见 [DmGateway]（server/lib/dm/dm_gateway.dart）与
-/// SqliteGateway（server/lib/db/sqlite_gateway.dart）。
+/// 数据库网关抽象。业务服务统一依赖本接口，不感知底层是达梦、SQLite
+/// 还是 PostgreSQL；实现见 [DmGateway]（server/lib/dm/dm_gateway.dart）、
+/// SqliteGateway（server/lib/db/sqlite_gateway.dart）与 PostgresGateway
+/// （server/lib/database/engine/postgres/postgres_gateway.dart）。
 abstract class DatabaseGateway {
   /// 网关使用的数据库方言。
   DbDialect get dialect;

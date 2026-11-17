@@ -58,7 +58,7 @@ class SchemaMigrator {
       if (seed != null) {
         await seed(_db);
       }
-      // 时间列由 Dart 侧生成后参数绑定（两库通用，见 formatTimestamp）。
+      // 时间列由 Dart 侧生成后参数绑定（各库通用，见 formatTimestamp）。
       await _db.execute(
         'INSERT INTO $versionTable (VERSION, DESCRIPTION, APPLIED_AT) '
         'VALUES (?, ?, ?)',
@@ -104,13 +104,25 @@ CREATE TABLE $versionTable (
   DESCRIPTION TEXT NOT NULL,
   APPLIED_AT  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 )''',
+    // 与达梦同构（PostgreSQL 支持 TIMESTAMP(0) 与 DEFAULT CURRENT_TIMESTAMP）。
+    DbDialect.postgres =>
+      '''
+CREATE TABLE $versionTable (
+  VERSION     INT NOT NULL,
+  DESCRIPTION VARCHAR(200) NOT NULL,
+  APPLIED_AT  TIMESTAMP(0) DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  CONSTRAINT PK_SYS_SCHEMA_VERSION PRIMARY KEY (VERSION)
+)''',
   };
 
-  /// 判断表是否存在（达梦查数据字典视图，SQLite 查 sqlite_master）。
+  /// 判断表是否存在（达梦查数据字典视图，SQLite 查 sqlite_master，
+  /// PostgreSQL 查 information_schema；未加引号的标识符在 PostgreSQL
+  /// 中折叠为小写存储，故按 UPPER 比对）。
   Future<bool> _tableExists(String name) async {
     final sql = switch (_db.dialect) {
       DbDialect.dm => 'SELECT COUNT(*) AS CNT FROM USER_TABLES WHERE TABLE_NAME = ?',
       DbDialect.sqlite => "SELECT COUNT(*) AS CNT FROM sqlite_master WHERE type = 'table' AND name = ?",
+      DbDialect.postgres => 'SELECT COUNT(*) AS CNT FROM information_schema.tables WHERE UPPER(table_name) = ? AND table_schema = CURRENT_SCHEMA()',
     };
     final result = await _db.query(sql, [name]);
     return int.parse(result.rowsAsMaps.first['CNT'] ?? '0') > 0;

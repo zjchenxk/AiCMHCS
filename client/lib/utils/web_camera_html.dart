@@ -29,9 +29,9 @@ class WebCamera {
   /// （仅 videoinput，无名称的按序号兜底命名）。
   ///
   /// getTracks/enumerateDevices 走 dynamic 调用：3.32 的 dart:html 在
-  /// DDC 运行时对这两个列表返回值声明的元素类型与实际 JSArray<dynamic>
-  /// 不符，直调会触发隐式转换崩溃（List is not a subtype of
-  /// List<MediaStreamTrack>）。
+  /// DDC 运行时对这两个列表返回值声明的元素类型与实际 `JSArray<dynamic>`
+  /// 不符，直调会触发隐式转换崩溃（`List` is not a subtype of
+  /// `List<MediaStreamTrack>`）。
   Future<List<WebCameraDevice>> listCameras() async {
     final mediaDevices = html.window.navigator.mediaDevices!;
     final probe = await (mediaDevices as dynamic).getUserMedia({

@@ -4,11 +4,12 @@
 
 ## 项目概述
 
-AiCMHCS（智慧儿童心理保健系统）：为满足国家信创要求，技术栈已从 Serverpod + PostgreSQL 整体迁移为 **Dart Frog + 达梦 DM8**。现为 Dart Workspace 组织的三个子包（client / server / common），不再依赖 Serverpod、PostgreSQL、Redis 或 Docker。注释、文档、提交信息一律使用**中文**。
+AiCMHCS（智慧儿童心理保健系统）：为满足国家信创要求，技术栈已从 Serverpod + PostgreSQL 整体迁移为 **Dart Frog + 达梦 DM8**。现为 Dart Workspace 组织的三个子包（client / server / common），不再依赖 Serverpod、Redis 或 Docker。注释、文档、提交信息一律使用**中文**。
 
 - DM8 没有官方/社区 Dart 驱动，后端通过 **DPI 原生接口（`dart:ffi` 直绑 `dmdpi.dll`）** 访问数据库；
-- 数据访问层已抽象为 `DatabaseGateway` 双实现：**网络版达梦 DM8（DPI）/ 单机版 SQLite**（`package:sqlite3`），由环境变量 `AICMHCS_DB_DRIVER`（dm 默认 / sqlite）切换；
-- 运行后端需本机安装 DM8（默认 `C:\dmdbms`，实例端口 5236），并安装 dart_frog CLI：`dart pub global activate dart_frog_cli`。
+- 数据访问层已抽象为 `DatabaseGateway` 三实现：**网络版达梦 DM8（DPI）/ 单机版 SQLite**（`package:sqlite3`）/ **PostgreSQL**（`package:postgres` 纯 Dart 驱动，无信创要求医院可选发行档），由环境变量 `AICMHCS_DB_DRIVER`（dm 默认 / sqlite / postgres）切换；
+- 业务表主键统一为**应用侧生成的 UUID v7（CHAR(36)）**：`server/lib/utils/uuid_util.dart` 的 `newUuid()`（48 位毫秒时间戳前缀 + 同毫秒单调计数器，字符串序=生成序，`ORDER BY ID` 语义与自增时代一致；仅 SYS_LOGIN_LOG / SYS_OPERATION_LOG 仍自增）——INSERT 前置生成、无自增回读环节，多进程 / 多 isolate 并发写入无冲突；
+- 运行后端需本机安装 DM8（默认 `C:\dmdbms`，实例端口 5236；`AICMHCS_DB_DRIVER=sqlite` / `postgres` 时无需 DM8），并安装 dart_frog CLI：`dart pub global activate dart_frog_cli`。
 
 ## 仓库结构与生成物
 
@@ -16,7 +17,7 @@ AiCMHCS（智慧儿童心理保健系统）：为满足国家信创要求，技�
 client/   Flutter 应用（MVVM，原 aicmhcs_flutter 更名并入）
 server/   Dart Frog 后端：routes / lib(database(engine, migrator), services, utils, models) / tool / test
 common/   前后端共享包：lib/models（basic 行政区划 / system 医院、登录用户）+ lib/utils（SecurePayload 报文加解密）
-database/         DM8 SQL 脚本：01 表空间+账号（SYSDBA 执行）；建表与结构变更在代码中（server/lib/database/migrator/migrations/，双方言迁移）
+database/         DBA 级初始化脚本：01_init_schema.sql（DM8 表空间+账号，SYSDBA 执行）、01_init_postgres.sql（PostgreSQL 建库+应用角色，超级用户 psql 执行）；建表与结构变更在代码中（server/lib/database/migrator/migrations/，三方言迁移）
 tools/            init_db.sh / start_backend.sh / serve_frontend.sh（Git Bash 运行）
 ```
 
@@ -38,6 +39,7 @@ flutter pub get
 # 重灌演示账号（改了演示账号后；结构变更走迁移，见「口令与数据库对象」）
 cd server && dart run tool/seed_demo_data.dart                                  # 达梦（默认）
 cd server && AICMHCS_DB_DRIVER=sqlite dart run tool/seed_demo_data.dart         # 单机版
+cd server && AICMHCS_DB_DRIVER=postgres dart run tool/seed_demo_data.dart       # PostgreSQL（先跑 database/01_init_postgres.sql）
 
 # 启动后端（http://localhost:8080；dart_frog dev 需要交互终端，支持热重载）
 cd server && dart_frog dev
@@ -57,7 +59,7 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 
 端口约定：后端 API `8080`（端口由 dart_frog 标准环境变量 `PORT` 覆盖，`dev` 与 `build` 产物均生效）、前端静态托管 `5173`、DM8 `5236`。
 
-环境变量（后端 `lib/app_config.dart` 读取，默认值对准本机开发环境）：`AICMHCS_DB_DRIVER`（dm 默认 / sqlite 单机版）、`AICMHCS_DB_HOST`（LOCALHOST）、`AICMHCS_DB_PORT`（5236）、`AICMHCS_DB_USER`（AICMHCS，最小权限应用账号，不用 SYSDBA）、`AICMHCS_DB_PASSWORD`（Aicmhcs@2026）、`AICMHCS_DB_FILE`（SQLite 数据文件，默认 data/aicmhcs.db）、`AICMHCS_SQLITE3_DLL`（sqlite3.dll 路径，默认 exe 同目录 → 系统 winsqlite3.dll）、`AICMHCS_FIELD_MASTER_KEY`（字段加密主密钥，base64 的 32 字节；未设时走密钥文件，生产/等保环境必须以本变量注入实现密钥与数据分离）、`AICMHCS_FIELD_KEY_FILE`（字段加密密钥文件，默认 data/aicmhcs.field.key，首启自动生成——单机版交付依赖此机制，密钥文件须单独备份，丢失即无法解密存量数据）、`DM_HOME`（定位 `dmdpi.dll`）。初始化脚本另有 `DM_HOST`/`DM_PORT`/`DM_SYSDBA_PWD`/`APP_DB_PWD`，见 `tools/init_db.sh` 头部注释。
+环境变量（后端 `lib/app_config.dart` 读取，默认值对准本机开发环境）：`AICMHCS_DB_DRIVER`（dm 默认 / sqlite 单机版 / postgres 开源库版）、`AICMHCS_DB_HOST`（LOCALHOST）、`AICMHCS_DB_PORT`（达梦 5236 / PostgreSQL 5432，未配置时按驱动取默认）、`AICMHCS_DB_USER`（达梦 AICMHCS / PostgreSQL aicmhcs，最小权限应用账号，不用 SYSDBA/postgres）、`AICMHCS_DB_PASSWORD`（Aicmhcs@2026）、`AICMHCS_DB_FILE`（SQLite 数据文件，默认 data/aicmhcs.db）、`AICMHCS_DB_NAME`（PostgreSQL 数据库名，默认 aicmhcs）、`AICMHCS_SQLITE3_DLL`（sqlite3.dll 路径，默认 exe 同目录 → 系统 winsqlite3.dll）、`AICMHCS_FIELD_MASTER_KEY`（字段加密主密钥，base64 的 32 字节；未设时走密钥文件，生产/等保环境必须以本变量注入实现密钥与数据分离）、`AICMHCS_FIELD_KEY_FILE`（字段加密密钥文件，默认 data/aicmhcs.field.key，首启自动生成——单机版交付依赖此机制，密钥文件须单独备份，丢失即无法解密存量数据）、`DM_HOME`（定位 `dmdpi.dll`）。初始化脚本另有 `DM_HOST`/`DM_PORT`/`DM_SYSDBA_PWD`/`APP_DB_PWD`，见 `tools/init_db.sh` 头部注释。
 
 演示账号：`admin/Admin@123`（系统管理员）、`doctor01/Doctor@123`（儿童心理医生）、`teacher01/Teacher@123`（教师）、`parent01/Parent@123`（家长）。
 
@@ -65,9 +67,9 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 
 ### 后端（server，Dart Frog）
 
-分层：`routes/`（HTTP 适配，文件路径即 URL）→ `services/`（业务逻辑）→ `lib/database/`（数据访问层，分两块：`engine/` 为网关抽象与达梦/SQLite 双实现，`migrator/` 为结构迁移——`schema_migrator.dart` 执行器 + `migrations/` 逐版本迁移文件与注册表）；达梦 FFI 绑定在 `lib/database/engine/dm/`（DPI / DmGateway）、SQLite 实现在 `lib/database/engine/sqlite/`，字段加密工具 `FieldCipher` 在 `lib/utils/`、API 请求体模型在 `lib/models/`；共享业务模型在 `common/lib/models/`（统一经 `package:common/model.dart` barrel 导入），DB 行解析（`fromRow` 类函数）留在服务层。**没有 ORM/代码生成环节**（协议就是手写 JSON + 手写模型；数据库结构走**手写版本化迁移**，见「口令与数据库对象」）。
+分层：`routes/`（HTTP 适配，文件路径即 URL）→ `services/`（业务逻辑）→ `lib/database/`（数据访问层，分两块：`engine/` 为网关抽象与达梦/SQLite/PostgreSQL 三实现，`migrator/` 为结构迁移——`schema_migrator.dart` 执行器 + `migrations/` 逐版本迁移文件与注册表）；达梦 FFI 绑定在 `lib/database/engine/dm/`（DPI / DmGateway）、SQLite 实现在 `lib/database/engine/sqlite/`、PostgreSQL 实现在 `lib/database/engine/postgres/`（三者共用 `engine/worker_gateway.dart` 的独立隔离区串行架构），字段加密工具 `FieldCipher` 与主键生成 `uuid_util.dart` 在 `lib/utils/`、API 请求体模型在 `lib/models/`；共享业务模型在 `common/lib/models/`（统一经 `package:common/model.dart` barrel 导入），DB 行解析（`fromRow` 类函数）留在服务层。**没有 ORM/代码生成环节**（协议就是手写 JSON + 手写模型；数据库结构走**手写版本化迁移**，见「口令与数据库对象」）。
 
-- **入口注入**：`main.dart` 自定义 `run()` 在启动时按 `AICMHCS_DB_DRIVER` 经 `openDatabaseGateway()`（`lib/database/engine/db_factory.dart`）打开网关（dm → `DmGateway` / sqlite → `SqliteGateway`）、经 `FieldCipher.fromConfig()` 解析字段加密密钥、带密钥跑 `SchemaMigrator.migrate()` 对齐结构、创建 `AuthService`，经 `handler.use(provider<T>(...))` 注入管线（现有 `DatabaseGateway` / `FieldCipher` / `AuthService` / `AdminDivisionService` / `OperationLogService`，操作日志另经 `LogHelper.service` 静态注入供无 context 位置调用）；路由内 `context.read<T>()` 获取。新增单例服务照此在 `main.dart` 注册；
+- **入口注入**：`main.dart` 自定义 `run()` 在启动时按 `AICMHCS_DB_DRIVER` 经 `openDatabaseGateway()`（`lib/database/engine/db_factory.dart`）打开网关（dm → `DmGateway` / sqlite → `SqliteGateway` / postgres → `PostgresGateway`，三者共用 `worker_gateway.dart` 的独立隔离区串行架构）、经 `FieldCipher.fromConfig()` 解析字段加密密钥、带密钥跑 `SchemaMigrator.migrate()` 对齐结构、创建 `AuthService`，经 `handler.use(provider<T>(...))` 注入管线（现有 `DatabaseGateway` / `FieldCipher` / `AuthService` / `AdminDivisionService` / `OperationLogService`，操作日志另经 `LogHelper.service` 静态注入供无 context 位置调用）；路由内 `context.read<T>()` 获取。新增单例服务照此在 `main.dart` 注册；
 - **统一响应**：`{'code': 0|非0, 'message': '...', 'data': ...}`，`code == 0` 表示成功。业务码与 HTTP 状态对应：40001/40002→400、40101/40102/40103→401、40301→403、40500→405、50000→500（全局兜底）。参照 `routes/api/auth/login.dart` 的 `_error` helper。响应报文会被 `/api` 加密中间件整体封入信封（见「安全层现状」）；
 - **业务异常模式**：service 层抛带 `httpStatus/code/message` 的异常（现有 `AuthException`，新模块可仿建），路由 `catch` 后转错误响应；用户不存在与口令错误统一提示，避免账号枚举；
 - **中间件**：全局 `routes/_middleware.dart`（CORS `*` 供 Flutter Web 跨域 + 未捕获异常兜底 500 并落操作日志）；报文加解密与会话校验的共用实现抽在 `server/lib/middlewares/api_secure_middleware.dart`（`apiSecureMiddleware`），**由各叶子路由段的 `_middleware.dart` 引用**（现挂 `routes/api/auth/`、`routes/api/adminDivision/`、`routes/api/hospital/`、`routes/api/campus/`、`routes/api/department/`、`routes/api/menu/`、`routes/api/role/`、`routes/api/user/` 与 `routes/api/logs/`）。⚠️ 加密中间件**不能挂在会被路径穿越的段**（如 `routes/api/`）：dart_frog Router 对 mount 内层路由不命中时会回退尝试下一个 mount，且重建 context 时丢弃 shelf request context——路径穿越段先读掉 body 流后，最终命中段的中间件再读 body 会因 shelf 请求体只能读一次而报错，非 GET 请求全部 400。新增 API 模块时在其目录下建 `_middleware.dart` 一行引用 `apiSecureMiddleware` 即可（详见「安全层现状」）；
@@ -75,19 +77,19 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 
 ### 数据库访问约定（信创核心约束，务必遵守）
 
-- 业务代码统一经 `DatabaseGateway`（`lib/database/engine/database_gateway.dart`）访问数据库，**不要直接使用 `Dpi` / `DmConnection` / sqlite3**（FFI 调用同步阻塞，会卡住 HTTP 事件循环）；两个实现（`DmGateway` / `SqliteGateway`）共用 `lib/database/engine/worker_gateway.dart` 的 isolate 工作区基类：连接在独立 isolate 串行执行，默认 30 秒超时；达梦侧 `query`/`ping` 失败自动重连并重试一次，`execute`/`executeDirect` **不重试**（防重复写入）。`Dpi.open()` 已处理 DLL 依赖链多轮加载（`dmdpi → dmcomm → libcrypto`），勿重复造轮子；
-- **字符集**：达梦全程走 DPI 的 W 系列（UTF-16）接口，GB18030 实例由 DPI 自动转码，Dart 侧始终处理 Unicode。`dpi_bind_param` 无宽字符版本——**绑定参数只支持 ASCII**；该限制已下沉到 `DmGateway`（`lib/database/engine/dm/dm_param_rewrite.dart` 自动把非 ASCII 参数转义内联、ASCII 照常绑定），**业务层直接写参数化 SQL，中文参数照常传，不要手拼 SQL 字面量**；
-- SQL 占位符 `?` 两库通用；`DbResult` 所有列以字符串返回（NULL 为 null），数值/时间由模型层按需转换（参照 `AuthService._loginUserFromRow`）；
+- 业务代码统一经 `DatabaseGateway`（`lib/database/engine/database_gateway.dart`）访问数据库，**不要直接使用 `Dpi` / `DmConnection` / sqlite3 / postgres 包**（FFI 调用同步阻塞，会卡住 HTTP 事件循环）；三个实现（`DmGateway` / `SqliteGateway` / `PostgresGateway`）共用 `lib/database/engine/worker_gateway.dart` 的 isolate 工作区基类：连接在独立 isolate 串行执行，默认 30 秒超时；达梦/PostgreSQL 侧 `query`/`ping` 失败自动重连并重试一次，`execute`/`executeDirect` **不重试**（防重复写入）。`Dpi.open()` 已处理 DLL 依赖链多轮加载（`dmdpi → dmcomm → libcrypto`），勿重复造轮子；PostgreSQL 网关把业务 SQL 的 `?` 占位符自动改写为 `$n` 位置参数、结果列名统一转大写返回（PG 将未加引号标识符折叠为小写），详见 `postgres_gateway.dart` 头注释；
+- **字符集**：达梦全程走 DPI 的 W 系列（UTF-16）接口，GB18030 实例由 DPI 自动转码，Dart 侧始终处理 Unicode。`dpi_bind_param` 无宽字符版本——**绑定参数只支持 ASCII**；该限制已下沉到 `DmGateway`（`lib/database/engine/dm/dm_param_rewrite.dart` 自动把非 ASCII 参数转义内联、ASCII 照常绑定），**业务层直接写参数化 SQL，中文参数照常传，不要手拼 SQL 字面量**（SQLite / PostgreSQL 网关无此限制，统一走参数绑定）；
+- SQL 占位符 `?` 各库通用；`DbResult` 所有列以字符串返回（NULL 为 null；PostgreSQL 网关将 DATE/TIMESTAMP 列格式化为 `yyyy-MM-dd` / `yyyy-MM-dd HH:MM:SS` 本地时间口径，与达梦 DPI 字符串口径一致），数值/时间由模型层按需转换（参照 `AuthService._loginUserFromRow`）；
 - **敏感字段加密存储（等保）**：`SYS_USER.PHONE` / `SYS_USER.ID_CARD_NO` 等敏感个人信息列存 `FieldCipher`（`lib/utils/field_cipher.dart`）的 AES-256-GCM 密文（`v1:` 版本前缀 + base64，同明文每次密文不同），配套冗余哈希列 `PHONE_HMAC` / `ID_CARD_NO_HMAC`（HMAC-SHA256 盲索引，应用侧密钥防穷举）供精确查询——查询一律在应用侧 `cipher.mac(purpose, 明文)` 后 `WHERE <字段>_HMAC = ?` 绑定，**不支持 LIKE 模糊查询/排序**；写入经 `seal`、读出经 `open`（不带版本前缀的存量明文原样返回兜底）；purpose 按字段区分（现有 `FieldCipher.phonePurpose` / `FieldCipher.idCardNoPurpose`），新敏感字段选新 purpose 即可派生独立子钥；密文与 HMAC 均为 ASCII，天然满足达梦绑定参数限制；**日志与异常信息中不得输出解密后的明文**；
-- **时间列**：统一在 Dart 侧用 `formatTimestamp(DateTime.now())` 生成后作为参数绑定写入（达梦隐式转 TIMESTAMP(0)；SQLite 的 `CURRENT_TIMESTAMP` 是 UTC，且 Windows 系统 winsqlite3.dll 的 `'localtime'` 修饰符返回 NULL，SQL 端时间函数不可依赖）；
+- **时间列**：统一在 Dart 侧用 `formatTimestamp(DateTime.now())` 生成后作为参数绑定写入（达梦/PostgreSQL 隐式转 TIMESTAMP(0)，PostgreSQL 参数以 unspecified OID 下发由服务端推断；SQLite 的 `CURRENT_TIMESTAMP` 是 UTC，且 Windows 系统 winsqlite3.dll 的 `'localtime'` 修饰符返回 NULL，SQL 端时间函数不可依赖）；
 - SQLite 网关（`lib/database/engine/sqlite/sqlite_gateway.dart`）：Windows 原生库解析顺序 `AICMHCS_SQLITE3_DLL` → exe 同目录 `sqlite3.dll` → 系统 `winsqlite3.dll`（单机版打包时随包分发官方 sqlite3.dll 即可）；`:memory:` 供测试，按路径缓存防 dart_frog 热重载泄漏 isolate。依赖锁定 `sqlite3` **2.4.0 双保险**：`server/pubspec.yaml` 精确锁定（勿加 `^`）+ 根 `pubspec.yaml` 的 `dependency_overrides`——后者优先级高于一切约束，实测连 `pub upgrade --major-versions` 都会被挡下（pub 会警告 `dependency_overrides prevents upgrades for: sqlite3`，属预期，无需处理）。原因：3.x 删除了 `open.dart` 的动态库覆盖机制、改为构建期 hook 下载预编译库，与 dart_frog 打包/离线信创环境/随包分发 dll 冲突。将来若要升 3.x，必须先删根 pubspec 的 override。
 
 ### 口令与数据库对象
 
 - 口令散列：`sha256(salt + password)` 十六进制，存储格式 `salt:hash`（salt 为 16 字节随机数的十六进制）。演示数据 `tool/seed_demo_data.dart` 直接复用 `PasswordUtil.makeStoredPassword`（`server/lib/utils/password_util.dart`，仅服务端持有的加盐散列生成/校验），算法天然一致，不存在两处维护。口令复杂度按等保三级校验（8-32 位、不得与登录账号相同、大写/小写/数字/特殊字符至少三类），规则与文案统一在 **common 包 `common/lib/utils/password_policy.dart` 的 `PasswordPolicy`**（`complexityError` 用户表单/服务端兜底、`quickError`/`strongError` 修改密码场景）：新增与重置口令时服务端 `UserService._requiredPassword` 兜底、前端 `user_info_form.dart` 与 `change_password_dialog.dart` 即时提示均调同一实现，改规则只改 common 一处；
-- 数据库：达梦为 `AICMHCS` 模式，SQLite 为单个数据文件（默认 `data/aicmhcs.db`）。现有表：`SYS_USER`（系统用户，v7 改造为 USER_TYPE 用户类别 + PERMISSION_LEVEL 权限级别（0-个人级/1-机构级/2-跨机构级）角色体系，时间列 CREATE_TIME/UPDATE_TIME，PHONE 与 ID_CARD_NO 存密文并配 `*_HMAC` 盲索引列，另有 HIS/MCHIS 用户代码、CERT_ID、AVATAR_IMAGE（v13 用户头像 base64）、SIGNATURE_IMAGE、DEPT_ID、HOSP_ID（与 SYS_CAMPUS.HOSP_ID 同名对齐），见「数据库访问约定」；存量 TEACHER/PARENT 类别原值保留待人工订正）、`SYS_LOGIN_LOG`（登录审计）、`SYS_OPERATION_LOG`（操作日志，见「操作日志」）、`SYS_SCHEMA_VERSION`（迁移版本历史）、`BASE_ADMIN_DIVISIONS`（行政区划基础表，v3 seed 导入）、`SYS_HOSPITAL`（医院表，医联体树形 PARENT_ID 自关联，v5）、`SYS_CAMPUS`（院区表，HOSP_ID 关联医院，v6，删除医院/院区前须先删院区/科室——服务层校验）、`SYS_DEPARTMENT`（科室表，HOSP_ID 关联医院 + CAMPUS_ID 可选关联院区 + PARENT_ID 自关联下级科室，v9；顶级科室可直挂医院根或挂院区下（2026-11-10 起取消「已设院区必须挂院区下」限制）、删科室须先删下级）、`SYS_MENU`（菜单表，「模块→菜单→操作」树 PARENT_ID 自关联，v10，ITEM_CODE 全表唯一经服务层校验、删上级须先删下级）、`SYS_ROLE`（角色表，HOSP_ID 关联医院按医院隔离，v11，ROLE_CODE/ROLE_NAME 同医院内唯一经服务层校验，删除时连带清空 SYS_ROLE_PERMISSION）、`SYS_ROLE_PERMISSION`（角色权限表，ROLE_ID+MENU_ID 复合主键关联 SYS_MENU，v11，全量覆盖式保存）、`SYS_USER_ROLE`（用户角色表，USER_ID+ROLE_ID 复合主键，v12，随用户保存全量覆盖、角色须属于用户所在医院），系统表前缀 `SYS_`、基础表前缀 `BASE_`；
-- **结构变更走代码迁移**（`server/lib/database/migrator/`：`schema_migrator.dart` 执行器 + `migrations/` 迁移目录——`base/migration.dart` 的 `DbMigration` 定义、`migration_<创建时间戳>.dart` 每个迁移一个文件、`migrations.dart` 注册表 `dbMigrations`；启动/seed 时自动补齐到最新版本）：已发布的迁移**不可修改，只能向后追加**（版本号严格递增，启动时校验）；迁移里**不要写 `DROP TABLE IF EXISTS`**（对升级用户是数据丢失）；演示数据不进迁移（生产不得自动长出演示账号）。DDL 约定：表/列名全大写、主键达梦 `BIGINT IDENTITY(1,1)` / SQLite `INTEGER PRIMARY KEY AUTOINCREMENT`、约束命名 `PK_<表>` / `UK_<表>_<字段>`、时间列达梦 `TIMESTAMP(0)` / SQLite `TEXT`；中文注释达梦用 `COMMENT ON`、SQLite 用语句内 `--`。改结构 = 在 `migrations/` 新建 `migration_<时间戳>.dart`（文件名取迁移创建时刻 `YYYYMMDDHHmm`，文件内为顶层 const `dbMigration_<时间戳>`，两库通用语句放 `common`，方言差异放 `dm`/`sqlite`），再在 `migrations.dart` 的 `dbMigrations` 列表按版本顺序追加；语句表达不了的数据订正（如 v2 存量明文加密）附 `dataFix` 回调（写在同一迁移文件内）——必须幂等（中断重跑不重复处理），`FieldCipher` 密钥经 `SchemaMigrator` 构造函数注入，含 dataFix 的迁移未注入密钥时启动即报错（DDL 不落半途状态）；
-- `database/` 仅保留 `01_init_schema.sql`（表空间 + 应用账号——DBA 级对象创建进不了应用代码）；开发期推倒重来：达梦 `./tools/init_db.sh`（DROP USER 重建 + 迁移 + 演示账号），单机版删数据文件。
+- 数据库：达梦为 `AICMHCS` 模式，SQLite 为单个数据文件（默认 `data/aicmhcs.db`），PostgreSQL 为独立数据库 `aicmhcs`（对象建在库内 public 模式）。现有表（除 `SYS_LOGIN_LOG`/`SYS_OPERATION_LOG` 外主键统一 CHAR(36) UUID v7，由应用侧 `newUuid()` 生成）：`SYS_USER`（系统用户，v7 改造为 USER_TYPE 用户类别 + PERMISSION_LEVEL 权限级别（0-个人级/1-机构级/2-跨机构级）角色体系，时间列 CREATE_TIME/UPDATE_TIME，PHONE 与 ID_CARD_NO 存密文并配 `*_HMAC` 盲索引列，另有 HIS/MCHIS 用户代码、CERT_ID、AVATAR_IMAGE（v13 用户头像 base64）、SIGNATURE_IMAGE、DEPT_ID、HOSP_ID（与 SYS_CAMPUS.HOSP_ID 同名对齐），见「数据库访问约定」；存量 TEACHER/PARENT 类别原值保留待人工订正）、`SYS_LOGIN_LOG`（登录审计，自增主键）、`SYS_OPERATION_LOG`（操作日志，自增主键，见「操作日志」）、`SYS_SCHEMA_VERSION`（迁移版本历史，INT 主键）、`BASE_ADMIN_DIVISIONS`（行政区划基础表，CODE 主键，v3 seed 导入）、`SYS_HOSPITAL`（医院表，医联体树形 PARENT_ID 自关联，v5）、`SYS_CAMPUS`（院区表，HOSP_ID 关联医院，v6，删除医院/院区前须先删院区/科室——服务层校验）、`SYS_DEPARTMENT`（科室表，HOSP_ID 关联医院 + CAMPUS_ID 可选关联院区 + PARENT_ID 自关联下级科室，v9；顶级科室可直挂医院根或挂院区下（2026-11-10 起取消「已设院区必须挂院区下」限制）、删科室须先删下级）、`SYS_MENU`（菜单表，「模块→菜单→操作」树 PARENT_ID 自关联，v10，ITEM_CODE 全表唯一经服务层校验、删上级须先删下级）、`SYS_ROLE`（角色表，HOSP_ID 关联医院按医院隔离，v11，ROLE_CODE/ROLE_NAME 同医院内唯一经服务层校验，删除时连带清空 SYS_ROLE_PERMISSION）、`SYS_ROLE_PERMISSION`（角色权限表，ROLE_ID+MENU_ID 复合主键关联 SYS_MENU，v11，全量覆盖式保存）、`SYS_USER_ROLE`（用户角色表，USER_ID+ROLE_ID 复合主键，v12，随用户保存全量覆盖、角色须属于用户所在医院）、儿童建档四表 `CHILD_INFO`/`CHILD_EXT_INFO`/`CHILD_GUARDIAN_INFO`/`CHILD_PHOTO`（v15/v17：CHECK_TIME 为 DATE 列；四表均冗余归属列 CREATOR_ID/CREATOR_NAME + DEPT_ID/DEPT_NAME/CAMPUS_ID/CAMPUS_NAME + HOSP_ID/HOSP_NAME，建档时取自创建人会话、修改不更新；敏感字段密文 + HMAC 盲索引见「数据库访问约定」）与字典 `BASE_DICT`/`BASE_DICT_ITEM`（v14，DICT_CODE 同医院唯一、ITEM_CODE 同字典唯一经服务层校验），系统表前缀 `SYS_`、基础表前缀 `BASE_`、儿童表前缀 `CHILD_`；
+- **结构变更走代码迁移**（`server/lib/database/migrator/`：`schema_migrator.dart` 执行器 + `migrations/` 迁移目录——`base/migration.dart` 的 `DbMigration` 定义、`migration_<创建时间戳>.dart` 每个迁移一个文件、`migrations.dart` 注册表 `dbMigrations`；启动/seed 时自动补齐到最新版本）：已发布的迁移**不可修改，只能向后追加**（版本号严格递增，启动时校验）；迁移里**不要写 `DROP TABLE IF EXISTS`**（对升级用户是数据丢失）；演示数据不进迁移（生产不得自动长出演示账号）。DDL 约定：表/列名全大写、主键统一 `CHAR(36)`（UUID v7 应用侧生成；达梦/PostgreSQL 同构、SQLite 为 `TEXT PRIMARY KEY NOT NULL`；仅 SYS_LOGIN_LOG / SYS_OPERATION_LOG / SYS_SCHEMA_VERSION 例外）、约束命名 `PK_<表>` / `UK_<表>_<字段>`、时间列达梦/PostgreSQL `TIMESTAMP(0)` / SQLite `TEXT`；中文注释达梦/PostgreSQL 用 `COMMENT ON`、SQLite 用语句内 `--`。改结构 = 在 `migrations/` 新建 `migration_<时间戳>.dart`（文件名取迁移创建时刻 `YYYYMMDDHHmm`，文件内为顶层 const `dbMigration_<时间戳>`，各库通用语句放 `common`，方言差异放 `dm`/`sqlite`/`postgres`——PostgreSQL 与达梦 DDL 大多同构，差异句主要是列改名 `RENAME COLUMN` 与列改型 `ALTER COLUMN ... TYPE`，勿照抄达梦的 `ALTER COLUMN x RENAME TO y` / `MODIFY`），再在 `migrations.dart` 的 `dbMigrations` 列表按版本顺序追加；语句表达不了的数据订正（如 v2 存量明文加密）附 `dataFix` 回调（写在同一迁移文件内）——必须幂等（中断重跑不重复处理），`FieldCipher` 密钥经 `SchemaMigrator` 构造函数注入，含 dataFix 的迁移未注入密钥时启动即报错（DDL 不落半途状态）；
+- `database/` 仅保留 DBA 级初始化脚本（对象创建进不了应用代码）：达梦 `01_init_schema.sql`（表空间 + 应用账号）、PostgreSQL `01_init_postgres.sql`（建库 + 应用角色，可整库重建）。开发期推倒重来：达梦 `./tools/init_db.sh`（DROP USER 重建 + 迁移 + 演示账号），PostgreSQL 重跑 `01_init_postgres.sql` + seed，单机版删数据文件。
 
 ### 前端（client）— MVVM
 
@@ -97,6 +99,7 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 - **ViewModel 模式**（参照 `hospital_management_view_model.dart`）：私有字段 + getter、`_loading`/`_errorMsg` 状态、状态变更后 `notifyListeners()`、异步方法返回 `Future<bool>` 表示成败。新 ViewModel 必须注册到 `main.dart` 的 `MultiProvider`；
 - **表单回车跳格与校验定位**：信息编辑表单的输入框按回车自动跳到下一个输入框、最后一个输入框回车直接提交。**必须用显式 FocusNode 链**（`initState` 创建、`dispose` 释放、每框 `focusNode:` 绑定 + `onFieldSubmitted` 定向 `nextNode.requestFocus()`，参照 `role_form_dialog.dart` 与 `views/system/user_info_form.dart`）；**禁止 `FocusScope.of(context).nextFocus()`**——它按整页焦点树找下一个可聚焦节点，会把焦点漏到页面其他可聚焦控件（左侧树节点、按钮等）。下拉选择框不参与回车链（回车从其上方输入框直接跳到其下方输入框；Tab 遍历仍可到达）；`textInputAction` 中间输入框用 `next`、最后一个用 `done`。长表单保存校验失败时**滚动定位到首个报错字段**（报错框可能在视野外，用户看不到提示）：参与校验的字段（含下拉框）各挂 `GlobalKey<FormFieldState<String>>` 按表单顺序登记，`validate()` 失败后遍历取首个 `errorText != null` 的字段 `Scrollable.ensureVisible` 滚入视野，输入框再附 `requestFocus`（键盘跟随、可直接修改，实现见 `user_info_form.dart` 的 `_scrollToFirstError`）；
 - **新页面接入路由**：菜单项在 `main_view_model.dart` 的 `menus` 列表中定义（带 `route`），页面构造器注册到 `lib/routes/menu_routes.dart`（key 与 `MenuItem.route` 一致）；
+- **全局时间服务（业务时间统一口径）**：客户端采集时间一律走 `services/time_service.dart` 的 `TimeService.now()`（getIt 注册，main 启动即 `startAutoSync()`），**不要在业务代码直接 `DateTime.now()`**（技术用途如防抖/唯一 ID 除外）——终端本地时钟不可信，建档时间默认值、实际年龄、相对时间等业务时间须与服务端一致。机制为偏移推算式同步：向 `GET /api/time`（明文白名单、极轻量）采样 3 次取最小 RTT 计算偏移，本地推算零网络开销；登录成功再即时校准一次、此后每 30 分钟周期重校准；同步失败静默回退本地时钟（`isSynced` 可诊断），业务可用性不受阻。
 - 后端地址配置在 `assets/config.json` 的 `apiUrl`，`main()` 中分别调用 `AuthService.loadConfig()` 与 `BaseService.loadConfig()` 读取；`http` 包已在 client 依赖中。
 
 ### 安全层现状（报文加密）
@@ -183,7 +186,7 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 
 ## 新增一个全栈功能的标准流程
 
-1. 在 `server/lib/database/migrator/migrations/` 新建 `migration_<时间戳>.dart` 结构迁移（`DbMigration`，双方言语句，沿用 DDL 约定）并在 `migrations.dart` 的 `dbMigrations` 注册，启动后端或 `dart run tool/seed_demo_data.dart` 即自动应用；
+1. 在 `server/lib/database/migrator/migrations/` 新建 `migration_<时间戳>.dart` 结构迁移（`DbMigration`，三方言语句 common/dm/sqlite/postgres，沿用 DDL 约定与 UUID 主键约定）并在 `migrations.dart` 的 `dbMigrations` 注册，启动后端或 `dart run tool/seed_demo_data.dart` 即自动应用；
 2. 在 `common/lib/models/<模块>/` 写共享模型（`fromJson`/`toJson`，并在 `common/lib/model.dart` 追加 export）；DB 行解析放 `server` 服务层（如 `AuthService._loginUserFromRow`）；
 3. 在 `server/lib/services/` 写业务服务（构造注入 `DatabaseGateway`）；需在路由中直接读取的，在 `main.dart` 用 `provider<T>` 注入；
 4. 在 `server/routes/api/<模块>/` 写路由（统一响应格式 + `_error` helper + 业务异常转换）；非 GET 请求取参用 `context.read<ApiBody>().json`（加密中间件已解出明文）；
@@ -201,13 +204,13 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 
 ## 测试
 
-- 后端测试位于 `server/test/`，为纯单元测试（口令散列、令牌逻辑、`SecurePayload` 信封加解密、`FieldCipher` 字段加密与盲索引、v2 存量加密回填、达梦参数改写、SQLite 网关 / 结构迁移 / 登录链路集成），**不需要** DM8 实例或 Docker——SQLite 测试走 `:memory:`，Windows 下原生库自动回退系统 `winsqlite3.dll`，直接 `dart test`；
+- 后端测试位于 `server/test/`，为纯单元测试（口令散列、令牌逻辑、`SecurePayload` 信封加解密、`FieldCipher` 字段加密与盲索引、UUID v7 主键生成与单调性、v2 存量加密回填、达梦参数改写、SQLite 网关 / 结构迁移 / 登录链路与各业务服务集成），**不需要** DM8 / PostgreSQL 实例或 Docker——SQLite 测试走 `:memory:`，Windows 下原生库自动回退系统 `winsqlite3.dll`，直接 `dart test`；
 - 前端测试位于 `client/test/`，用 `flutter test`；现有登录链路 widget 测试（`FakeAuthService` 注入 `LoginViewModel`）：登录失败 SnackBar 提示、登录成功写入全局 `loginUser` 并同步 `MainViewModel` 工作副本——新增涉及登录/主界面的改动时仿照扩展；
 - 原 GitHub Actions CI 已随信创迁移移除（仓库无 `.github/` 目录）。
 
 ## 当前已知 Mock / 待接线（勿误判为已接通）
 
-- **后端已实现真实接口**：`POST /api/auth/login`、`GET /api/auth/me`、`GET /api/auth/roles`（登录前按用户名查角色）、`GET /health`（数据库探活）——登录链路后端侧已通（达梦经 `init_db.sh` 初始化后可用，单机版 `AICMHCS_DB_DRIVER=sqlite` 首启自动建库）；
+- **后端已实现真实接口**：`POST /api/auth/login`、`GET /api/auth/me`、`GET /api/auth/roles`（登录前按用户名查角色）、`GET /api/time`（全局时间服务，明文白名单，供客户端时钟校准）、`GET /health`（数据库探活）——登录链路后端侧已通（达梦经 `init_db.sh` 初始化后可用，单机版 `AICMHCS_DB_DRIVER=sqlite` 首启自动建库）；
 - **客户端登录已接通**：`LoginViewModel.login()` 调用真实后端，成功后写入全局 `token`、`sessionKey` 与 `loginUser`（`LoginUser.fromJson` 解析），登录页跳转主界面前经 `MainViewModel.setRoleMenus()` + `syncLoginUser()` 刷新侧边栏菜单与工作副本，注销时三者清空。登录响应 user 已对齐 SYS_USER 新结构下发全量协议字段：`userType`/`permissionLevel`/`phone`/`idCardNo`/`hisUserCode`/`mchisUserCode`/`certId`/`signatureImage`/`avatarImage`/`deptId`/`hospId`（PHONE/ID_CARD_NO 服务端 `FieldCipher.open` 解密后明文下发，传输由信封保护）；工作区名称已由登录 SQL 关联下发真实数据：`hospName` LEFT JOIN SYS_HOSPITAL、`deptName` LEFT JOIN SYS_DEPARTMENT、`campusId`/`campusName` 经所属科室的 CAMPUS_ID 间接关联 SYS_CAMPUS（未设置归属时为 null，`MainViewModel.syncLoginUser()` 工作副本**只存真实值、不再保底本地默认示例**，主界面信息栏按 null 逐项隐藏）。登录时服务端校验所选角色确属该用户（SYS_USER_ROLE，未分配返回 40301）、roleId 记入 `LoginSession`，响应 `data.menus` 随登录下发该角色已授权的模块/菜单（`MenuService.listRoleAll`：ITEM_TYPE 限 1-模块/2-菜单、按 ITEM_CODE 排序；**隐藏项目（VISIBLE='0'）有意随登录下发**，VISIBLE 原样携带、由客户端决定展示形态）；主界面侧边栏由 `MainViewModel.setRoleMenus()` 按 parentId 构建两层树（上级模块未授权的散落菜单兜底挂根级），图标经 `menuIconOrFallback` 解析、查不到按项目类型回退——**`MainViewModel.menus` 已为动态数据，不要回退成硬编码菜单列表**。顶栏用户菜单头像优先显示 `AVATAR_IMAGE`（裸 base64，解码失败回退姓名首字）。`LoginUser` 工作区字段已统一新命名 `hospId`/`hospName`/`campusId`/`campusName`（协议 JSON 键与字段同名，不兼容旧 `organId`/`branchId` 键，前后端需同步）。登录页下拉已由科室改为**角色**：输入用户名回车/失焦后经 `AuthService.fetchUserRoles`（`GET /api/auth/roles?usercode=`，白名单明文接口）拉取该用户名在 SYS_USER × SYS_USER_ROLE × SYS_ROLE 三表中拥有的角色 ID 与名称绑定下拉框（同一用户名不重复请求、用户名变更后清空失效选择、登录前兜底补加载），登录请求携带所选角色 ID；
 - 行政区划与医院管理均已接通真实后端：`AdminDivisionsService` 走 `/api/adminDivision/*`（树形懒加载 + 医院表单地址级联），`HospitalService` 走 `/api/hospital/*`（医院查看/新增/修改/级联删除，右侧表单三态录入，同行政区划交互；列表接口按登录用户 hospId 做数据范围过滤——为空返回全部，非空仅该医院及其嵌套下级，`scopeRootId` 随响应下发、限定范围时前端隐藏「添加顶级医院」入口），`LogService` 走 `/api/logs`（操作日志上报）；
 - 院区管理与科室管理均已接通真实后端：`CampusService` 走 `/api/campus/*`（左列表右表单三态，院区归属登录用户所属医院），`DepartmentService` 走 `/api/department/*`（科室管理页左「医院→院区→科室→下级科室」树 + 右三态表单；树根为登录用户所属医院，顶级科室可直挂医院根或挂院区下（2026-11-10 起取消强制挂院区限制，医院根始终提供「新增科室」），删科室须先删下级、删院区/医院须先删科室）；

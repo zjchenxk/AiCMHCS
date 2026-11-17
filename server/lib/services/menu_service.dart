@@ -1,5 +1,6 @@
 import 'package:common/model.dart';
 import 'package:server/database/engine/database_gateway.dart';
+import 'package:server/utils/uuid_util.dart';
 
 /// 菜单类业务异常：httpStatus / code / message 直接映射到 HTTP 响应
 /// （模式同 AuthException / DepartmentException）。
@@ -25,8 +26,8 @@ final class MenuException implements Exception {
 /// 经 DatabaseGateway 访问 SYS_MENU（PARENT_ID 自关联构成「模块→菜单→
 /// 操作」树，不建物理外键）。菜单规模有限，列表接口整表返回、由前端
 /// 组树；名称含中文时由达梦网关参数改写自动内联，业务层直接写参数化
-/// SQL。ID 为自增主键，两库网关无 last-insert-id 通道，新增后按唯一
-/// ITEM_CODE 回读确定新行 ID（并发下不受会话级自增值串扰）。表按需求
+/// SQL。主键为应用侧生成的 UUID v7（CHAR(36)，见 newUuid），INSERT
+/// 前置生成、无自增回读环节。表按需求
 /// 设计不设时间列。挂载（parentId）不允许经 update 调整（树形结构
 /// 调整走增删）；删除前须先删除全部下级项目。MENU_ROUTE 可选
 /// （占位菜单可暂不配置路由，接入主界面路由后按需补齐）。
@@ -79,7 +80,7 @@ class MenuService {
   /// 2-菜单，操作类项目不下发），按项目编码排序，
   /// 供登录响应携带、主界面侧边栏构建「模块→菜单」树。
   Future<List<Menu>> listRoleAll(String roleId) async {
-    final idValue = _toInt(roleId, '角色ID');
+    final idValue = _id(roleId, '角色ID');
     final result = await _db.query(
       'SELECT M.ID, M.PARENT_ID, M.ITEM_CODE, M.ITEM_NAME, M.ITEM_TYPE, '
       'M.MENU_ROUTE, M.MENU_ICON, M.VISIBLE '
@@ -96,7 +97,7 @@ class MenuService {
   /// 供功能页做按钮级权限控制（登录下发的 data.menus 刻意不含操作项，
   /// 操作权限编码由功能页经 /api/menu/operations 另行拉取）。
   Future<Set<String>> listRoleOperationCodes(String roleId) async {
-    final idValue = _toInt(roleId, '角色ID');
+    final idValue = _id(roleId, '角色ID');
     final result = await _db.query(
       'SELECT M.ITEM_CODE FROM SYS_ROLE_PERMISSION P '
       'JOIN SYS_MENU M ON M.ID = P.MENU_ID '
@@ -111,7 +112,7 @@ class MenuService {
     final result = await _db.query(
       'SELECT ID, PARENT_ID, ITEM_CODE, ITEM_NAME, ITEM_TYPE, MENU_ROUTE, '
       'MENU_ICON, VISIBLE FROM SYS_MENU WHERE ID = ?',
-      [_toInt(id, '菜单ID')],
+      [_id(id, '菜单ID')],
     );
     if (result.rows.isEmpty) {
       throw MenuException(400, 40001, '菜单项目不存在：$id');
@@ -136,20 +137,13 @@ class MenuService {
 
     await _ensureCodeUnique(code);
 
+    final newId = newUuid();
     await _db.execute(
-      'INSERT INTO SYS_MENU (PARENT_ID, ITEM_CODE, ITEM_NAME, ITEM_TYPE, '
-      'MENU_ROUTE, MENU_ICON, VISIBLE) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [parentValue, code, name, type, route, icon, visible],
+      'INSERT INTO SYS_MENU (ID, PARENT_ID, ITEM_CODE, ITEM_NAME, ITEM_TYPE, '
+      'MENU_ROUTE, MENU_ICON, VISIBLE) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [newId, parentValue, code, name, type, route, icon, visible],
     );
-    // 自增 ID 经唯一 ITEM_CODE 回读（网关无 last-insert-id 通道）
-    final row = await _db.query(
-      'SELECT ID FROM SYS_MENU WHERE ITEM_CODE = ?',
-      [code],
-    );
-    if (row.rows.isEmpty) {
-      throw const MenuException(500, 50000, '新增菜单项目后回读失败');
-    }
-    return getById(row.rows.first[0]!);
+    return getById(newId);
   }
 
   /// 修改菜单项目（changes 为本次要更新的字段集合，键与 JSON 契约
@@ -162,7 +156,7 @@ class MenuService {
       }
     }
     await getById(id);
-    final idValue = _toInt(id, '菜单ID');
+    final idValue = _id(id, '菜单ID');
 
     // 先解析目标值并完成唯一性校验（必填字段必须非空、可空字段 null 清空）
     final code = changes.containsKey('itemCode') ? _required(changes['itemCode']?.toString(), '项目编码', _codeMaxLength) : null;
@@ -216,7 +210,7 @@ class MenuService {
   /// 防止下级项目沦为孤儿数据。
   Future<int> delete(String id) async {
     await getById(id);
-    final idValue = _toInt(id, '菜单ID');
+    final idValue = _id(id, '菜单ID');
     final dup = await _db.query(
       'SELECT COUNT(*) AS CNT FROM SYS_MENU WHERE PARENT_ID = ?',
       [idValue],
@@ -239,9 +233,9 @@ class MenuService {
     visible: row['VISIBLE'] ?? '1',
   );
 
-  /// 校验上级项目存在，返回其 int 形式 ID。
-  Future<int> _ensureParent(String parentId) async {
-    final value = _toInt(parentId, '上级项目ID');
+  /// 校验上级项目存在，返回其 ID。
+  Future<String> _ensureParent(String parentId) async {
+    final value = _id(parentId, '上级项目ID');
     final result = await _db.query(
       'SELECT ID FROM SYS_MENU WHERE ID = ?',
       [value],
@@ -253,7 +247,7 @@ class MenuService {
   }
 
   /// 校验项目编码全表唯一（excludeId 用于修改时排除自身）。
-  Future<void> _ensureCodeUnique(String code, {int? excludeId}) async {
+  Future<void> _ensureCodeUnique(String code, {String? excludeId}) async {
     final sql = excludeId == null ? 'SELECT COUNT(*) AS CNT FROM SYS_MENU WHERE ITEM_CODE = ?' : 'SELECT COUNT(*) AS CNT FROM SYS_MENU WHERE ITEM_CODE = ? AND ID <> ?';
     final params = excludeId == null ? <Object?>[code] : <Object?>[code, excludeId];
     final dup = await _db.query(sql, params);
@@ -291,12 +285,11 @@ class MenuService {
     return v;
   }
 
-  /// 数字 ID 字符串转 int（网关列值均为字符串，绑定 int 避免两库隐式
-  /// 转换差异）。
-  int _toInt(String id, String label) {
-    final v = int.tryParse(id.trim());
-    if (v == null) {
-      throw MenuException(400, 40002, '$label格式不正确：$id');
+  /// 必填 ID 校验：UUID 主键经网关以字符串取回，仅需去空格、非空。
+  String _id(String id, String label) {
+    final v = id.trim();
+    if (v.isEmpty) {
+      throw MenuException(400, 40002, '$label不能为空');
     }
     return v;
   }

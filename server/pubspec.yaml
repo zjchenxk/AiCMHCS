@@ -15,6 +15,10 @@ dependencies:
   crypto: ^3.0.0
   dart_frog: ^1.1.0
   ffi: ^2.1.0
+  # PostgreSQL 网关（非信创医院可选发行档；纯 Dart 实现，无原生依赖）
+  postgres: ^3.6.0
+  # 业务主键生成（UUID v7：时间有序，可按字符串排序近似创建序）
+  uuid: ^4.5.1
   # 精确固定 2.4.0（勿加 ^）：3.x 删除了 open.dart 的动态库覆盖机制，
   # 改为构建期 hook 下载预编译库，与 dart_frog 打包、离线信创环境、
   # 随包分发 sqlite3.dll 均冲突。

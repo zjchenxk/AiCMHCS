@@ -3,6 +3,7 @@ import 'package:client/models/current_child.dart';
 import 'package:client/models/menu_item.dart';
 import 'package:client/services/account_service.dart';
 import 'package:client/services/child_service.dart';
+import 'package:client/services/time_service.dart';
 import 'package:client/utils/log_helper.dart';
 import 'package:client/utils/menu_icons.dart';
 import 'package:common/model.dart';
@@ -45,12 +46,14 @@ class MainViewModel extends ChangeNotifier {
 
   // 当前儿童上下文（默认空占位；主界面顶部搜索框精确检索选中后写入，
   // 随 BasePage 分发到各功能页，儿童建档页据此自动载入整档）
+  // 未选定儿童时的空占位（epoch 0 明确「无值」语义；占位值从不参与
+  // 年龄计算与展示，选定真实档案后经 setCurrentChild 整体覆盖）
   CurrentChild child = CurrentChild(
     visitCardNo: '',
     patientId: '',
     name: '',
     gender: '',
-    birthDate: DateTime.now(),
+    birthDate: DateTime.fromMillisecondsSinceEpoch(0),
     phone: '',
   );
 
@@ -71,7 +74,7 @@ class MainViewModel extends ChangeNotifier {
   /// 实际年龄按出生日期实时计算）。
   ///param info: 检索/保存得到的儿童档案（服务端已解密的明文）
   void setCurrentChild(ChildInfo info) {
-    final birth = DateTime.tryParse(info.birthDate) ?? DateTime.now();
+    final birth = DateTime.tryParse(info.birthDate) ?? DateTime.fromMillisecondsSinceEpoch(0);
     child = CurrentChild(
       id: info.id,
       visitCardNo: info.visitCardNo ?? '',
@@ -89,9 +92,14 @@ class MainViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 当前时间（全局时间服务口径，见 time_service.dart）。
+  static DateTime _now() => app.getIt<TimeService>().now();
+
   /// 按出生日期格式化实际年龄（x岁/x岁y个月/y个月，未满月为 0个月）。
   String _formatAge(DateTime birth) {
-    final now = DateTime.now();
+    // 「现在」取全局时间服务（服务端口径），避免终端本地时钟不一致
+    // 影响实际年龄展示
+    final now = _now();
     var months = (now.year - birth.year) * 12 + now.month - birth.month;
     if (now.day < birth.day) months--;
     if (months < 0) months = 0;
@@ -333,7 +341,7 @@ class MainViewModel extends ChangeNotifier {
       patientId: '',
       name: '',
       gender: '',
-      birthDate: DateTime.now(),
+      birthDate: DateTime.fromMillisecondsSinceEpoch(0),
       phone: '',
     );
     notifyListeners();

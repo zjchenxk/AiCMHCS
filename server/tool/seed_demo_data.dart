@@ -5,6 +5,7 @@
 // 用法（在 server/ 目录执行）：
 //   dart run tool/seed_demo_data.dart                                # 达梦
 //   AICMHCS_DB_DRIVER=sqlite dart run tool/seed_demo_data.dart       # 单机版
+//   AICMHCS_DB_DRIVER=postgres dart run tool/seed_demo_data.dart     # PostgreSQL
 // 连接参数与后端一致（AICMHCS_DB_HOST/PORT/USER/PASSWORD、AICMHCS_DB_FILE、
 // AICMHCS_FIELD_MASTER_KEY/KEY_FILE）。
 import 'package:server/app_config.dart';
@@ -13,6 +14,7 @@ import 'package:server/database/engine/db_factory.dart';
 import 'package:server/database/migrator/schema_migrator.dart';
 import 'package:server/utils/field_cipher.dart';
 import 'package:server/utils/password_helper.dart';
+import 'package:server/utils/uuid_util.dart';
 
 /// 演示账号（userCode / 口令 / 姓名 / 用户类别 / 权限级别 / 手机号）。
 /// TEACHER / PARENT 不在新值域内，按迁移约定原值保留待人工订正。
@@ -45,6 +47,15 @@ const demoHospitals = [
     '示例路1-1号',
     '010-88886667',
   ),
+];
+
+/// 演示角色（角色编码/名称/分配的演示账号 userCode）：登录须携带
+/// 已分配角色（SYS_USER_ROLE），故随演示账号一并写入。
+const demoRoles = [
+  ('R1001', '系统管理员', ['admin']),
+  ('R1002', '儿童心理医生', ['doctor01']),
+  ('R1003', '教师', ['teacher01']),
+  ('R1004', '家长', ['parent01']),
 ];
 
 /// 演示院区：按 CODE 幂等写入，hospCode 取 demoHospitals 内代码。
@@ -84,10 +95,11 @@ Future<void> main() async {
       }
       await db.execute(
         'INSERT INTO SYS_USER '
-        '(USER_CODE, PASSWORD, USER_NAME, USER_TYPE, PERMISSION_LEVEL, '
+        '(ID, USER_CODE, PASSWORD, USER_NAME, USER_TYPE, PERMISSION_LEVEL, '
         'PHONE, PHONE_HMAC, STATUS, CREATE_TIME) '
-        'VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)',
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)',
         [
+          newUuid(),
           userCode,
           PasswordHelper.makeStoredPassword(password),
           userName,
@@ -101,27 +113,25 @@ Future<void> main() async {
       print('  $userCode / $password 已写入');
     }
     // 演示医院：按 CODE 幂等写入，先全部落库再回填父子引用
-    final hospitalIds = <String, int>{};
+    final hospitalIds = <String, String>{};
     for (final (code, _, name, province, city, county, address, tel) in demoHospitals) {
       final exists = await db.query(
         'SELECT ID FROM SYS_HOSPITAL WHERE CODE = ?',
         [code],
       );
       if (exists.rows.isNotEmpty) {
-        hospitalIds[code] = int.parse(exists.rows.first[0]!);
+        hospitalIds[code] = exists.rows.first[0]!;
         print('  医院 $code 已存在，跳过');
         continue;
       }
+      final hospId = newUuid();
       await db.execute(
-        'INSERT INTO SYS_HOSPITAL (PARENT_ID, CODE, NAME, PROVINCE, CITY, '
-        'COUNTY, ADDRESS, TEL, CREATE_TIME) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [null, code, name, province, city, county, address, tel, formatTimestamp(DateTime.now())],
+        'INSERT INTO SYS_HOSPITAL (ID, PARENT_ID, CODE, NAME, PROVINCE, '
+        'CITY, COUNTY, ADDRESS, TEL, CREATE_TIME) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [hospId, null, code, name, province, city, county, address, tel, formatTimestamp(DateTime.now())],
       );
-      final row = await db.query(
-        'SELECT ID FROM SYS_HOSPITAL WHERE CODE = ?',
-        [code],
-      );
-      hospitalIds[code] = int.parse(row.rows.first[0]!);
+      hospitalIds[code] = hospId;
       print('  医院 $code $name 已写入');
     }
     for (final (code, parentCode, _, _, _, _, _, _) in demoHospitals) {
@@ -132,16 +142,62 @@ Future<void> main() async {
         [parent, code],
       );
     }
+    // 演示角色：按 CODE 幂等写入（归属示例人民医院），ID 收进 roleIds
+    // 供下方账号关联；同账号关联其专属角色
+    final roleIds = <String, String>{};
+    final roleHospId = hospitalIds['HDEMO001'];
+    for (final (code, name, userCodes) in demoRoles) {
+      if (roleHospId == null) {
+        print('  角色 $code 归属医院不存在，跳过');
+        continue;
+      }
+      final exists = await db.query(
+        'SELECT ID FROM SYS_ROLE WHERE HOSP_ID = ? AND ROLE_CODE = ?',
+        [roleHospId, code],
+      );
+      String roleId;
+      if (exists.rows.isNotEmpty) {
+        roleId = exists.rows.first[0]!;
+        print('  角色 $code 已存在，跳过');
+      } else {
+        roleId = newUuid();
+        await db.execute(
+          'INSERT INTO SYS_ROLE (ID, ROLE_CODE, ROLE_NAME, HOSP_ID, '
+          'CREATE_TIME) VALUES (?, ?, ?, ?, ?)',
+          [roleId, code, name, roleHospId, formatTimestamp(DateTime.now())],
+        );
+        print('  角色 $code $name 已写入');
+      }
+      roleIds[code] = roleId;
+      // 账号-角色关联幂等：先查后插（各库通用；INSERT OR IGNORE /
+      // ON CONFLICT 均为方言专属语法，不可用）
+      for (final userCode in userCodes) {
+        final linked = await db.query(
+          'SELECT COUNT(*) AS CNT FROM SYS_USER_ROLE UR '
+          'JOIN SYS_USER U ON U.ID = UR.USER_ID '
+          'WHERE UR.ROLE_ID = ? AND U.USER_CODE = ?',
+          [roleId, userCode],
+        );
+        if (int.parse(linked.rowsAsMaps.first['CNT'] ?? '0') > 0) {
+          continue;
+        }
+        await db.execute(
+          'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID) '
+          'SELECT U.ID, ? FROM SYS_USER U WHERE U.USER_CODE = ?',
+          [roleId, userCode],
+        );
+      }
+    }
     // 演示院区：按 CODE 幂等写入，医院 ID 经上方 hospitalIds 映射取得，
     // ID 收进 campusIds 供下方演示科室挂载
-    final campusIds = <String, int>{};
+    final campusIds = <String, String>{};
     for (final (code, hospCode, name, address, tel) in demoCampuses) {
       final exists = await db.query(
         'SELECT ID FROM SYS_CAMPUS WHERE CODE = ?',
         [code],
       );
       if (exists.rows.isNotEmpty) {
-        campusIds[code] = int.parse(exists.rows.first[0]!);
+        campusIds[code] = exists.rows.first[0]!;
         print('  院区 $code 已存在，跳过');
         continue;
       }
@@ -150,28 +206,25 @@ Future<void> main() async {
         print('  院区 $code 所属医院 $hospCode 不存在，跳过');
         continue;
       }
+      final campusId = newUuid();
       await db.execute(
-        'INSERT INTO SYS_CAMPUS (HOSP_ID, CODE, NAME, ADDRESS, TEL, '
-        'CREATE_TIME) VALUES (?, ?, ?, ?, ?, ?)',
-        [hospId, code, name, address, tel, formatTimestamp(DateTime.now())],
+        'INSERT INTO SYS_CAMPUS (ID, HOSP_ID, CODE, NAME, ADDRESS, TEL, '
+        'CREATE_TIME) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [campusId, hospId, code, name, address, tel, formatTimestamp(DateTime.now())],
       );
-      final row = await db.query(
-        'SELECT ID FROM SYS_CAMPUS WHERE CODE = ?',
-        [code],
-      );
-      campusIds[code] = int.parse(row.rows.first[0]!);
+      campusIds[code] = campusId;
       print('  院区 $code $name 已写入');
     }
     // 演示科室：按 CODE 幂等写入，院区 ID 经上方 campusIds 映射取得、
     // 上级科室 ID 经本循环边写边存的 deptIds 映射取得（列表上级在前）
-    final deptIds = <String, int>{};
+    final deptIds = <String, String>{};
     for (final (code, campusCode, parentCode, name, address, tel) in demoDepartments) {
       final exists = await db.query(
         'SELECT ID FROM SYS_DEPARTMENT WHERE CODE = ?',
         [code],
       );
       if (exists.rows.isNotEmpty) {
-        deptIds[code] = int.parse(exists.rows.first[0]!);
+        deptIds[code] = exists.rows.first[0]!;
         print('  科室 $code 已存在，跳过');
         continue;
       }
@@ -193,10 +246,13 @@ Future<void> main() async {
         print('  科室 $code 上级科室 $parentCode 未写入，跳过');
         continue;
       }
+      final deptId = newUuid();
       await db.execute(
-        'INSERT INTO SYS_DEPARTMENT (HOSP_ID, CAMPUS_ID, PARENT_ID, CODE, '
-        'NAME, ADDRESS, TEL, CREATE_TIME) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO SYS_DEPARTMENT (ID, HOSP_ID, CAMPUS_ID, PARENT_ID, '
+        'CODE, NAME, ADDRESS, TEL, CREATE_TIME) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
+          deptId,
           hosp,
           campus,
           parent,
@@ -207,11 +263,7 @@ Future<void> main() async {
           formatTimestamp(DateTime.now()),
         ],
       );
-      final row = await db.query(
-        'SELECT ID FROM SYS_DEPARTMENT WHERE CODE = ?',
-        [code],
-      );
-      deptIds[code] = int.parse(row.rows.first[0]!);
+      deptIds[code] = deptId;
       print('  科室 $code $name 已写入');
     }
     // 演示账号归属医院：未设置时绑到示例人民医院，供院区管理等按登录

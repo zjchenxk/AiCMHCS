@@ -148,6 +148,7 @@ void main() {
         dbUser: '',
         dbPassword: '',
         dbFile: '',
+        dbName: '',
         fieldMasterKey: base64Encode(utf8.encode(rawKey)),
         fieldKeyFile: keyFile,
       );
@@ -174,6 +175,7 @@ void main() {
         dbUser: '',
         dbPassword: '',
         dbFile: '',
+        dbName: '',
         fieldKeyFile: keyFile,
       );
       final cipher = await FieldCipher.fromConfig(config);
@@ -198,6 +200,7 @@ void main() {
         dbUser: '',
         dbPassword: '',
         dbFile: '',
+        dbName: '',
         fieldKeyFile: keyFile,
       );
       final cipher = await FieldCipher.fromConfig(config);

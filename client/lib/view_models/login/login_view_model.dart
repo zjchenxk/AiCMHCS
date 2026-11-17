@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:client/main.dart';
 import 'package:client/services/auth_service.dart';
+import 'package:client/services/time_service.dart';
 import 'package:client/utils/log_helper.dart';
 import 'package:common/model.dart';
 import 'package:material_ui/material_ui.dart';
@@ -206,6 +207,13 @@ class LoginViewModel extends ChangeNotifier {
             //解析所选角色下发的菜单项目（主界面侧边栏数据源，登录页跳转前转交）
             final menusJson = data['menus'] as List<dynamic>? ?? const [];
             _roleMenus = menusJson.whereType<Map>().map((m) => Menu.fromJson(Map<String, dynamic>.from(m))).toList();
+
+            //登录成功立即向服务端校准一次时钟（全局时间服务，会话期间
+            //业务采集时间以服务端为准；未注册（测试环境）或同步失败均
+            //静默跳过，不阻塞登录）
+            if (getIt.isRegistered<TimeService>()) {
+              getIt<TimeService>().sync();
+            }
 
             _isLoading = false;
             notifyListeners();

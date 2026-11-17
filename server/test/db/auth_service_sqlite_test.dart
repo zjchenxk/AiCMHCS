@@ -7,9 +7,20 @@ import 'package:server/database/migrator/schema_migrator.dart';
 import 'package:server/services/auth_service.dart';
 import 'package:server/utils/field_cipher.dart';
 import 'package:server/utils/password_helper.dart';
+import 'package:server/utils/uuid_util.dart';
 import 'package:test/test.dart';
 
 import '../support/test_divisions.dart';
+
+// 种子数据固定 UUID（任意 36 位字符串均可作 CHAR(36) 主键值，
+// 固定值便于跨用例引用与断言）。
+const roleAdminId = 'b0000000-0000-0000-0000-000000000001';
+const roleDoctorId = 'b0000000-0000-0000-0000-000000000002';
+const roleAdmin2Id = 'b0000000-0000-0000-0000-000000000010';
+const roleDoctor2Id = 'b0000000-0000-0000-0000-000000000020';
+const hospId = 'a0000000-0000-0000-0000-000000000009';
+const campusId = 'a0000000-0000-0000-0000-000000000008';
+const deptId = 'a0000000-0000-0000-0000-000000000007';
 
 void main() {
   late SqliteGateway db;
@@ -28,9 +39,10 @@ void main() {
     // 联系电话经 FieldCipher 加密写入（与 seed/后端写入口径一致）。
     await db.execute(
       'INSERT INTO SYS_USER '
-      '(USER_CODE, PASSWORD, USER_NAME, USER_TYPE, PHONE, PHONE_HMAC, STATUS) '
-      'VALUES (?, ?, ?, ?, ?, ?, 1)',
+      '(ID, USER_CODE, PASSWORD, USER_NAME, USER_TYPE, PHONE, PHONE_HMAC, '
+      'STATUS) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
       [
+        newUuid(),
         'admin',
         PasswordHelper.makeStoredPassword('Admin@123'),
         '系统管理员',
@@ -40,15 +52,17 @@ void main() {
       ],
     );
     auth = AuthService(db, cipher);
-    // 种子：角色 1（系统管理员）分配给 admin——登录自本改造起校验所选
-    // 角色归属（SYS_USER_ROLE），本文件的登录用例固定用角色 1。
+    // 种子：系统管理员角色分配给 admin——登录自本改造起校验所选角色
+    // 归属（SYS_USER_ROLE），本文件的登录用例固定用该角色。
     await db.execute(
       'INSERT INTO SYS_ROLE (ID, ROLE_CODE, ROLE_NAME, CREATE_TIME) '
-      "VALUES (1, 'R0001', '系统管理员', '2026-11-08 09:00:00')",
+      "VALUES (?, 'R0001', '系统管理员', '2026-11-08 09:00:00')",
+      [roleAdminId],
     );
     await db.execute(
       'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID) '
-      "SELECT U.ID, 1 FROM SYS_USER U WHERE U.USER_CODE = 'admin'",
+      "SELECT U.ID, ? FROM SYS_USER U WHERE U.USER_CODE = 'admin'",
+      [roleAdminId],
     );
   });
 
@@ -58,8 +72,8 @@ void main() {
   });
 
   test('登录成功：返回会话（手机号已解密）、写审计', () async {
-    final session = await auth.login('admin', 'Admin@123', '1', ip: '127.0.0.1');
-    expect(session.user.id, greaterThan(0));
+    final session = await auth.login('admin', 'Admin@123', roleAdminId, ip: '127.0.0.1');
+    expect(session.user.id, isNotEmpty);
     expect(session.user.userCode, 'admin');
     expect(session.user.userName, '系统管理员');
     expect(session.user.userType, 'ADMIN');
@@ -81,49 +95,62 @@ void main() {
   });
 
   test('登录成功：关联下发医院/院区/科室真实名称', () async {
-    // 种子：医院 9 → 院区 8 → 科室 7（挂院区下），用户挂该医院与科室
+    // 种子：医院 → 院区 → 科室（挂院区下），用户挂该医院与科室
     await db.execute(
       'INSERT INTO SYS_HOSPITAL (ID, CODE, NAME, PROVINCE, CITY, ADDRESS, '
-      'CREATE_TIME) VALUES (9, \'H0009\', \'测试三级医院\', \'北京市\', '
+      'CREATE_TIME) VALUES (?, \'H0009\', \'测试三级医院\', \'北京市\', '
       '\'北京市\', \'测试路9号\', \'2026-11-08 09:00:00\')',
+      [hospId],
     );
     await db.execute(
       'INSERT INTO SYS_CAMPUS (ID, HOSP_ID, CODE, NAME, CREATE_TIME) '
-      'VALUES (8, 9, \'C0008\', \'城南院区\', \'2026-11-08 09:00:00\')',
+      'VALUES (?, ?, \'C0008\', \'城南院区\', \'2026-11-08 09:00:00\')',
+      [campusId, hospId],
     );
     await db.execute(
       'INSERT INTO SYS_DEPARTMENT (ID, HOSP_ID, CAMPUS_ID, CODE, NAME, '
-      'CREATE_TIME) VALUES (7, 9, 8, \'D0007\', \'儿童心理科\', '
+      'CREATE_TIME) VALUES (?, ?, ?, \'D0007\', \'儿童心理科\', '
       '\'2026-11-08 09:00:00\')',
+      [deptId, hospId, campusId],
     );
     await db.execute(
       'INSERT INTO SYS_USER '
-      '(USER_CODE, PASSWORD, USER_NAME, USER_TYPE, HOSP_ID, DEPT_ID, STATUS) '
-      'VALUES (?, ?, ?, ?, ?, ?, 1)',
-      ['doctor09', PasswordHelper.makeStoredPassword('Doctor@123'), '关联用户', 'DOCTOR', 9, 7],
+      '(ID, USER_CODE, PASSWORD, USER_NAME, USER_TYPE, HOSP_ID, DEPT_ID, '
+      'STATUS) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
+      [
+        newUuid(),
+        'doctor09',
+        PasswordHelper.makeStoredPassword('Doctor@123'),
+        '关联用户',
+        'DOCTOR',
+        hospId,
+        deptId,
+      ],
     );
-    // 种子：角色 2（儿童心理医生）分配给该用户（登录校验所选角色归属）
+    // 种子：儿童心理医生角色分配给该用户（登录校验所选角色归属）
     await db.execute(
       'INSERT INTO SYS_ROLE (ID, ROLE_CODE, ROLE_NAME, CREATE_TIME) '
-      "VALUES (2, 'R0002', '儿童心理医生', '2026-11-08 09:00:00')",
+      "VALUES (?, 'R0002', '儿童心理医生', '2026-11-08 09:00:00')",
+      [roleDoctorId],
     );
     await db.execute(
       'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID) '
-      "SELECT U.ID, 2 FROM SYS_USER U WHERE U.USER_CODE = 'doctor09'",
+      "SELECT U.ID, ? FROM SYS_USER U WHERE U.USER_CODE = 'doctor09'",
+      [roleDoctorId],
     );
 
-    final session = await auth.login('doctor09', 'Doctor@123', '2');
-    expect(session.roleId, '2');
-    expect(session.user.hospId, '9');
+    final session = await auth.login('doctor09', 'Doctor@123', roleDoctorId);
+    expect(session.roleId, roleDoctorId);
+    expect(session.user.hospId, hospId);
     expect(session.user.hospName, '测试三级医院');
-    expect(session.user.deptId, '7');
+    expect(session.user.deptId, deptId);
     expect(session.user.deptName, '儿童心理科');
     // 院区经所属科室的 CAMPUS_ID 间接关联
-    expect(session.user.campusId, '8');
+    expect(session.user.campusId, campusId);
     expect(session.user.campusName, '城南院区');
 
     // 未设置归属的用户名称字段为 null（LEFT JOIN 不命中）
-    final bare = await auth.login('admin', 'Admin@123', '1');
+    final bare = await auth.login('admin', 'Admin@123', roleAdminId);
     expect(bare.user.hospName, isNull);
     expect(bare.user.deptName, isNull);
   });
@@ -131,16 +158,17 @@ void main() {
   test('存量明文行登录：手机号原样返回（读兼容兜底）', () async {
     await db.execute(
       'INSERT INTO SYS_USER '
-      '(USER_CODE, PASSWORD, USER_NAME, USER_TYPE, PHONE, STATUS) '
-      "VALUES ('legacy', ?, '存量用户', 'DOCTOR', '13900000000', 1)",
-      [PasswordHelper.makeStoredPassword('Legacy@123')],
+      '(ID, USER_CODE, PASSWORD, USER_NAME, USER_TYPE, PHONE, STATUS) '
+      "VALUES (?, 'legacy', ?, '存量用户', 'DOCTOR', '13900000000', 1)",
+      [newUuid(), PasswordHelper.makeStoredPassword('Legacy@123')],
     );
-    // 复用「关联下发」用例种子化的角色 2（登录校验所选角色归属）
+    // 复用「关联下发」用例种子化的儿童心理医生角色（登录校验所选角色归属）
     await db.execute(
       'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID) '
-      "SELECT U.ID, 2 FROM SYS_USER U WHERE U.USER_CODE = 'legacy'",
+      "SELECT U.ID, ? FROM SYS_USER U WHERE U.USER_CODE = 'legacy'",
+      [roleDoctorId],
     );
-    final session = await auth.login('legacy', 'Legacy@123', '2');
+    final session = await auth.login('legacy', 'Legacy@123', roleDoctorId);
     expect(session.user.phone, '13900000000');
   });
 
@@ -161,12 +189,12 @@ void main() {
   test('账号停用：40301', () async {
     await db.execute(
       'INSERT INTO SYS_USER '
-      '(USER_CODE, PASSWORD, USER_NAME, USER_TYPE, STATUS) '
-      'VALUES (?, ?, ?, ?, 0)',
-      ['disabled', PasswordHelper.makeStoredPassword('X@123'), '停用账号', 'DOCTOR'],
+      '(ID, USER_CODE, PASSWORD, USER_NAME, USER_TYPE, STATUS) '
+      'VALUES (?, ?, ?, ?, ?, 0)',
+      [newUuid(), 'disabled', PasswordHelper.makeStoredPassword('X@123'), '停用账号', 'DOCTOR'],
     );
     await expectLater(
-      auth.login('disabled', 'X@123', '2'),
+      auth.login('disabled', 'X@123', roleDoctorId),
       throwsA(
         isA<AuthException>().having((e) => e.code, 'code', 40301),
       ),
@@ -178,62 +206,66 @@ void main() {
     // 不依赖其他用例的数据（用例需可独立运行）
     await db.execute(
       'INSERT INTO SYS_USER '
-      '(USER_CODE, PASSWORD, USER_NAME, USER_TYPE, STATUS) '
-      "VALUES ('roleuser09', ?, '角色用户', 'DOCTOR', 1)",
-      [PasswordHelper.makeStoredPassword('Doctor@123')],
+      '(ID, USER_CODE, PASSWORD, USER_NAME, USER_TYPE, STATUS) '
+      "VALUES (?, 'roleuser09', ?, '角色用户', 'DOCTOR', 1)",
+      [newUuid(), PasswordHelper.makeStoredPassword('Doctor@123')],
     );
     await db.execute(
       'INSERT INTO SYS_ROLE (ID, ROLE_CODE, ROLE_NAME, CREATE_TIME) VALUES '
-      "(20, 'R0020', '儿童心理医生', '2026-11-08 09:00:00'), "
-      "(10, 'R0010', '系统管理员', '2026-11-08 09:00:00')",
+      "(?, 'R0020', '儿童心理医生', '2026-11-08 09:00:00'), "
+      "(?, 'R0010', '系统管理员', '2026-11-08 09:00:00')",
+      [roleDoctor2Id, roleAdmin2Id],
     );
     await db.execute(
       'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID) '
       'SELECT U.ID, R.ID FROM SYS_USER U, SYS_ROLE R '
-      "WHERE U.USER_CODE = 'roleuser09' AND R.ID IN (10, 20)",
+      "WHERE U.USER_CODE = 'roleuser09' AND R.ID IN (?, ?)",
+      [roleAdmin2Id, roleDoctor2Id],
     );
 
-    // 角色按 ID 升序返回，ID 为字符串形式（网关所有列以字符串返回）
+    // 角色按 ID 升序返回（固定 UUID 按字符串序：...0010 < ...0020）
     final roles = await auth.listUserRoles('roleuser09');
     expect(roles, [
-      {'id': '10', 'roleName': '系统管理员'},
-      {'id': '20', 'roleName': '儿童心理医生'},
+      {'id': roleAdmin2Id, 'roleName': '系统管理员'},
+      {'id': roleDoctor2Id, 'roleName': '儿童心理医生'},
     ]);
 
     // 未分配角色的用户与不存在的用户名统一返回空列表（避免账号枚举）。
-    // admin 已在 setUpAll 分配角色 1，此处另建无角色用户验证空列表分支。
+    // admin 已在 setUpAll 分配管理员角色，此处另建无角色用户验证空列表分支。
     await db.execute(
       'INSERT INTO SYS_USER '
-      '(USER_CODE, PASSWORD, USER_NAME, USER_TYPE, STATUS) '
-      "VALUES ('norole09', ?, '无角色用户', 'DOCTOR', 1)",
-      [PasswordHelper.makeStoredPassword('Doctor@123')],
+      '(ID, USER_CODE, PASSWORD, USER_NAME, USER_TYPE, STATUS) '
+      "VALUES (?, 'norole09', ?, '无角色用户', 'DOCTOR', 1)",
+      [newUuid(), PasswordHelper.makeStoredPassword('Doctor@123')],
     );
     expect(await auth.listUserRoles('norole09'), isEmpty);
     expect(await auth.listUserRoles('nobody'), isEmpty);
   });
 
   test('登录校验所选角色归属：角色存在但未分配给该用户时 40301', () async {
-    // 角色 20 已在「查询用户角色列表」用例种子化（分配给 roleuser09），
-    // admin 未持有该角色，登录应拒绝
+    // 儿童心理医生角色已在「查询用户角色列表」用例种子化（分配给
+    // roleuser09），admin 未持有该角色，登录应拒绝
     await expectLater(
-      auth.login('admin', 'Admin@123', '20'),
+      auth.login('admin', 'Admin@123', roleDoctor2Id),
       throwsA(
         isA<AuthException>().having((e) => e.code, 'code', 40301),
       ),
     );
   });
 
-  test('登录角色参数非数字：40001', () async {
+  test('登录角色参数不匹配任何已分配角色：40301', () async {
+    // 角色主键为 UUID，任意非本用户已分配角色的取值（含乱串）均
+    // 走「未授权」拒绝路径，不再有按数字校验的分支
     await expectLater(
-      auth.login('admin', 'Admin@123', 'abc'),
+      auth.login('admin', 'Admin@123', 'not-a-role-id'),
       throwsA(
-        isA<AuthException>().having((e) => e.code, 'code', 40001),
+        isA<AuthException>().having((e) => e.code, 'code', 40301),
       ),
     );
   });
 
   test('会话校验、续期与登出', () async {
-    final session = await auth.login('admin', 'Admin@123', '1');
+    final session = await auth.login('admin', 'Admin@123', roleAdminId);
 
     final verified = await auth.verify(session.token);
     expect(verified.userCode, 'admin');
@@ -248,38 +280,40 @@ void main() {
   });
 
   test('切换角色：校验归属后更新会话角色，未分配/非法参数被拒绝', () async {
-    // 种子：admin 追加分配角色 10（已在「查询用户角色列表」用例种子化），
-    // 验证从角色 1 切到角色 10
+    // 种子：admin 追加分配第二个管理员角色（已在「查询用户角色列表」
+    // 用例种子化），验证从管理员角色切到它
     await db.execute(
       'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID) '
-      "SELECT U.ID, 10 FROM SYS_USER U WHERE U.USER_CODE = 'admin'",
+      "SELECT U.ID, ? FROM SYS_USER U WHERE U.USER_CODE = 'admin'",
+      [roleAdmin2Id],
     );
 
-    final session = await auth.login('admin', 'Admin@123', '1');
-    expect(session.roleId, '1');
+    final session = await auth.login('admin', 'Admin@123', roleAdminId);
+    expect(session.roleId, roleAdminId);
 
     // 切到已分配的角色：会话角色更新、令牌不变（同一会话内切换）
-    final switched = await auth.switchRole(session.token, '10');
+    final switched = await auth.switchRole(session.token, roleAdmin2Id);
     expect(identical(switched, session), isTrue);
-    expect(session.roleId, '10');
+    expect(session.roleId, roleAdmin2Id);
     final verified = await auth.verify(session.token);
     expect(verified, same(session.user));
 
-    // 切到未分配给该用户的角色：40301（角色 2 属于 doctor09/legacy）
+    // 切到未分配给该用户的角色：40301（儿童心理医生角色属于
+    // doctor09/legacy）
     await expectLater(
-      auth.switchRole(session.token, '2'),
+      auth.switchRole(session.token, roleDoctorId),
       throwsA(
         isA<AuthException>().having((e) => e.code, 'code', 40301),
       ),
     );
     // 被拒绝的切换不改动会话角色
-    expect(session.roleId, '10');
+    expect(session.roleId, roleAdmin2Id);
 
-    // 角色参数非数字：40001
+    // 任意未分配角色取值：40301
     await expectLater(
-      auth.switchRole(session.token, 'abc'),
+      auth.switchRole(session.token, 'not-a-role-id'),
       throwsA(
-        isA<AuthException>().having((e) => e.code, 'code', 40001),
+        isA<AuthException>().having((e) => e.code, 'code', 40301),
       ),
     );
 

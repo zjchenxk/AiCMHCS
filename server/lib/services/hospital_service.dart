@@ -1,5 +1,6 @@
 import 'package:common/model.dart';
 import 'package:server/database/engine/database_gateway.dart';
+import 'package:server/utils/uuid_util.dart';
 
 /// 医院类业务异常：httpStatus / code / message 直接映射到 HTTP 响应
 /// （模式同 AuthException / AdminDivisionException）。
@@ -24,9 +25,9 @@ final class HospitalException implements Exception {
 ///
 /// 经 DatabaseGateway 访问 SYS_HOSPITAL（医联体树形，PARENT_ID 自关联）。
 /// 医院规模有限（百级以内），列表接口整表返回、由前端建树；名称含中文
-/// 时由达梦网关参数改写自动内联，业务层直接写参数化 SQL。ID 为自增主键，
-/// 两库网关无 last-insert-id 通道，新增后按唯一 CODE 回读确定新行 ID
-/// （并发下不受会话级自增值串扰）。
+/// 时由达梦网关参数改写自动内联，业务层直接写参数化 SQL。主键为应用侧
+/// 生成的 UUID v7（CHAR(36)，见 newUuid），INSERT 前置生成、无自增回读
+/// 环节。
 class HospitalService {
   /// 构造函数：注入数据库网关。
   HospitalService(this._db);
@@ -54,7 +55,7 @@ class HospitalService {
     final scope = scopeHospId?.trim() ?? '';
     if (scope.isNotEmpty) {
       // 收集范围医院子树全部 ID（含根）；根不存在时结果为空列表
-      List<int> ids;
+      List<String> ids;
       try {
         ids = await _collectSubtreeIds(scope);
       } on HospitalException {
@@ -78,7 +79,7 @@ class HospitalService {
 
   /// 按 ID 查询单个医院，不存在时抛业务异常。
   Future<Hospital> getById(String id) async {
-    final result = await _db.query(_detailSql + ' WHERE H.ID = ?', [_toInt(id)]);
+    final result = await _db.query(_detailSql + ' WHERE H.ID = ?', [_id(id)]);
     if (result.rows.isEmpty) {
       throw HospitalException(400, 40001, '医院不存在：$id');
     }
@@ -110,11 +111,9 @@ class HospitalService {
     final cityV = _required(city, '城市', _addressPartMaxLength);
     final addr = _required(address, '详细地址', _addressMaxLength);
 
-    int? parentValue;
-    final parent = parentId?.trim();
-    if (parent != null && parent.isNotEmpty) {
-      await getById(parent);
-      parentValue = _toInt(parent);
+    final parentValue = parentId?.trim();
+    if (parentValue != null && parentValue.isNotEmpty) {
+      await getById(parentValue);
     }
     final dup = await _db.query(
       'SELECT COUNT(*) AS CNT FROM SYS_HOSPITAL WHERE CODE = ?',
@@ -124,13 +123,15 @@ class HospitalService {
       throw HospitalException(400, 40001, '组织机构代码已存在：$c');
     }
 
+    final newId = newUuid();
     await _db.execute(
-      'INSERT INTO SYS_HOSPITAL (PARENT_ID, CODE, NAME, NAME_EN, PROVINCE, '
-      'CITY, COUNTY, TOWN, ADDRESS, TEL, LOGO_IMAGE, SEAL_IMAGE, '
+      'INSERT INTO SYS_HOSPITAL (ID, PARENT_ID, CODE, NAME, NAME_EN, '
+      'PROVINCE, CITY, COUNTY, TOWN, ADDRESS, TEL, LOGO_IMAGE, SEAL_IMAGE, '
       'WATERMARK_IMAGE, CREATE_TIME) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
-        parentValue,
+        newId,
+        _optionalId(parentValue, '上级医院ID'),
         c,
         n,
         _optional(nameEn, '医院英文名称', _nameMaxLength),
@@ -146,15 +147,7 @@ class HospitalService {
         formatTimestamp(DateTime.now()),
       ],
     );
-    // 自增 ID 经唯一 CODE 回读（网关无 last-insert-id 通道）
-    final row = await _db.query(
-      'SELECT ID FROM SYS_HOSPITAL WHERE CODE = ?',
-      [c],
-    );
-    if (row.rows.isEmpty) {
-      throw const HospitalException(500, 50000, '新增医院后回读失败');
-    }
-    return getById(row.rows.first[0]!);
+    return getById(newId);
   }
 
   /// 修改医院（changes 为本次要更新的字段集合，键与 JSON 契约一致；
@@ -173,7 +166,7 @@ class HospitalService {
           final v = _required(value?.toString(), '组织机构代码', _codeMaxLength);
           final dup = await _db.query(
             'SELECT COUNT(*) AS CNT FROM SYS_HOSPITAL WHERE CODE = ? AND ID <> ?',
-            [v, _toInt(id)],
+            [v, _id(id)],
           );
           if (int.parse(dup.rowsAsMaps.first['CNT'] ?? '0') > 0) {
             throw HospitalException(400, 40001, '组织机构代码已存在：$v');
@@ -223,7 +216,7 @@ class HospitalService {
     setters.add('UPDATE_TIME = ?');
     params
       ..add(formatTimestamp(DateTime.now()))
-      ..add(_toInt(id));
+      ..add(_id(id));
     await _db.execute(
       'UPDATE SYS_HOSPITAL SET ${setters.join(', ')} WHERE ID = ?',
       params,
@@ -312,8 +305,8 @@ class HospitalService {
       'FROM SYS_HOSPITAL H';
 
   /// 自顶向下逐层收集子树全部 ID（含根），每层按批 IN 查询子级。
-  Future<List<int>> _collectSubtreeIds(String rootId) async {
-    final ids = <int>[_toInt(rootId)];
+  Future<List<String>> _collectSubtreeIds(String rootId) async {
+    final ids = <String>[_id(rootId)];
     var start = 0;
     while (start < ids.length) {
       final batch = ids.skip(start).take(_batchSize).toList();
@@ -323,7 +316,7 @@ class HospitalService {
         'SELECT ID FROM SYS_HOSPITAL WHERE PARENT_ID IN ($placeholders) ORDER BY ID',
         batch,
       );
-      ids.addAll(result.rows.map((row) => int.parse(row[0]!)));
+      ids.addAll(result.rows.map((row) => row[0]!));
     }
     return ids;
   }
@@ -367,13 +360,19 @@ class HospitalService {
     return v;
   }
 
-  /// 数字 ID 字符串转 int（网关列值均为字符串，绑定 int 避免两库隐式
-  /// 转换差异）。
-  int _toInt(String id) {
-    final v = int.tryParse(id.trim());
-    if (v == null) {
-      throw HospitalException(400, 40002, '医院ID格式不正确：$id');
+  /// 必填 ID 校验：UUID 主键经网关以字符串取回，仅需去空格、非空。
+  String _id(String id) {
+    final v = id.trim();
+    if (v.isEmpty) {
+      throw const HospitalException(400, 40002, '医院ID不能为空');
     }
+    return v;
+  }
+
+  /// 可空 ID 校验：空值归一为 null。
+  String? _optionalId(String? id, String label) {
+    final v = id?.trim() ?? '';
+    if (v.isEmpty) return null;
     return v;
   }
 }

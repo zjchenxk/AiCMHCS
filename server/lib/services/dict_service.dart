@@ -1,5 +1,6 @@
 import 'package:common/model.dart';
 import 'package:server/database/engine/database_gateway.dart';
+import 'package:server/utils/uuid_util.dart';
 
 /// 字典类业务异常：httpStatus / code / message 直接映射到 HTTP 响应
 /// （模式同 MenuException / RoleException）。
@@ -27,9 +28,8 @@ final class DictException implements Exception {
 /// 医院，由路由层从令牌会话推导后传入，不信任客户端上报，名称含中文
 /// 时由达梦网关参数改写自动内联，业务层直接写参数化 SQL）。DICT_CODE
 /// 同医院内唯一、ITEM_CODE 同字典内唯一均由服务层 COUNT 校验（表上
-/// 不建唯一约束，与 SYS_MENU 的 ITEM_CODE 同策略）。ID 为自增主键，
-/// 两库网关无 last-insert-id 通道，字典新增后按「HOSP_ID+DICT_CODE」、
-/// 数据项新增后按「DICT_ID+ITEM_CODE」唯一自然键回读新行 ID。
+/// 不建唯一约束，与 SYS_MENU 的 ITEM_CODE 同策略）。主键为应用侧生成
+/// 的 UUID v7（CHAR(36)，见 newUuid），INSERT 前置生成、无自增回读环节。
 /// IS_DEFAULT 默认项同字典内至多一项：新增即默认或设置默认时先清
 /// 字典内全部默认位再置位。删除策略保守：字典存在下级字典或数据项时
 /// 均阻止删除（防孤儿数据与误删），数据项直接删除。挂载（parentId）
@@ -78,7 +78,7 @@ class DictService {
       'SELECT ID, PARENT_ID, DICT_CODE, DICT_NAME, DISPLAY_ORDER, '
       'CREATOR_ID, CREATOR_NAME, HOSP_ID, HOSP_NAME, CREATE_TIME, UPDATE_TIME '
       'FROM BASE_DICT WHERE HOSP_ID = ? ORDER BY ID',
-      [_toInt(scope, '医院ID')],
+      [scope],
     );
     return result.rowsAsMaps.map(_fromRow).toList(growable: false);
   }
@@ -89,7 +89,7 @@ class DictService {
       'SELECT ID, PARENT_ID, DICT_CODE, DICT_NAME, DISPLAY_ORDER, '
       'CREATOR_ID, CREATOR_NAME, HOSP_ID, HOSP_NAME, CREATE_TIME, UPDATE_TIME '
       'FROM BASE_DICT WHERE ID = ?',
-      [_toInt(id, '字典ID')],
+      [_id(id, '字典ID')],
     );
     if (result.rows.isEmpty) {
       throw DictException(400, 40001, '数据字典不存在：$id');
@@ -115,9 +115,9 @@ class DictService {
   }) async {
     final code = _required(dictCode, '字典编码', _codeMaxLength);
     final name = _required(dictName, '字典名称', _nameMaxLength);
-    final hospIdValue = _toInt(hospId, '医院ID');
+    final hospIdValue = _id(hospId, '医院ID');
     final hosp = _required(hospName, '医院名称', _hospNameMaxLength);
-    final creatorIdValue = _toInt(creatorId, '创建人ID');
+    final creatorIdValue = _id(creatorId, '创建人ID');
     final creator = _required(creatorName, '创建人姓名', _creatorNameMaxLength);
     final order = _optionalInt(displayOrder);
 
@@ -126,11 +126,13 @@ class DictService {
 
     await _ensureDictCodeUnique(hospIdValue, code);
 
+    final newId = newUuid();
     await _db.execute(
-      'INSERT INTO BASE_DICT (PARENT_ID, DICT_CODE, DICT_NAME, DISPLAY_ORDER, '
-      'CREATOR_ID, CREATOR_NAME, HOSP_ID, HOSP_NAME, CREATE_TIME) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO BASE_DICT (ID, PARENT_ID, DICT_CODE, DICT_NAME, '
+      'DISPLAY_ORDER, CREATOR_ID, CREATOR_NAME, HOSP_ID, HOSP_NAME, '
+      'CREATE_TIME) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
+        newId,
         parentValue,
         code,
         name,
@@ -142,15 +144,7 @@ class DictService {
         formatTimestamp(DateTime.now()),
       ],
     );
-    // 自增 ID 经「医院ID+字典编码」唯一自然键回读（网关无 last-insert-id 通道）
-    final row = await _db.query(
-      'SELECT ID FROM BASE_DICT WHERE HOSP_ID = ? AND DICT_CODE = ?',
-      [hospIdValue, code],
-    );
-    if (row.rows.isEmpty) {
-      throw const DictException(500, 50000, '新增数据字典后回读失败');
-    }
-    return getById(row.rows.first[0]!);
+    return getById(newId);
   }
 
   /// 修改数据字典（changes 为本次要更新的字段集合，键与 JSON 契约
@@ -163,12 +157,12 @@ class DictService {
       }
     }
     final current = await getById(id);
-    final idValue = _toInt(id, '字典ID');
+    final idValue = _id(id, '字典ID');
 
     // 先解析目标值并完成唯一性校验（必填字段必须非空、可空字段 null 清空）
     final code = changes.containsKey('dictCode') ? _required(changes['dictCode']?.toString(), '字典编码', _codeMaxLength) : null;
     if (code != null) {
-      await _ensureDictCodeUnique(_toInt(current.hospId, '医院ID'), code, excludeId: idValue);
+      await _ensureDictCodeUnique(current.hospId, code, excludeId: idValue);
     }
     final name = changes.containsKey('dictName') ? _required(changes['dictName']?.toString(), '字典名称', _nameMaxLength) : null;
     final order = changes.containsKey('displayOrder') ? _optionalInt(changes['displayOrder']?.toString()) : null;
@@ -209,7 +203,7 @@ class DictService {
   /// 防止下级字典与数据项沦为孤儿数据。
   Future<int> delete(String id) async {
     await getById(id);
-    final idValue = _toInt(id, '字典ID');
+    final idValue = _id(id, '字典ID');
     final children = await _db.query(
       'SELECT COUNT(*) AS CNT FROM BASE_DICT WHERE PARENT_ID = ?',
       [idValue],
@@ -235,7 +229,7 @@ class DictService {
       'SELECT ID, DICT_ID, ITEM_CODE, ITEM_VALUE, DISPLAY_ORDER, IS_DEFAULT, '
       'CREATOR_ID, CREATOR_NAME, HOSP_ID, HOSP_NAME, CREATE_TIME, UPDATE_TIME '
       'FROM BASE_DICT_ITEM WHERE DICT_ID = ? ORDER BY ID',
-      [_toInt(dictId, '字典ID')],
+      [_id(dictId, '字典ID')],
     );
     return result.rowsAsMaps.map(_itemFromRow).toList(growable: false);
   }
@@ -246,7 +240,7 @@ class DictService {
       'SELECT ID, DICT_ID, ITEM_CODE, ITEM_VALUE, DISPLAY_ORDER, IS_DEFAULT, '
       'CREATOR_ID, CREATOR_NAME, HOSP_ID, HOSP_NAME, CREATE_TIME, UPDATE_TIME '
       'FROM BASE_DICT_ITEM WHERE ID = ?',
-      [_toInt(id, '数据项ID')],
+      [_id(id, '数据项ID')],
     );
     if (result.rows.isEmpty) {
       throw DictException(400, 40001, '数据字典项目不存在：$id');
@@ -271,12 +265,12 @@ class DictService {
     String? displayOrder,
   }) async {
     final dict = await getById(dictId);
-    final dictIdValue = _toInt(dictId, '字典ID');
+    final dictIdValue = _id(dictId, '字典ID');
     final code = _required(itemCode, '项目编码', _itemCodeMaxLength);
     final value = _required(itemValue, '项目值', _itemValueMaxLength);
     final order = _optionalInt(displayOrder);
     final def = _isDefaultFlag(isDefault);
-    final creatorIdValue = _toInt(creatorId, '创建人ID');
+    final creatorIdValue = _id(creatorId, '创建人ID');
     final creator = _required(creatorName, '创建人姓名', _creatorNameMaxLength);
 
     await _ensureItemCodeUnique(dictIdValue, code);
@@ -285,11 +279,13 @@ class DictService {
       await _clearDefault(dictIdValue);
     }
 
+    final newId = newUuid();
     await _db.execute(
-      'INSERT INTO BASE_DICT_ITEM (DICT_ID, ITEM_CODE, ITEM_VALUE, DISPLAY_ORDER, '
-      'IS_DEFAULT, CREATOR_ID, CREATOR_NAME, HOSP_ID, HOSP_NAME, CREATE_TIME) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO BASE_DICT_ITEM (ID, DICT_ID, ITEM_CODE, ITEM_VALUE, '
+      'DISPLAY_ORDER, IS_DEFAULT, CREATOR_ID, CREATOR_NAME, HOSP_ID, '
+      'HOSP_NAME, CREATE_TIME) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
+        newId,
         dictIdValue,
         code,
         value,
@@ -297,20 +293,12 @@ class DictService {
         def,
         creatorIdValue,
         creator,
-        _toInt(dict.hospId, '医院ID'),
+        dict.hospId,
         dict.hospName,
         formatTimestamp(DateTime.now()),
       ],
     );
-    // 自增 ID 经「字典ID+项目编码」唯一自然键回读（网关无 last-insert-id 通道）
-    final row = await _db.query(
-      'SELECT ID FROM BASE_DICT_ITEM WHERE DICT_ID = ? AND ITEM_CODE = ?',
-      [dictIdValue, code],
-    );
-    if (row.rows.isEmpty) {
-      throw const DictException(500, 50000, '新增数据字典项目后回读失败');
-    }
-    return getItemById(row.rows.first[0]!);
+    return getItemById(newId);
   }
 
   /// 修改数据项（changes 为本次要更新的字段集合，键与 JSON 契约一致；
@@ -323,12 +311,12 @@ class DictService {
       }
     }
     final current = await getItemById(id);
-    final idValue = _toInt(id, '数据项ID');
+    final idValue = _id(id, '数据项ID');
 
     // 先解析目标值并完成唯一性校验（必填字段必须非空、可空字段 null 清空）
     final code = changes.containsKey('itemCode') ? _required(changes['itemCode']?.toString(), '项目编码', _itemCodeMaxLength) : null;
     if (code != null) {
-      await _ensureItemCodeUnique(_toInt(current.dictId, '字典ID'), code, excludeId: idValue);
+      await _ensureItemCodeUnique(current.dictId, code, excludeId: idValue);
     }
     final value = changes.containsKey('itemValue') ? _required(changes['itemValue']?.toString(), '项目值', _itemValueMaxLength) : null;
     final order = changes.containsKey('displayOrder') ? _optionalInt(changes['displayOrder']?.toString()) : null;
@@ -366,7 +354,7 @@ class DictService {
   /// 删除数据项，返回删除行数（0 或 1）。
   Future<int> deleteItem(String id) async {
     await getItemById(id);
-    return _db.execute('DELETE FROM BASE_DICT_ITEM WHERE ID = ?', [_toInt(id, '数据项ID')]);
+    return _db.execute('DELETE FROM BASE_DICT_ITEM WHERE ID = ?', [_id(id, '数据项ID')]);
   }
 
   /// 设置数据项为所属字典的默认项，返回设置后的对象。
@@ -375,8 +363,8 @@ class DictService {
   Future<DictItem> setItemDefault(String id) async {
     final item = await getItemById(id);
     if (item.isDefault != isDefaultYes) {
-      final dictIdValue = _toInt(item.dictId, '字典ID');
-      final idValue = _toInt(id, '数据项ID');
+      final dictIdValue = _id(item.dictId, '字典ID');
+      final idValue = _id(id, '数据项ID');
       await _clearDefault(dictIdValue);
       await _db.execute(
         'UPDATE BASE_DICT_ITEM SET IS_DEFAULT = ?, UPDATE_TIME = ? WHERE ID = ?',
@@ -389,7 +377,7 @@ class DictService {
   // ---------------- 内部辅助 ----------------
 
   /// 清空指定字典内全部默认位（IS_DEFAULT = '0'）。
-  Future<void> _clearDefault(int dictId) async {
+  Future<void> _clearDefault(String dictId) async {
     await _db.execute(
       'UPDATE BASE_DICT_ITEM SET IS_DEFAULT = ? WHERE DICT_ID = ?',
       [isDefaultNo, dictId],
@@ -427,9 +415,9 @@ class DictService {
     updateTime: row['UPDATE_TIME'],
   );
 
-  /// 校验上级字典存在且同属本院，返回其 int 形式 ID。
-  Future<int> _ensureParent(String parentId, int hospId) async {
-    final value = _toInt(parentId, '上级字典ID');
+  /// 校验上级字典存在且同属本院，返回其 ID。
+  Future<String> _ensureParent(String parentId, String hospId) async {
+    final value = _id(parentId, '上级字典ID');
     final result = await _db.query(
       'SELECT ID FROM BASE_DICT WHERE ID = ? AND HOSP_ID = ?',
       [value, hospId],
@@ -441,7 +429,7 @@ class DictService {
   }
 
   /// 校验字典编码同医院内唯一（excludeId 用于修改时排除自身）。
-  Future<void> _ensureDictCodeUnique(int hospId, String code, {int? excludeId}) async {
+  Future<void> _ensureDictCodeUnique(String hospId, String code, {String? excludeId}) async {
     final sql = excludeId == null ? 'SELECT COUNT(*) AS CNT FROM BASE_DICT WHERE HOSP_ID = ? AND DICT_CODE = ?' : 'SELECT COUNT(*) AS CNT FROM BASE_DICT WHERE HOSP_ID = ? AND DICT_CODE = ? AND ID <> ?';
     final params = excludeId == null ? <Object?>[hospId, code] : <Object?>[hospId, code, excludeId];
     final dup = await _db.query(sql, params);
@@ -451,7 +439,7 @@ class DictService {
   }
 
   /// 校验项目编码同字典内唯一（excludeId 用于修改时排除自身）。
-  Future<void> _ensureItemCodeUnique(int dictId, String code, {int? excludeId}) async {
+  Future<void> _ensureItemCodeUnique(String dictId, String code, {String? excludeId}) async {
     final sql = excludeId == null ? 'SELECT COUNT(*) AS CNT FROM BASE_DICT_ITEM WHERE DICT_ID = ? AND ITEM_CODE = ?' : 'SELECT COUNT(*) AS CNT FROM BASE_DICT_ITEM WHERE DICT_ID = ? AND ITEM_CODE = ? AND ID <> ?';
     final params = excludeId == null ? <Object?>[dictId, code] : <Object?>[dictId, code, excludeId];
     final dup = await _db.query(sql, params);
@@ -501,12 +489,11 @@ class DictService {
     return n;
   }
 
-  /// 数字 ID 字符串转 int（网关列值均为字符串，绑定 int 避免两库隐式
-  /// 转换差异）。
-  int _toInt(String id, String label) {
-    final v = int.tryParse(id.trim());
-    if (v == null) {
-      throw DictException(400, 40002, '$label格式不正确：$id');
+  /// 必填 ID 校验：UUID 主键经网关以字符串取回，仅需去空格、非空。
+  String _id(String id, String label) {
+    final v = id.trim();
+    if (v.isEmpty) {
+      throw DictException(400, 40002, '$label不能为空');
     }
     return v;
   }

@@ -14,6 +14,7 @@ import 'package:client/services/hospital_service.dart';
 import 'package:client/services/log_service.dart';
 import 'package:client/services/menu_service.dart';
 import 'package:client/services/role_service.dart';
+import 'package:client/services/time_service.dart';
 import 'package:client/services/user_service.dart';
 import 'package:client/utils/log_helper.dart';
 import 'package:client/view_models/child/child_create_view_model.dart';
@@ -50,6 +51,7 @@ final getIt = GetIt.instance;
 void setupServiceLocator() {
   getIt.registerLazySingleton<BaseService>(() => BaseService());
   getIt.registerLazySingleton<AuthService>(() => AuthService());
+  getIt.registerLazySingleton<TimeService>(() => TimeService());
   getIt.registerLazySingleton<AccountService>(() => AccountService());
   getIt.registerLazySingleton<LogService>(() => LogService());
   getIt.registerLazySingleton<AdminDivisionsService>(() => AdminDivisionsService());
@@ -89,6 +91,11 @@ void main() async {
   //读取配置文件
   await getIt<AuthService>().loadConfig();
   await getIt<BaseService>().loadConfig();
+  await getIt<TimeService>().loadConfig();
+
+  //启动全局时间服务（立即向服务端校准一次并周期重校准；失败静默回退
+  //本地时钟，业务侧采集时间统一走 TimeService.now，见 time_service.dart）
+  getIt<TimeService>().startAutoSync();
 
   runApp(
     MultiProvider(

@@ -32,6 +32,16 @@ class FakeChildService extends ChildService {
   int deleteCalls = 0;
   String? lastUpdatedId;
 
+  /// 查重入参记录（断言编辑态排除自身用）。
+  String? lastDuplicateCheckExcludeId;
+  List<ChildInfo> Function(String? excludeId)? onDuplicateCheck;
+
+  @override
+  Future<List<ChildInfo>> duplicateCheck({required String name, required String sex, required String birthDate, String? excludeId}) async {
+    lastDuplicateCheckExcludeId = excludeId;
+    return onDuplicateCheck?.call(excludeId) ?? const [];
+  }
+
   @override
   Future<ChildArchive> load(String id) async => archives[id]!;
 
@@ -301,5 +311,25 @@ void main() {
     expect(service.createCalls, 1);
     expect(service.archives['1']!.$3, hasLength(1));
     expect(service.archives['1']!.$3.first.name, '王大壮');
+  });
+
+  test('checkDuplicate：新增态不带 excludeId，编辑态排除自身', () async {
+    final service = FakeChildService();
+    final vm = _buildViewModel(operationCodes: {ChildCreateViewModel.opCreate}, childService: service);
+    await vm.loadPermissions();
+
+    // 新增态（无已载入档案）→ excludeId 为 null
+    await vm.startCreate();
+    service.onDuplicateCheck = (excludeId) => [ChildInfo.fromJson(_child('9').toJson())];
+    final inCreate = await vm.checkDuplicate(_child(''));
+    expect(inCreate, hasLength(1));
+    expect(service.lastDuplicateCheckExcludeId, isNull);
+
+    // 编辑态（已载入档案 id=1）→ excludeId 携带自身 ID
+    service.archives['1'] = (_child('1'), null, const []);
+    await vm.selectChild('1');
+    vm.startEdit();
+    await vm.checkDuplicate(_child('1'));
+    expect(service.lastDuplicateCheckExcludeId, '1');
   });
 }

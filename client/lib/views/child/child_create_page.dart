@@ -6,6 +6,7 @@ import 'package:client/views/child/child_basic_info_form.dart';
 import 'package:client/views/child/child_ext_info_form.dart';
 import 'package:client/views/child/child_guardian_panel.dart';
 import 'package:client/widgets/camera_capture_dialog.dart';
+import 'package:client/widgets/child_pick_dialog.dart';
 import 'package:client/widgets/glass_panel.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -174,8 +175,14 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
     }
   }
 
-  /// 整单保存：依次校验基本/扩展 Tab，失败切到首个出错 Tab 并滚动定位。
+  /// 整单保存：依次校验基本/扩展 Tab，失败切到首个出错 Tab 并滚动定位；
+  /// 保存前按「姓名+性别+出生日期」做重复建档检查——命中时弹相似儿童
+  /// 列表确认（选择已有即转浏览该档案并写入全局当前儿童上下文，取消则
+  /// 作为新儿童继续保存）；保存成功后自动把该儿童写入全局当前儿童
+  /// 上下文（MainViewModel.child）。
   Future<void> _submit() async {
+    // await 前先取齐依赖（避免跨异步使用 BuildContext）
+    final mainViewModel = context.read<MainViewModel>();
     // 两个键在表单挂载后必然有 State；为空属异常兜底（重建间隙点击等）
     final basicState = _basicKey.currentState;
     final extState = _extKey.currentState;
@@ -193,8 +200,34 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
     }
     final child = basicState.collect();
     final ext = extState.collectOrNull();
+
+    // 重复建档检查：命中 → 相似儿童列表确认（取消=作为新儿童继续保存）
+    final duplicates = await _viewModel.checkDuplicate(child);
+    if (!mounted) return;
+    if (duplicates.isNotEmpty) {
+      final picked = await showChildPickDialog(
+        context,
+        duplicates,
+        title: '发现同名同性别同出生日期的儿童',
+        showCancelButton: true,
+        cancelHint: '点击取消视为新儿童，将继续保存',
+      );
+      if (!mounted) return;
+      if (picked != null) {
+        // 用户确认与已有档案为同一儿童 → 转浏览该档案并写入当前儿童上下文
+        await _viewModel.selectChild(picked.id);
+        mainViewModel.setCurrentChild(picked);
+        return;
+      }
+    }
+
     final ok = await _viewModel.save(child: child, ext: ext);
     if (ok) {
+      // 保存成功 → 自动将新建/修改后的儿童写入全局当前儿童上下文
+      final saved = _viewModel.child;
+      if (saved != null) {
+        mainViewModel.setCurrentChild(saved);
+      }
       _showToast('保存成功');
     }
   }

@@ -8,6 +8,7 @@ import 'package:server/database/migrator/migrations/migration_202610231703.dart'
 import 'package:server/database/migrator/migrations/migrations.dart';
 import 'package:server/database/migrator/schema_migrator.dart';
 import 'package:server/utils/field_cipher.dart';
+import 'package:server/utils/uuid_util.dart';
 import 'package:test/test.dart';
 
 import '../support/test_divisions.dart';
@@ -36,11 +37,12 @@ void main() {
     clearTestDivisionsCsv(divisionsDir);
   });
 
+  // 主键 ID 为 CHAR(36) UUID v7、无自增/默认值，直插必须显式携带。
   Future<void> insertUser(String userCode, String? phone) => db.execute(
     'INSERT INTO SYS_USER '
-    '(USER_CODE, PASSWORD, USER_NAME, ROLE_CODE, PHONE, STATUS) '
-    "VALUES (?, 'salt:hash', '用户', 'DOCTOR', ?, 1)",
-    [userCode, phone],
+    '(ID, USER_CODE, PASSWORD, USER_NAME, ROLE_CODE, PHONE, STATUS) '
+    "VALUES (?, ?, 'salt:hash', '用户', 'DOCTOR', ?, 1)",
+    [newUuid(), userCode, phone],
   );
 
   test('存量明文手机号升级后变为密文并写入盲索引，可精确查询', () async {
