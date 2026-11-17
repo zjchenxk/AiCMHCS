@@ -16,6 +16,7 @@ import 'package:client/view_models/login/login_view_model.dart';
 import 'package:client/view_models/main/main_view_model.dart';
 import 'package:client/views/login/login_page.dart';
 import 'package:client/views/main/change_password_dialog.dart';
+import 'package:client/views/main/child_info_sidebar.dart';
 import 'package:flutter_svg/svg.dart';
 import 'dart:convert';
 import 'dart:ui';
@@ -63,6 +64,8 @@ class _MainPageState extends State<MainPage> {
                 children: [
                   _buildSidebar(theme),
                   Expanded(child: _buildContentArea(theme)),
+                  // 右侧当前儿童信息侧边栏（未选定儿童时自动隐藏）
+                  const ChildInfoSidebar(),
                 ],
               ),
             ),

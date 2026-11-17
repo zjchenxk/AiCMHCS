@@ -283,7 +283,8 @@ class ChildBasicInfoFormState extends State<ChildBasicInfoForm> {
                   TextFormField(
                     initialValue: base?.patientId,
                     readOnly: true,
-                    decoration: childGlassDecoration(theme, '病人ID（HIS回写）'),
+                    enabled: editable,
+                    decoration: childGlassDecoration(theme, '病人ID'),
                     style: theme.textTheme.bodyMedium,
                   ),
                 ),

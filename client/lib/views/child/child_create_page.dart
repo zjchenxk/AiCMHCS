@@ -382,64 +382,62 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _buildButtonBar(theme, vm, editing),
-          const SizedBox(height: 12),
+          //const SizedBox(height: 12),
           Expanded(
             child: vm.loading
                 ? const Center(child: CircularProgressIndicator())
-                : GlassPanel(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          TabBar(
-                            controller: _tabController,
-                            isScrollable: true,
-                            tabAlignment: TabAlignment.start,
-                            tabs: [
-                              const Tab(text: '基本信息'),
-                              const Tab(text: '扩展信息'),
-                              Tab(text: '监护人（${vm.guardians.length}）'),
+                : Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        TabBar(
+                          controller: _tabController,
+                          isScrollable: true,
+                          tabAlignment: TabAlignment.start,
+                          tabs: [
+                            const Tab(text: '基本信息'),
+                            const Tab(text: '扩展信息'),
+                            Tab(text: '监护人（${vm.guardians.length}）'),
+                          ],
+                        ),
+                        const Divider(height: 1),
+                        const SizedBox(height: 16),
+                        // 用 IndexedStack 而非 TabBarView：三个 Tab 表单
+                        // 全部常驻挂载（TabBarView 懒构建，未访问过的 Tab
+                        // 表单 State 不存在，整单保存时校验键会为空）；
+                        // 各 Tab 顶部留 8px 内距，防首行浮动标签贴顶被裁
+                        Expanded(
+                          child: IndexedStack(
+                            index: _tabController.index,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: ChildBasicInfoForm(
+                                  key: _basicKey,
+                                  viewModel: vm,
+                                  editable: editing,
+                                  onSubmit: editing ? _submit : null,
+                                  onCapturePhoto: editing ? _startCapture : null,
+                                  onRemovePhoto: editing ? _removePhoto : null,
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: ChildExtInfoForm(
+                                  key: _extKey,
+                                  viewModel: vm,
+                                  editable: editing,
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: ChildGuardianPanel(viewModel: vm, editable: editing),
+                              ),
                             ],
                           ),
-                          const Divider(height: 1),
-                          const SizedBox(height: 16),
-                          // 用 IndexedStack 而非 TabBarView：三个 Tab 表单
-                          // 全部常驻挂载（TabBarView 懒构建，未访问过的 Tab
-                          // 表单 State 不存在，整单保存时校验键会为空）；
-                          // 各 Tab 顶部留 8px 内距，防首行浮动标签贴顶被裁
-                          Expanded(
-                            child: IndexedStack(
-                              index: _tabController.index,
-                              children: [
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 8),
-                                  child: ChildBasicInfoForm(
-                                    key: _basicKey,
-                                    viewModel: vm,
-                                    editable: editing,
-                                    onSubmit: editing ? _submit : null,
-                                    onCapturePhoto: editing ? _startCapture : null,
-                                    onRemovePhoto: editing ? _removePhoto : null,
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 8),
-                                  child: ChildExtInfoForm(
-                                    key: _extKey,
-                                    viewModel: vm,
-                                    editable: editing,
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 8),
-                                  child: ChildGuardianPanel(viewModel: vm, editable: editing),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
           ),
@@ -464,59 +462,57 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
       saveTip = '请先新增或载入儿童档案';
     }
 
-    return GlassPanel(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Wrap(
-          spacing: 12,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Tooltip(
-              message: vm.canCreate ? '新增儿童档案' : '无新增操作权限',
-              child: OutlinedButton.icon(
-                onPressed: createReady ? () => _viewModel.startCreate() : null,
-                icon: const Icon(Icons.add_outlined, size: 18),
-                label: const Text('新增'),
-              ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Tooltip(
+            message: vm.canCreate ? '新增儿童档案' : '无新增操作权限',
+            child: OutlinedButton.icon(
+              onPressed: createReady ? () => _viewModel.startCreate() : null,
+              icon: const Icon(Icons.add_outlined, size: 18),
+              label: const Text('新增'),
             ),
-            Tooltip(
-              message: !vm.canUpdate ? '无修改操作权限' : (vm.browsing ? '修改当前儿童档案' : '请先新增或载入儿童档案'),
-              child: OutlinedButton.icon(
-                onPressed: updateReady ? () => _viewModel.startEdit() : null,
-                icon: const Icon(Icons.edit_outlined, size: 18),
-                label: const Text('修改'),
-              ),
+          ),
+          Tooltip(
+            message: !vm.canUpdate ? '无修改操作权限' : (vm.browsing ? '修改当前儿童档案' : '请先新增或载入儿童档案'),
+            child: OutlinedButton.icon(
+              onPressed: updateReady ? () => _viewModel.startEdit() : null,
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              label: const Text('修改'),
             ),
-            Tooltip(
-              message: saveTip,
-              child: FilledButton.icon(
-                onPressed: (saveReady && !vm.busy) ? _submit : null,
-                icon: vm.busy ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.save_outlined, size: 18),
-                label: const Text('保 存'),
-              ),
+          ),
+          Tooltip(
+            message: saveTip,
+            child: FilledButton.icon(
+              onPressed: (saveReady && !vm.busy) ? _submit : null,
+              icon: vm.busy ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.save_outlined, size: 18),
+              label: const Text('保 存'),
             ),
-            if (editing)
-              OutlinedButton.icon(
-                onPressed: vm.busy ? null : _cancelEdit,
-                icon: const Icon(Icons.cancel_outlined, size: 18),
-                label: const Text('取消'),
-              ),
-            Tooltip(
-              message: !vm.canDelete ? '无删除操作权限' : (vm.browsing ? '删除当前儿童档案' : '请先新增或载入儿童档案'),
-              child: OutlinedButton.icon(
-                onPressed: (deleteReady && !vm.busy) ? _deleteCurrent : null,
-                icon: Icon(Icons.delete_outline, size: 18, color: theme.colorScheme.error),
-                label: Text('删除', style: TextStyle(color: theme.colorScheme.error)),
-              ),
+          ),
+          if (editing)
+            OutlinedButton.icon(
+              onPressed: vm.busy ? null : _cancelEdit,
+              icon: const Icon(Icons.cancel_outlined, size: 18),
+              label: const Text('取消'),
             ),
-            if (!editing && vm.child != null)
-              Text(
-                '浏览模式：${vm.child!.name}（点击【修改】编辑，【新增】建档）',
-                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
-              ),
-          ],
-        ),
+          Tooltip(
+            message: !vm.canDelete ? '无删除操作权限' : (vm.browsing ? '删除当前儿童档案' : '请先新增或载入儿童档案'),
+            child: OutlinedButton.icon(
+              onPressed: (deleteReady && !vm.busy) ? _deleteCurrent : null,
+              icon: Icon(Icons.delete_outline, size: 18, color: theme.colorScheme.error),
+              label: Text('删除', style: TextStyle(color: theme.colorScheme.error)),
+            ),
+          ),
+          if (!editing && vm.child != null)
+            Text(
+              '浏览模式：${vm.child!.name}（点击【修改】编辑，【新增】建档）',
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+            ),
+        ],
       ),
     );
   }

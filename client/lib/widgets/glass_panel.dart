@@ -20,15 +20,7 @@ class GlassPanel extends StatelessWidget {
   /// 描边宽度
   final double borderWidth;
 
-  const GlassPanel({
-    super.key,
-    required this.child,
-    this.blur = 20,
-    this.color,
-    this.borderRadius = 16,
-    this.borderColor,
-    this.borderWidth = 0.5,
-  });
+  const GlassPanel({super.key, required this.child, this.blur = 20, this.color, this.borderRadius = 16, this.borderColor, this.borderWidth = 0.5});
 
   @override
   Widget build(BuildContext context) {

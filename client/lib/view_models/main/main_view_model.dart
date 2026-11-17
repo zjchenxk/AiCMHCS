@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:client/main.dart' as app;
+import 'package:client/models/child_sidebar.dart';
 import 'package:client/models/current_child.dart';
 import 'package:client/models/menu_item.dart';
 import 'package:client/services/account_service.dart';
@@ -70,8 +73,31 @@ class MainViewModel extends ChangeNotifier {
     return service.search(name: kw, visitCardNo: kw, certificateNo: kw, phone: kw);
   }
 
+  // 右侧儿童信息侧边栏：先以基础档案 + 演示数据即时出栏，随后异步载入
+  // 儿童扩展档案与最近一次拍照头像后重建（风险分级按扩展数据评估，
+  // 见 child_sidebar.dart）。
+  ChildSidebarData? _childSidebarData;
+  ChildSidebarData? get childSidebarData => _childSidebarData;
+
+  /// 侧边栏扩展信息/头像是否加载中（仅影响顶部细进度条）。
+  bool _childSidebarLoading = false;
+  bool get childSidebarLoading => _childSidebarLoading;
+
+  /// 侧边栏是否收起（收起为 48 宽竖条，仅保留头像与展开按钮）。
+  bool _childSidebarCollapsed = false;
+  bool get childSidebarCollapsed => _childSidebarCollapsed;
+
+  /// 侧边栏加载请求序号：切换儿童/注销后丢弃过期响应。
+  int _childSidebarRequestId = 0;
+
+  /// 收起/展开右侧儿童信息侧边栏。
+  void toggleChildSidebar() {
+    _childSidebarCollapsed = !_childSidebarCollapsed;
+    notifyListeners();
+  }
+
   /// 将选中的儿童档案写入当前儿童上下文（显示字段由档案字段映射，
-  /// 实际年龄按出生日期实时计算）。
+  /// 实际年龄按出生日期实时计算），并触发右侧侧边栏扩展信息加载。
   ///param info: 检索/保存得到的儿童档案（服务端已解密的明文）
   void setCurrentChild(ChildInfo info) {
     final birth = DateTime.tryParse(info.birthDate) ?? DateTime.fromMillisecondsSinceEpoch(0);
@@ -89,8 +115,60 @@ class MainViewModel extends ChangeNotifier {
       actualAge: _formatAge(birth),
       phone: info.phone ?? '',
     );
+    // 基础信息立即可见；扩展档案到达前使用演示高危数据（界面会标注）
+    _childSidebarData = ChildSidebarData.build(
+      child: child,
+      ext: null,
+      avatarBase64: null,
+      now: _now(),
+    );
+    _childSidebarLoading = info.id.isNotEmpty;
     notifyListeners();
+    unawaited(_loadChildSidebar(info.id));
   }
+
+  /// 加载侧边栏展示所需的扩展档案与最近一次拍照头像；失败时保留基础
+  /// 信息与演示数据，不阻断侧边栏展示。
+  ///param childId: 当前儿童档案 ID（空串直接结束）
+  Future<void> _loadChildSidebar(String childId) async {
+    if (childId.isEmpty) {
+      _childSidebarLoading = false;
+      notifyListeners();
+      return;
+    }
+    final requestId = ++_childSidebarRequestId;
+    try {
+      final service = _childService ?? app.getIt<ChildService>();
+      final archive = await service.load(childId);
+      if (!_isCurrentSidebarRequest(requestId, childId)) return;
+
+      ChildPhoto? photo;
+      try {
+        photo = await service.latestPhoto(childId);
+      } catch (e) {
+        // 头像失败不影响扩展信息展示
+        unawaited(LogHelper.warn('client:MainViewModel._loadChildSidebar', content: '儿童头像加载失败：$e'));
+      }
+      if (!_isCurrentSidebarRequest(requestId, childId)) return;
+
+      _childSidebarData = ChildSidebarData.build(
+        child: child,
+        ext: archive.$2,
+        avatarBase64: photo?.avatarBase64,
+        now: _now(),
+      );
+    } catch (e) {
+      unawaited(LogHelper.warn('client:MainViewModel._loadChildSidebar', content: '儿童扩展信息加载失败：$e'));
+    } finally {
+      if (requestId == _childSidebarRequestId) {
+        _childSidebarLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  /// 该请求是否仍对应当前儿童（防切换儿童后过期响应覆盖新数据）。
+  bool _isCurrentSidebarRequest(int requestId, String childId) => requestId == _childSidebarRequestId && child.id == childId;
 
   /// 当前时间（全局时间服务口径，见 time_service.dart）。
   static DateTime _now() => app.getIt<TimeService>().now();
@@ -348,6 +426,11 @@ class MainViewModel extends ChangeNotifier {
       birthDate: DateTime.fromMillisecondsSinceEpoch(0),
       phone: '',
     );
+    // 侧边栏一并清空，并使在途加载请求失效
+    _childSidebarRequestId++;
+    _childSidebarData = null;
+    _childSidebarLoading = false;
+    _childSidebarCollapsed = false;
     notifyListeners();
   }
 
