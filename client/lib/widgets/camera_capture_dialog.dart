@@ -202,27 +202,34 @@ class _CameraCaptureDialogState extends State<CameraCaptureDialog> {
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
-      child: GlassPanel(
-        blur: 24,
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.photo_camera_outlined, color: theme.colorScheme.primary, size: 22),
-                  const SizedBox(width: 10),
-                  Text(
-                    '儿童拍照',
-                    style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              _buildContent(theme),
-            ],
+      // 面板宽度须显式收敛到内容宽（预览 480 + 左右内距 48）：Dialog 给
+      // 子树的约束上限是整窗宽，GlassPanel 内的 Row 默认 mainAxisSize.max
+      // 会把面板撑满整窗，右侧留大片空白（与其他对话框的 maxWidth 约束
+      // 同款模式）
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 528),
+        child: GlassPanel(
+          blur: 24,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.photo_camera_outlined, color: theme.colorScheme.primary, size: 22),
+                    const SizedBox(width: 10),
+                    Text(
+                      '儿童拍照',
+                      style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _buildContent(theme),
+              ],
+            ),
           ),
         ),
       ),

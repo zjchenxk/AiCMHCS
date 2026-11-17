@@ -138,31 +138,34 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: Colors.transparent,
-        content: GlassPanel(
-          blur: 24,
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('移除今日拍照', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 12),
-                Text('将删除今天拍摄的全部记录，头像恢复显示为历史拍照；确定移除吗？', style: theme.textTheme.bodyMedium),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('取消')),
-                    const SizedBox(width: 12),
-                    FilledButton(
-                      style: FilledButton.styleFrom(backgroundColor: theme.colorScheme.error),
-                      onPressed: () => Navigator.of(dialogContext).pop(true),
-                      child: const Text('移除'),
-                    ),
-                  ],
-                ),
-              ],
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400), // 收敛面板宽，防 Row 默认 max 撑满整窗留右侧空白
+          child: GlassPanel(
+            blur: 24,
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('移除今日拍照', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  Text('将删除今天拍摄的全部记录，头像恢复显示为历史拍照；确定移除吗？', style: theme.textTheme.bodyMedium),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('取消')),
+                      const SizedBox(width: 12),
+                      FilledButton(
+                        style: FilledButton.styleFrom(backgroundColor: theme.colorScheme.error),
+                        onPressed: () => Navigator.of(dialogContext).pop(true),
+                        child: const Text('移除'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -241,34 +244,37 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: Colors.transparent,
-        content: GlassPanel(
-          blur: 24,
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('删除儿童档案', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 12),
-                Text(
-                  '确定删除「${child.name}」的儿童档案吗？扩展信息与监护人将一并删除，操作不可恢复。',
-                  style: theme.textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('取消')),
-                    const SizedBox(width: 12),
-                    FilledButton(
-                      style: FilledButton.styleFrom(backgroundColor: theme.colorScheme.error),
-                      onPressed: () => Navigator.of(dialogContext).pop(true),
-                      child: const Text('删除'),
-                    ),
-                  ],
-                ),
-              ],
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400), // 收敛面板宽，防 Row 默认 max 撑满整窗留右侧空白
+          child: GlassPanel(
+            blur: 24,
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('删除儿童档案', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  Text(
+                    '确定删除「${child.name}」的儿童档案吗？扩展信息与监护人将一并删除，操作不可恢复。',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('取消')),
+                      const SizedBox(width: 12),
+                      FilledButton(
+                        style: FilledButton.styleFrom(backgroundColor: theme.colorScheme.error),
+                        onPressed: () => Navigator.of(dialogContext).pop(true),
+                        child: const Text('删除'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
