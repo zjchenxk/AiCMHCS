@@ -1,6 +1,7 @@
 import 'package:client/main.dart';
 import 'package:client/providers/theme_provider.dart';
 import 'package:client/utils/log_helper.dart';
+import 'package:client/utils/role_display.dart';
 import 'package:client/utils/theme_color_mapper.dart';
 import 'package:client/utils/theme_data.dart';
 import 'package:client/views/help/help_center_page.dart';
@@ -1173,14 +1174,15 @@ class _MainPageState extends State<MainPage> {
     }
   }
 
-  // 切换角色
+  // 切换角色（「角色-科室」授权组合：同一角色按科室细分授权会列出多行）
   Future<void> _showSwitchRoleDialog(BuildContext context, ThemeData theme) async {
     final mainViewModel = context.read<MainViewModel>();
 
     final selected = await showDialog<Map<String, String>>(
       context: context,
       builder: (dialogContext) {
-        String currentRoleId = mainViewModel.loginUser.roleId; // 弹窗内的局部选中态
+        // 弹窗内的局部选中态：当前身份的「角色ID|科室ID」复合键
+        String currentRoleKey = '${mainViewModel.loginUser.roleId}|${mainViewModel.loginUser.deptId ?? ''}';
 
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) => Dialog(
@@ -1219,13 +1221,13 @@ class _MainPageState extends State<MainPage> {
                       ),
                       const SizedBox(height: 8),
 
-                      // 单选列表
+                      // 单选列表（逐行「科室 角色」，值用复合键避免重复）
                       Flexible(
                         child: RadioGroup<String>(
-                          groupValue: currentRoleId,
+                          groupValue: currentRoleKey,
                           onChanged: (value) {
                             if (value != null) {
-                              setDialogState(() => currentRoleId = value);
+                              setDialogState(() => currentRoleKey = value);
                             }
                           },
                           child: ListView(
@@ -1233,11 +1235,11 @@ class _MainPageState extends State<MainPage> {
                             children: [
                               for (final role in mainViewModel.roles)
                                 RadioListTile<String>(
-                                  value: role['id'] ?? '',
+                                  value: roleGrantKey(role),
                                   dense: true,
                                   activeColor: theme.colorScheme.primary,
                                   title: Text(
-                                    role['roleName'] ?? '',
+                                    roleGrantLabel(role),
                                     style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer),
                                   ),
                                 ),
@@ -1262,10 +1264,10 @@ class _MainPageState extends State<MainPage> {
                           FilledButton(
                             onPressed: () {
                               final role = mainViewModel.roles.firstWhere(
-                                (d) => d['id'] == currentRoleId,
-                                orElse: () => {'id': '', 'roleName': ''},
+                                (d) => roleGrantKey(d) == currentRoleKey,
+                                orElse: () => const {},
                               );
-                              if (role['id']!.isNotEmpty) {
+                              if (role.isNotEmpty) {
                                 Navigator.of(dialogContext).pop(role);
                               }
                             },
@@ -1287,16 +1289,19 @@ class _MainPageState extends State<MainPage> {
     );
 
     if (selected != null) {
-      final selectedRole = selected;
-      if (selectedRole['id'] != mainViewModel.loginUser.roleId) {
-        // 调后端切换会话角色并刷新菜单权限，按结果给出提示
-        final ok = await mainViewModel.switchRole(selectedRole['id'] ?? '');
+      final selectedGrant = selected;
+      final currentDeptId = mainViewModel.loginUser.deptId ?? '';
+      final switched = selectedGrant['id'] != mainViewModel.loginUser.roleId || (selectedGrant['deptId'] ?? '') != currentDeptId;
+      if (switched) {
+        // 调后端切换会话「角色-科室」授权组合并刷新菜单权限，按结果给出提示
+        final deptId = selectedGrant['deptId'] ?? '';
+        final ok = await mainViewModel.switchRole(selectedGrant['id'] ?? '', deptId: deptId.isEmpty ? null : deptId);
         if (!context.mounted) return;
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              ok ? '已切换到角色：${selectedRole['roleName']}' : (mainViewModel.errorMsg ?? '切换角色失败，请稍后重试'),
+              ok ? '已切换到：${roleGrantLabel(selectedGrant)}' : (mainViewModel.errorMsg ?? '切换角色失败，请稍后重试'),
             ),
             backgroundColor: ok ? theme.colorScheme.primary : theme.colorScheme.error,
             behavior: SnackBarBehavior.floating,

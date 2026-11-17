@@ -1,7 +1,9 @@
 /// 登录用户信息（前后端共享，SYS_USER 表的业务视图）。
 ///
 /// 字段分两组：协议字段由后端 `/api/auth/login`、`/api/auth/me` 下发；
-/// 工作区字段（医院/院区/科室）后端暂不下发，由客户端登录后自行补充。
+/// 工作区字段（医院/院区/科室/角色名称）按登录时所选「角色-科室」授权
+/// 组合由后端关联下发（见 AuthService.withRoleContext），未设置的字段
+/// 为 null，界面按需隐藏。
 final class LoginUser {
   /// 构造函数
   const LoginUser({
@@ -9,6 +11,7 @@ final class LoginUser {
     required this.userCode,
     required this.userName,
     required this.roleId,
+    this.roleName,
     this.userType,
     this.permissionLevel,
     this.phone,
@@ -32,6 +35,7 @@ final class LoginUser {
     userCode: json['userCode'] as String,
     userName: json['userName'] as String,
     roleId: json['roleId'] as String,
+    roleName: json['roleName'] as String?,
     userType: json['userType'] as String?,
     permissionLevel: json['permissionLevel'] as String?,
     phone: json['phone'] as String?,
@@ -58,8 +62,11 @@ final class LoginUser {
   /// 用户姓名
   final String userName;
 
-  /// 登录角色ID
+  /// 登录角色ID（登录时所选「角色-科室」授权组合中的角色）
   final String roleId;
+
+  /// 登录角色名称（登录时所选授权组合的角色，后端关联下发）
+  final String? roleName;
 
   /// 用户类别（ADMIN/DOCTOR/NURSE/TECHNICIAN）
   final String? userType;
@@ -91,22 +98,22 @@ final class LoginUser {
   ///用户头像图片BASE64
   final String? avatarImage;
 
-  /// 科室 ID
+  /// 科室 ID（登录时所选授权组合的适用科室）
   final String? deptId;
 
-  /// 科室名称
+  /// 科室名称（登录时所选授权组合的适用科室名称）
   final String? deptName;
 
-  /// 院区 ID
+  /// 院区 ID（上述科室所属院区）
   final String? campusId;
 
-  /// 院区名称
+  /// 院区名称（上述科室所属院区名称）
   final String? campusName;
 
-  /// 医院 ID
+  /// 医院 ID（上述科室所属医院）
   final String? hospId;
 
-  /// 医院名称
+  /// 医院名称（上述科室所属医院名称）
   final String? hospName;
 
   /// 复制并替换指定字段
@@ -115,6 +122,7 @@ final class LoginUser {
     String? userCode,
     String? userName,
     String? roleId,
+    String? roleName,
     String? userType,
     String? permissionLevel,
     String? phone,
@@ -135,6 +143,7 @@ final class LoginUser {
     userCode: userCode ?? this.userCode,
     userName: userName ?? this.userName,
     roleId: roleId ?? this.roleId,
+    roleName: roleName ?? this.roleName,
     userType: userType ?? this.userType,
     permissionLevel: permissionLevel ?? this.permissionLevel,
     phone: phone ?? this.phone,
@@ -152,12 +161,48 @@ final class LoginUser {
     hospName: hospName ?? this.hospName,
   );
 
+  /// 以登录时所选「角色-科室」授权组合替换身份上下文：角色 ID/名称与
+  /// 医院/院区/科室字段**整体覆盖**（含置 null——所选科室无院区时须清掉
+  /// 之前的值，故不能用 copyWith 的「null 表示保留」语义）。
+  LoginUser withRoleContext({
+    required String roleId,
+    String? roleName,
+    String? deptId,
+    String? deptName,
+    String? campusId,
+    String? campusName,
+    String? hospId,
+    String? hospName,
+  }) => LoginUser(
+    id: id,
+    userCode: userCode,
+    userName: userName,
+    roleId: roleId,
+    roleName: roleName,
+    userType: userType,
+    permissionLevel: permissionLevel,
+    phone: phone,
+    idCardNo: idCardNo,
+    hisUserCode: hisUserCode,
+    mchisUserCode: mchisUserCode,
+    certId: certId,
+    signatureImage: signatureImage,
+    avatarImage: avatarImage,
+    deptId: deptId,
+    deptName: deptName,
+    campusId: campusId,
+    campusName: campusName,
+    hospId: hospId,
+    hospName: hospName,
+  );
+
   /// 将 LoginUser 转换为 JSON 对象（后端 login/me 响应的 user 字段同此结构）
   Map<String, dynamic> toJson() => {
     'id': id,
     'userCode': userCode,
     'userName': userName,
     'roleId': roleId,
+    'roleName': roleName,
     'userType': userType,
     'permissionLevel': permissionLevel,
     'phone': phone,

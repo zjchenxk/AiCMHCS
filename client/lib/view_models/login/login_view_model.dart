@@ -4,6 +4,7 @@ import 'package:client/main.dart';
 import 'package:client/services/auth_service.dart';
 import 'package:client/services/time_service.dart';
 import 'package:client/utils/log_helper.dart';
+import 'package:client/utils/role_display.dart';
 import 'package:common/model.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -32,9 +33,12 @@ class LoginViewModel extends ChangeNotifier {
   final _userCodeController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  String? _selectedRole;
+  ///当前所选「角色-科室」授权组合的复合键（角色ID|科室ID；同一角色可按
+  ///科室细分授权，下拉框逐行展示「科室 角色」，仅用角色 ID 会重复）
+  String? _selectedRoleKey;
 
-  ///该用户名拥有的角色列表（用户名回车/失焦后从后端加载，绑定角色下拉框）
+  ///该用户名拥有的「角色-科室」授权组合列表（用户名回车/失焦后从后端加载，
+  ///绑定角色下拉框，逐行展示「科室 角色」）
   List<Map<String, String>> _roles = const [];
   bool _isLoadingRoles = false;
 
@@ -57,7 +61,8 @@ class LoginViewModel extends ChangeNotifier {
   TextEditingController get userCodeController => _userCodeController;
   TextEditingController get passwordController => _passwordController;
 
-  String? get selectedRole => _selectedRole;
+  ///当前所选「角色-科室」授权组合的复合键（角色ID|科室ID）
+  String? get selectedRoleKey => _selectedRoleKey;
 
   List<Map<String, String>> get roles => _roles;
   bool get isLoadingRoles => _isLoadingRoles;
@@ -78,14 +83,15 @@ class LoginViewModel extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
-  void selectRole(String? role) {
-    _selectedRole = role;
+  void selectRole(String? roleKey) {
+    _selectedRoleKey = roleKey;
     _validateRole(); //选择后立即重新验证
   }
 
-  /// 按当前用户名从后端加载其拥有的角色列表并绑定角色下拉框。
-  /// 同一用户名不重复请求；用户名变更后原选中角色不在新列表中时清空选择。
-  ///return 加载后的角色列表是否可用（非空）
+  /// 按当前用户名从后端加载其拥有的「角色-科室」授权组合列表并绑定角色
+  /// 下拉框。同一用户名不重复请求；用户名变更后原选中组合不在新列表中
+  /// 时清空选择。
+  ///return 加载后的组合列表是否可用（非空）
   Future<bool> loadRoles() async {
     final userCode = _userCodeController.text.trim();
     if (userCode.isEmpty) {
@@ -106,8 +112,8 @@ class LoginViewModel extends ChangeNotifier {
       final roles = await service.fetchUserRoles(userCode);
       _roles = roles;
       _rolesLoadedUser = userCode;
-      if (_selectedRole != null && !_roles.any((r) => r['id'] == _selectedRole)) {
-        _selectedRole = null; //原选中角色不属于当前用户名，清空选择
+      if (_selectedRoleKey != null && !_roles.any((r) => roleGrantKey(r) == _selectedRoleKey)) {
+        _selectedRoleKey = null; //原选中组合不属于当前用户名，清空选择
       }
       _roleError = roles.isEmpty ? '该用户名暂无可选角色' : null;
       return roles.isNotEmpty;
@@ -123,11 +129,11 @@ class LoginViewModel extends ChangeNotifier {
     }
   }
 
-  /// 清空角色列表、加载标记与已选角色（不清理校验错误，由调用方决定）。
+  /// 清空角色组合列表、加载标记与已选组合（不清理校验错误，由调用方决定）。
   void _clearRoles() {
     _roles = const [];
     _rolesLoadedUser = null;
-    _selectedRole = null;
+    _selectedRoleKey = null;
   }
 
   @override
@@ -160,7 +166,7 @@ class LoginViewModel extends ChangeNotifier {
   }
 
   void _validateRole() {
-    if (_selectedRole == null || _selectedRole!.isEmpty) {
+    if (_selectedRoleKey == null || _selectedRoleKey!.isEmpty) {
       _roleError = "角色不能为空！";
     } else {
       _roleError = null;
@@ -192,11 +198,18 @@ class LoginViewModel extends ChangeNotifier {
 
           if (_userCodeError == null && _passwordError == null && _roleError == null) {
             final password = _passwordController.text;
-            final role = _selectedRole;
+            //所选「角色-科室」授权组合：复合键拆出角色 ID 与科室 ID，
+            //登录后服务端按所选科室下发医院/院区/科室身份上下文
+            final grant = parseRoleGrantKey(_selectedRoleKey!);
 
             //登录系统
             final service = _authService ?? getIt<AuthService>();
-            final data = await service.login(userCode, password, role!);
+            final data = await service.login(
+              userCode,
+              password,
+              grant.roleId,
+              deptId: grant.deptId.isEmpty ? null : grant.deptId,
+            );
 
             token = data['token'] as String;
             sessionKey = data['sessionKey'] as String;

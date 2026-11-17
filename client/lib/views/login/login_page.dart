@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:ui';
+import 'package:client/utils/role_display.dart';
 import 'package:client/utils/theme_color_mapper.dart';
 import 'package:client/view_models/login/login_view_model.dart';
 import 'package:client/view_models/main/main_view_model.dart';
@@ -175,11 +176,13 @@ class _LoginPageState extends State<LoginPage> {
                                 ),
                                 SizedBox(height: 20),
 
-                                //角色（值域来自后端：输入用户名回车后加载该用户拥有的角色）
+                                //角色（值域来自后端：输入用户名回车后加载该用户
+                                //拥有的「角色-科室」授权组合，逐行展示「科室 角色」）
                                 DropdownButtonFormField<String>(
-                                  //绑定 VM 选中值：VM 侧清空/重置时经 key 重建同步显示
-                                  key: ValueKey(loginViewModel.selectedRole),
-                                  initialValue: loginViewModel.selectedRole,
+                                  //绑定 VM 选中值（角色ID|科室ID 复合键）：VM 侧
+                                  //清空/重置时经 key 重建同步显示
+                                  key: ValueKey(loginViewModel.selectedRoleKey),
+                                  initialValue: loginViewModel.selectedRoleKey,
                                   isExpanded: true,
                                   decoration: InputDecoration(
                                     labelText: '角色',
@@ -203,8 +206,10 @@ class _LoginPageState extends State<LoginPage> {
                                   items: loginViewModel.roles
                                       .map(
                                         (role) => DropdownMenuItem(
-                                          value: role['id'],
-                                          child: Text(role['roleName'] ?? '', style: theme.textTheme.bodyMedium),
+                                          //同一角色按科室细分授权会返回多行，值用
+                                          //「角色ID|科室ID」复合键避免重复
+                                          value: roleGrantKey(role),
+                                          child: Text(roleGrantLabel(role), style: theme.textTheme.bodyMedium),
                                         ),
                                       )
                                       .toList(),

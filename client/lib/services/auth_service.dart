@@ -17,12 +17,13 @@ class AuthService {
   ///param userCode: 用户名
   ///param password: 明文口令
   ///param role: 角色ID
+  ///param deptId: 所选角色适用科室 ID（空/缺省表示存量未指定科室的哨兵组合）
   ///returns: 登录结果 Map（token / expiresIn / user），失败抛带 message 的异常
-  Future<Map<String, dynamic>> login(String userCode, String password, String role) async {
+  Future<Map<String, dynamic>> login(String userCode, String password, String role, {String? deptId}) async {
     final response = await client.post(
       Uri.parse('$apiUrl/api/auth/login'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'usercode': userCode, 'password': password, 'role': role}),
+      body: jsonEncode({'usercode': userCode, 'password': password, 'role': role, 'deptId': ?deptId}),
     );
 
     final jsonResponse = jsonDecode(response.body) as Map<String, dynamic>;
@@ -38,9 +39,11 @@ class AuthService {
     return jsonResponse['data'] as Map<String, dynamic>;
   }
 
-  /// 按用户名查询其拥有的角色列表（登录页输入用户名回车后绑定角色下拉框）。
+  /// 按用户名查询其拥有的「角色-科室」授权组合列表（登录页输入用户名
+  /// 回车后绑定角色下拉框，逐行展示「科室 角色」）。
   ///param userCode: 用户名
-  ///returns: 角色列表 [{id, roleName}]，失败抛带 message 的异常
+  ///returns: 组合列表 [{id, roleName, deptId, deptName}]（deptId/deptName
+  /// 为空串表示存量未指定科室的哨兵组合），失败抛带 message 的异常
   Future<List<Map<String, String>>> fetchUserRoles(String userCode) async {
     final uri = Uri.parse('$apiUrl/api/auth/roles').replace(queryParameters: {'usercode': userCode});
     final response = await client.get(uri, headers: {'Content-Type': 'application/json'});
@@ -58,7 +61,12 @@ class AuthService {
     final data = jsonResponse['data'] as Map<String, dynamic>;
     final roles = data['roles'] as List<dynamic>? ?? const [];
     return roles.whereType<Map>().map((role) {
-      return {'id': role['id'] as String, 'roleName': role['roleName'] as String};
+      return {
+        'id': role['id'] as String,
+        'roleName': role['roleName'] as String? ?? '',
+        'deptId': role['deptId'] as String? ?? '',
+        'deptName': role['deptName'] as String? ?? '',
+      };
     }).toList();
   }
 }

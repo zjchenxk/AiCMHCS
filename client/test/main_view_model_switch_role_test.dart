@@ -7,19 +7,28 @@ import 'package:client/view_models/main/main_view_model.dart';
 import 'package:common/model.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// 返回固定切换结果（角色 6-系统管理员）的伪账户服务。
+/// 返回固定切换结果（系统管理员 × 护理部）的伪账户服务。
 class FakeAccountService extends AccountService {
+  /// 切换时捕获的科室 ID（断言「角色-科室」组合一并提交）。
+  String? capturedDeptId;
+
   @override
-  Future<SwitchRoleResult> switchRole(String roleId) async {
+  Future<SwitchRoleResult> switchRole(String roleId, {String? deptId}) async {
+    capturedDeptId = deptId;
     return (
       user: const LoginUser(
         id: '2',
         userCode: 'doctor01',
         userName: '李医生',
         roleId: '6',
+        roleName: '系统管理员',
         userType: 'DOCTOR',
         hospId: '1',
         hospName: '测试三级医院',
+        campusId: '8',
+        campusName: '城南院区',
+        deptId: '9',
+        deptName: '护理部',
       ),
       menus: [
         const Menu(
@@ -50,7 +59,7 @@ class FakeAccountService extends AccountService {
 /// 始终抛异常（模拟后端拒绝，如角色未授权）的伪账户服务。
 class FailingAccountService extends AccountService {
   @override
-  Future<SwitchRoleResult> switchRole(String roleId) async {
+  Future<SwitchRoleResult> switchRole(String roleId, {String? deptId}) async {
     throw Exception('所选角色无效或未授权，请重新选择');
   }
 }
@@ -98,33 +107,39 @@ void main() {
     hospName: '测试三级医院',
   );
 
-  /// 该用户拥有的角色列表（登录页角色下拉同源，roleName 按当前 roleId 从此解析）。
+  /// 该用户拥有的「角色-科室」授权组合列表（登录页角色下拉同源；登录用户
+  /// 未下发 roleName 时 roleName 按当前 roleId 从此列表回退解析）。
   List<Map<String, String>> userRoles() => const [
-    {'id': '2', 'roleName': '儿童心理医生'},
-    {'id': '6', 'roleName': '系统管理员'},
+    {'id': '2', 'roleName': '儿童心理医生', 'deptId': '7', 'deptName': '儿童心理科'},
+    {'id': '6', 'roleName': '系统管理员', 'deptId': '9', 'deptName': '护理部'},
   ];
 
-  test('切换成功：全局与工作副本刷新为新角色身份，菜单按新角色重建', () async {
+  test('切换成功：全局与工作副本刷新为新组合身份，菜单按新角色重建', () async {
     loginUser = loginAsRole2();
-    final vm = MainViewModel(accountService: FakeAccountService());
+    final accountService = FakeAccountService();
+    final vm = MainViewModel(accountService: accountService);
     vm.setRoles(userRoles());
     vm.syncLoginUser();
     vm.setRoleMenus(_oldRoleMenus());
-    // 顶栏信息栏按当前角色 ID 解析角色名称
+    // 登录用户未下发 roleName 时按当前角色 ID 从组合列表回退解析
     expect(vm.roleName, '儿童心理医生');
     // 造一个选中态，验证切换后被清空
     vm.selectMenu(vm.menus.first.children.first, ['系统管理', '医院管理']);
     expect(vm.selectedMenuId, '2');
 
-    final ok = await vm.switchRole('6');
+    final ok = await vm.switchRole('6', deptId: '9');
 
     expect(ok, isTrue);
+    expect(accountService.capturedDeptId, '9'); //「角色-科室」组合一并提交
     expect(vm.errorMsg, isNull);
     expect(vm.switchingRole, isFalse);
-    // 切换后随新角色 ID 解析新角色名称
+    // 切换后顶栏「当前角色」取响应下发的 roleName
     expect(vm.roleName, '系统管理员');
-    // 全局 loginUser 已替换为响应下发的新角色身份
+    // 全局 loginUser 已替换为响应下发的新组合身份（科室/院区/医院随之刷新）
     expect(loginUser!.roleId, '6');
+    expect(loginUser!.roleName, '系统管理员');
+    expect(loginUser!.deptName, '护理部');
+    expect(loginUser!.campusName, '城南院区');
     // 工作副本同步（引用替换，Selector 可感知）
     expect(vm.loginUser.roleId, '6');
     expect(identical(vm.loginUser, loginUser), isTrue);

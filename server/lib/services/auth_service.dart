@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:common/model.dart';
 import 'package:common/utils/security_helper.dart';
 import 'package:server/database/engine/database_gateway.dart';
+import 'package:server/services/user_service.dart';
 import 'package:server/utils/field_cipher.dart';
 import 'package:server/utils/password_helper.dart';
 
@@ -34,8 +35,9 @@ final class LoginSession {
   /// 会话加密密钥（base64 的 32 字节随机数，随登录下发，与 token 同生命周期）。
   final String sessionKey;
 
-  /// 登录用户（含解密后的手机号）。
-  final LoginUser user;
+  /// 登录用户（含解密后的手机号；角色 ID/名称与医院/院区/科室为登录时
+  /// 所选「角色-科室」授权组合的身份上下文，切换角色时随之更新）。
+  LoginUser user;
 
   /// 会话过期时间（滑动续期）。
   DateTime expiresAt;
@@ -90,7 +92,12 @@ class AuthService {
   );
 
   /// 登录：校验用户名口令、写审计日志、签发令牌（登录时间由 SYS_LOGIN_LOG 审计）。
-  Future<LoginSession> login(String userCode, String password, String role, {String? ip}) async {
+  ///
+  /// role / deptId 为登录页所选的「角色-科室」授权组合（deptId 为空表示
+  /// 存量未指定科室的哨兵关联）：校验该组合确已分配给该用户后，把角色
+  /// ID/名称与所选科室及其所属院区、医院写入登录用户身份上下文，主界面
+  /// 顶栏「当前医院/院区/科室/角色」据此展示。
+  Future<LoginSession> login(String userCode, String password, String role, {String? deptId, String? ip}) async {
     final uCode = userCode.trim();
     if (uCode.isEmpty || password.isEmpty || role.isEmpty) {
       throw const AuthException(400, 40001, '用户名、密码和角色不能为空');
@@ -142,64 +149,137 @@ class AuthService {
       throw const AuthException(400, 40001, '角色不能为空');
     }
 
-    await _ensureUserRole(user.id, roleIdValue, uCode, ip);
+    await _ensureUserRole(user.id, roleIdValue, deptId, uCode, ip);
 
     await _logLogin(user.id, uCode, ip, 'SUCCESS', null);
 
     _pruneExpired();
 
     final token = _randomHex(32);
-    final session = LoginSession(token, SecurePayload.generateSessionKey(), user, DateTime.now().add(sessionTtl), roleIdValue);
+    // 按所选授权组合补齐身份上下文（角色名称 + 科室及其院区/医院）
+    final sessionUser = await _withGrantContext(user, roleIdValue, deptId);
+    final session = LoginSession(token, SecurePayload.generateSessionKey(), sessionUser, DateTime.now().add(sessionTtl), roleIdValue);
     _sessions[token] = session;
     return session;
   }
 
-  /// 校验角色已分配给用户（SYS_USER_ROLE），未分配时写失败审计并抛 403 业务异常。
-  Future<void> _ensureUserRole(String userId, String roleId, String userCode, String? ip) async {
-    if (!await _hasUserRole(userId, roleId)) {
+  /// 校验「角色-科室」授权组合已分配给用户（SYS_USER_ROLE），未分配时
+  /// 写失败审计并抛 403 业务异常。deptId 为空时只按角色匹配（兼容存量
+  /// 未指定科室的哨兵关联行）。
+  Future<void> _ensureUserRole(String userId, String roleId, String? deptId, String userCode, String? ip) async {
+    if (!await _hasUserRole(userId, roleId, deptId: deptId)) {
       await _logLogin(userId, userCode, ip, 'FAIL', '所选角色未授权');
       throw const AuthException(403, 40301, '所选角色无效或未授权，请重新选择');
     }
   }
 
-  /// 查询角色是否已分配给用户（SYS_USER_ROLE 精确匹配），登录与切换角色共用。
-  Future<bool> _hasUserRole(String userId, String roleId) async {
-    final result = await _db.query(
-      'SELECT COUNT(*) AS CNT FROM SYS_USER_ROLE WHERE USER_ID = ? AND ROLE_ID = ?',
-      [userId, roleId],
-    );
+  /// 查询「角色-科室」授权组合是否已分配给用户（SYS_USER_ROLE 精确
+  /// 匹配），登录与切换角色共用；deptId 为空时按角色匹配任意科室行。
+  Future<bool> _hasUserRole(String userId, String roleId, {String? deptId}) async {
+    final dept = _realDeptId(deptId);
+    final result = dept == null
+        ? await _db.query(
+            'SELECT COUNT(*) AS CNT FROM SYS_USER_ROLE WHERE USER_ID = ? AND ROLE_ID = ?',
+            [userId, roleId],
+          )
+        : await _db.query(
+            'SELECT COUNT(*) AS CNT FROM SYS_USER_ROLE WHERE USER_ID = ? AND ROLE_ID = ? AND DEPT_ID = ?',
+            [userId, roleId, dept],
+          );
     return int.parse(result.rowsAsMaps.first['CNT'] ?? '0') > 0;
   }
 
-  /// 查询用户名拥有的角色列表（SYS_USER × SYS_USER_ROLE × SYS_ROLE 三表联查），
-  /// 供登录页输入用户名后绑定角色下拉框；用户名不存在或未分配角色时返回空列表
-  /// （不区分两种情况，避免账号枚举）。DISTINCT 去重：同一角色按科室细分
-  /// 授权（SYS_USER_ROLE 复合主键含 DEPT_ID）后会联出多行，登录下拉每角
-  /// 色只取一次。
-  ///returns: 角色列表 [{id, roleName}]，ID 为字符串形式（网关所有列以字符串返回）
+  /// 归一科室 ID：空串与「未指定科室」哨兵值归一为 null（表示未指定，
+  /// 协议层不出现哨兵）；真实科室 ID 去空格返回。
+  static String? _realDeptId(String? value) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty || v == UserService.unspecifiedDeptId) return null;
+    return v;
+  }
+
+  /// 按登录所选「角色-科室」授权组合补齐用户身份上下文：角色 ID/名称 +
+  /// 所选科室及其所属院区、医院。科室为空（存量哨兵组合）或科室已删除
+  /// 时只补角色名称，医院/院区/科室保留用户自身归属（登录 SQL 关联下发）。
+  Future<LoginUser> _withGrantContext(LoginUser user, String roleId, String? deptId) async {
+    final roleResult = await _db.query(
+      'SELECT ROLE_NAME FROM SYS_ROLE WHERE ID = ?',
+      [roleId],
+    );
+    final roleName = roleResult.rowsAsMaps.firstOrNull?['ROLE_NAME'];
+
+    final dept = _realDeptId(deptId);
+    if (dept == null) {
+      return user.copyWith(roleId: roleId, roleName: roleName);
+    }
+    final deptResult = await _db.query(
+      'SELECT D.NAME AS DEPT_NAME, D.CAMPUS_ID, C.NAME AS CAMPUS_NAME, '
+      'D.HOSP_ID, H.NAME AS HOSP_NAME '
+      'FROM SYS_DEPARTMENT D '
+      'LEFT JOIN SYS_CAMPUS C ON C.ID = D.CAMPUS_ID '
+      'LEFT JOIN SYS_HOSPITAL H ON H.ID = D.HOSP_ID '
+      'WHERE D.ID = ?',
+      [dept],
+    );
+    if (deptResult.rows.isEmpty) {
+      // 科室已被删除（关联行残留）：退回用户自身归属，不阻断登录
+      return user.copyWith(roleId: roleId, roleName: roleName);
+    }
+    final row = deptResult.rowsAsMaps.first;
+    return user.withRoleContext(
+      roleId: roleId,
+      roleName: roleName,
+      deptId: dept,
+      deptName: row['DEPT_NAME'],
+      campusId: row['CAMPUS_ID'],
+      campusName: row['CAMPUS_NAME'],
+      hospId: row['HOSP_ID'],
+      hospName: row['HOSP_NAME'],
+    );
+  }
+
+  /// 查询用户名拥有的「角色-科室」授权组合列表（SYS_USER × SYS_USER_ROLE
+  /// × SYS_ROLE，LEFT JOIN SYS_DEPARTMENT 取适用科室），供登录页输入用户
+  /// 名后绑定角色下拉框。同一角色按科室细分授权会返回多行（不做
+  /// DISTINCT），登录页逐行展示「科室 角色」；按科室 ID 再角色 ID 升序
+  /// 返回（同科室的组合相邻，便于下拉按科室分组阅读）。用户名不存在或
+  /// 未分配角色时返回空列表（不区分两种情况，避免账号枚举）。
+  ///returns: 组合列表 [{id, roleName, deptId, deptName}]，ID 为字符串形式
+  /// （网关所有列以字符串返回）；存量未指定科室的哨兵组合 deptId/deptName
+  /// 归一为空串
   Future<List<Map<String, String>>> listUserRoles(String userCode) async {
     final result = await _db.query(
-      'SELECT DISTINCT R.ID, R.ROLE_NAME '
+      'SELECT R.ID, R.ROLE_NAME, UR.DEPT_ID, D.NAME AS DEPT_NAME '
       'FROM SYS_USER U '
       'JOIN SYS_USER_ROLE UR ON UR.USER_ID = U.ID '
       'JOIN SYS_ROLE R ON R.ID = UR.ROLE_ID '
+      'LEFT JOIN SYS_DEPARTMENT D ON D.ID = UR.DEPT_ID '
       'WHERE U.USER_CODE = ? '
-      'ORDER BY R.ID',
+      'ORDER BY UR.DEPT_ID, R.ID',
       [userCode.trim()],
     );
     return [
-      for (final row in result.rowsAsMaps) {'id': row['ID'] ?? '', 'roleName': row['ROLE_NAME'] ?? ''},
+      for (final row in result.rowsAsMaps)
+        {
+          'id': row['ID'] ?? '',
+          'roleName': row['ROLE_NAME'] ?? '',
+          // 存量哨兵组合归一为空串（协议层不出现哨兵），科室已删除时
+          // LEFT JOIN 取不到名称也归为空串
+          'deptId': _realDeptId(row['DEPT_ID']) ?? '',
+          'deptName': row['DEPT_NAME'] ?? '',
+        },
     ];
   }
 
-  /// 切换会话角色（主界面「切换角色」）：校验目标角色已分配给当前登录
-  /// 用户后，更新会话内的角色 ID（后续请求按新角色取菜单/过滤数据）。
-  /// 不写登录审计（非登录动作）；请求留痕由加密中间件统一落 SYS_OPERATION_LOG。
+  /// 切换会话角色（主界面「切换角色」）：校验目标「角色-科室」授权组合
+  /// 已分配给当前登录用户后，更新会话内的角色 ID 与身份上下文（科室/
+  /// 院区/医院随之刷新，后续请求按新角色取菜单/过滤数据）。不写登录审计
+  /// （非登录动作）；请求留痕由加密中间件统一落 SYS_OPERATION_LOG。
   ///param token: 登录令牌
   ///param role: 目标角色 ID
+  ///param deptId: 目标角色适用科室 ID（空/缺省表示存量未指定科室的哨兵组合）
   ///returns: 更新角色后的会话
   ///throws: AuthException 40102 会话无效 / 40001 角色参数不正确 / 40301 角色未授权
-  Future<LoginSession> switchRole(String token, String role) async {
+  Future<LoginSession> switchRole(String token, String role, {String? deptId}) async {
     final session = await verifySession(token);
 
     final roleIdValue = role.trim();
@@ -207,11 +287,13 @@ class AuthService {
       throw const AuthException(400, 40001, '角色不能为空');
     }
 
-    if (!await _hasUserRole(session.user.id, roleIdValue)) {
+    if (!await _hasUserRole(session.user.id, roleIdValue, deptId: deptId)) {
       throw const AuthException(403, 40301, '所选角色无效或未授权，请重新选择');
     }
 
     session.roleId = roleIdValue;
+    // 同步所选授权组合的身份上下文（主界面顶栏医院/院区/科室/角色随之刷新）
+    session.user = await _withGrantContext(session.user, roleIdValue, deptId);
 
     return session;
   }

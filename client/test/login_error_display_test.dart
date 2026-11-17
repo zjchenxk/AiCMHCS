@@ -13,12 +13,12 @@ class FakeAuthService extends AuthService {
   @override
   Future<List<Map<String, String>>> fetchUserRoles(String userCode) async {
     return [
-      {'id': '2', 'roleName': '儿童心理医生'},
+      {'id': '2', 'roleName': '儿童心理医生', 'deptId': '7', 'deptName': '儿童心理科'},
     ];
   }
 
   @override
-  Future<Map<String, dynamic>> login(String username, String password, String role) async {
+  Future<Map<String, dynamic>> login(String username, String password, String role, {String? deptId}) async {
     throw Exception('登录失败！用户名或密码错误');
   }
 }
@@ -67,8 +67,9 @@ void main() {
     await viewModel.loadRoles();
     await tester.pump();
 
-    // 直接经 ViewModel 设置角色（下拉 overlay 的 tap 命中不稳定，与本测试目标无关）
-    viewModel.selectRole('2');
+    // 直接经 ViewModel 设置「角色-科室」组合键（下拉 overlay 的 tap 命中
+    // 不稳定，与本测试目标无关）
+    viewModel.selectRole('2|7');
     await tester.pump();
 
     // 点击登录按钮

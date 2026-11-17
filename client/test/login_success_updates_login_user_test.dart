@@ -22,27 +22,32 @@ class FakeAuthService extends AuthService {
   /// 登录时捕获的角色 ID（断言登录请求带上下拉框绑定的角色 ID）。
   String? capturedRole;
 
+  /// 登录时捕获的科室 ID（断言登录请求携带所选「角色-科室」组合的科室）。
+  String? capturedDeptId;
+
   @override
   Future<List<Map<String, String>>> fetchUserRoles(String userCode) async {
     return [
-      {'id': '2', 'roleName': '儿童心理医生'},
-      {'id': '6', 'roleName': '系统管理员'},
+      {'id': '2', 'roleName': '儿童心理医生', 'deptId': '7', 'deptName': '儿童心理科'},
+      {'id': '6', 'roleName': '系统管理员', 'deptId': '9', 'deptName': '护理部'},
     ];
   }
 
   @override
-  Future<Map<String, dynamic>> login(String username, String password, String role) async {
+  Future<Map<String, dynamic>> login(String username, String password, String role, {String? deptId}) async {
     capturedRole = role;
+    capturedDeptId = deptId;
     return {
       'token': 'test-token',
       'sessionKey': 'MDEyMzQ1Njc4OWFiY2RlZmdoaWprbG1ub3BxcnN0dXY=',
       'tokenType': 'Bearer',
       'expiresIn': 7200,
       'user': {
-        'id': 2,
+        'id': '2',
         'userCode': 'doctor01',
         'userName': '李医生',
         'roleId': '2',
+        'roleName': '儿童心理医生',
         'userType': 'DOCTOR',
         'userTypeName': '儿童心理医生',
         'phone': '13800000001',
@@ -136,8 +141,9 @@ void main() {
     await tester.enterText(textFields.at(1), 'Doctor@123');
     await loginViewModel.loadRoles();
     await tester.pump();
-    expect(loginViewModel.roles, isNotEmpty); //角色下拉框已绑定该用户名拥有的角色
-    loginViewModel.selectRole('2');
+    expect(loginViewModel.roles, isNotEmpty); //角色下拉框已绑定该用户名的「角色-科室」组合
+    // 选中「儿童心理科 儿童心理医生」组合（复合键：角色ID|科室ID）
+    loginViewModel.selectRole('2|7');
     await tester.pump();
 
     // 点击登录，等待异步登录与路由跳转完成
@@ -149,15 +155,19 @@ void main() {
     expect(token, 'test-token');
     expect(sessionKey, 'MDEyMzQ1Njc4OWFiY2RlZmdoaWprbG1ub3BxcnN0dXY=');
     expect(fakeAuth.capturedRole, '2'); //登录请求携带下拉框绑定的角色 ID
+    expect(fakeAuth.capturedDeptId, '7'); //登录请求携带所选组合的适用科室
     expect(loginUser, isNotNull);
-    expect(loginUser!.id, 2);
+    expect(loginUser!.id, '2');
     expect(loginUser!.userCode, 'doctor01');
     expect(loginUser!.userName, '李医生');
     expect(loginUser!.userType, 'DOCTOR');
+    // 角色名称随登录下发（主界面顶栏「当前角色」直接取用）
+    expect(loginUser!.roleId, '2');
+    expect(loginUser!.roleName, '儿童心理医生');
 
     // MainViewModel 工作副本：身份真实、医院/院区/科室为登录接口
-    // 关联下发的真实数据（不被本地默认覆盖）
-    expect(mainViewModel.loginUser.id, 2);
+    // 按所选「角色-科室」组合关联下发的真实数据（不被本地默认覆盖）
+    expect(mainViewModel.loginUser.id, '2');
     expect(mainViewModel.loginUser.userName, '李医生');
     expect(mainViewModel.loginUser.hospId, '1');
     expect(mainViewModel.loginUser.hospName, '测试三级医院');
@@ -168,7 +178,7 @@ void main() {
     // 顶栏用户菜单数据源使用真实姓名
     expect(mainViewModel.userName, '李医生');
 
-    // 顶栏信息栏按当前角色 ID 从角色列表解析角色名称
+    // 顶栏信息栏「当前角色」取登录下发的角色名称
     expect(mainViewModel.roleName, '儿童心理医生');
 
     // 侧边栏菜单按登录响应下发的角色菜单构建（模块→菜单树，含路由）

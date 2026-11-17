@@ -203,7 +203,7 @@ void main() {
     );
   });
 
-  test('查询用户角色列表：三表联查返回 ID 与名称、未知用户返回空', () async {
+  test('查询用户角色列表：逐行返回「角色-科室」组合、未知用户返回空', () async {
     // 种子：专用用户 + 两个角色 + 角色关联（SYS_USER × SYS_USER_ROLE × SYS_ROLE），
     // 不依赖其他用例的数据（用例需可独立运行）
     await db.execute(
@@ -225,9 +225,16 @@ void main() {
       // 占位符按 SQL 文本序绑定：SELECT 哨兵值在前、WHERE IN 两角色在后
       [UserService.unspecifiedDeptId, roleAdmin2Id, roleDoctor2Id],
     );
-    // 儿童心理医生角色按科室细分授权：追加两个指定科室的关联行
-    // （复合主键 USER_ID+ROLE_ID+DEPT_ID），验证 DISTINCT 去重后登录
-    // 下拉每角色仍只出现一次
+    // 儿童心理医生角色按科室细分授权：追加两个指定科室的关联行（复合主键
+    // USER_ID+ROLE_ID+DEPT_ID），登录下拉逐行展示「科室 角色」不去重
+    Future<void> seedDept(String id, String code, String name) => db.execute(
+      'INSERT INTO SYS_DEPARTMENT (ID, HOSP_ID, CAMPUS_ID, PARENT_ID, CODE, '
+      'NAME, CREATE_TIME) VALUES (?, ?, NULL, NULL, ?, ?, ?)',
+      [id, hospId, code, name, '2026-11-08 09:00:00'],
+    );
+
+    await seedDept('a0000000-0000-0000-0000-000000000005', 'D0905', '康复科');
+    await seedDept('a0000000-0000-0000-0000-000000000006', 'D0906', '新生儿科');
     await db.execute(
       'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID, DEPT_ID) '
       "SELECT U.ID, ?, ? FROM SYS_USER U WHERE U.USER_CODE = 'roleuser09'",
@@ -238,13 +245,23 @@ void main() {
       "SELECT U.ID, ?, ? FROM SYS_USER U WHERE U.USER_CODE = 'roleuser09'",
       [roleDoctor2Id, 'a0000000-0000-0000-0000-000000000005'],
     );
+    // 同一科室（康复科）再挂系统管理员角色：验证排序为「科室 ID 优先、
+    // 角色 ID 次之」（同科室组合相邻，科室内按角色 ID 升序）
+    await db.execute(
+      'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID, DEPT_ID) '
+      "SELECT U.ID, ?, ? FROM SYS_USER U WHERE U.USER_CODE = 'roleuser09'",
+      [roleAdmin2Id, 'a0000000-0000-0000-0000-000000000005'],
+    );
 
-    // 角色按 ID 升序返回（固定 UUID 按字符串序：...0010 < ...0020），
-    // 多科室细分不产生重复项
+    // 组合按科室 ID、角色 ID 升序返回（固定 UUID 按字符串序：哨兵全零值
+    // 排最前；同科室 ...0010 < ...0020）；存量哨兵组合 deptId 归空串
     final roles = await auth.listUserRoles('roleuser09');
     expect(roles, [
-      {'id': roleAdmin2Id, 'roleName': '系统管理员'},
-      {'id': roleDoctor2Id, 'roleName': '儿童心理医生'},
+      {'id': roleAdmin2Id, 'roleName': '系统管理员', 'deptId': '', 'deptName': ''},
+      {'id': roleDoctor2Id, 'roleName': '儿童心理医生', 'deptId': '', 'deptName': ''},
+      {'id': roleAdmin2Id, 'roleName': '系统管理员', 'deptId': 'a0000000-0000-0000-0000-000000000005', 'deptName': '康复科'},
+      {'id': roleDoctor2Id, 'roleName': '儿童心理医生', 'deptId': 'a0000000-0000-0000-0000-000000000005', 'deptName': '康复科'},
+      {'id': roleDoctor2Id, 'roleName': '儿童心理医生', 'deptId': 'a0000000-0000-0000-0000-000000000006', 'deptName': '新生儿科'},
     ]);
 
     // 未分配角色的用户与不存在的用户名统一返回空列表（避免账号枚举）。
@@ -257,6 +274,98 @@ void main() {
     );
     expect(await auth.listUserRoles('norole09'), isEmpty);
     expect(await auth.listUserRoles('nobody'), isEmpty);
+  });
+
+  test('登录选择角色-科室组合：身份上下文取所选科室及其院区、医院', () async {
+    // 自建数据：医院/院区/两个科室 + 用户自身归属科室，授权组合横跨两个科室
+    const grantHospId = 'a0000000-0000-0000-0000-000000000031';
+    const grantCampusId = 'a0000000-0000-0000-0000-000000000032';
+    const deptRehabId = 'a0000000-0000-0000-0000-000000000033'; // 康复科（挂院区）
+    const deptNicuId = 'a0000000-0000-0000-0000-000000000034'; // 新生儿科（无院区）
+    const deptOwnId = 'a0000000-0000-0000-0000-000000000035'; // 用户自身归属科室
+    const grantRoleId = 'b0000000-0000-0000-0000-000000000031';
+    await db.execute(
+      'INSERT INTO SYS_HOSPITAL (ID, CODE, NAME, PROVINCE, CITY, ADDRESS, '
+      "CREATE_TIME) VALUES (?, 'H0031', '组合测试医院', '北京市', '北京市', "
+      "'测试路31号', '2026-11-08 09:00:00')",
+      [grantHospId],
+    );
+    await db.execute(
+      "INSERT INTO SYS_CAMPUS (ID, HOSP_ID, CODE, NAME, CREATE_TIME) VALUES (?, ?, 'C0032', '北院区', '2026-11-08 09:00:00')",
+      [grantCampusId, grantHospId],
+    );
+    await db.execute(
+      'INSERT INTO SYS_DEPARTMENT (ID, HOSP_ID, CAMPUS_ID, PARENT_ID, CODE, '
+      'NAME, CREATE_TIME) VALUES (?, ?, ?, NULL, ?, ?, ?)',
+      [deptRehabId, grantHospId, grantCampusId, 'D0933', '康复科', '2026-11-08 09:00:00'],
+    );
+    await db.execute(
+      'INSERT INTO SYS_DEPARTMENT (ID, HOSP_ID, CAMPUS_ID, PARENT_ID, CODE, '
+      'NAME, CREATE_TIME) VALUES (?, ?, NULL, NULL, ?, ?, ?)',
+      [deptNicuId, grantHospId, 'D0934', '新生儿科', '2026-11-08 09:00:00'],
+    );
+    await db.execute(
+      'INSERT INTO SYS_DEPARTMENT (ID, HOSP_ID, CAMPUS_ID, PARENT_ID, CODE, '
+      'NAME, CREATE_TIME) VALUES (?, ?, ?, NULL, ?, ?, ?)',
+      [deptOwnId, grantHospId, grantCampusId, 'D0935', '儿童保健科', '2026-11-08 09:00:00'],
+    );
+    await db.execute(
+      'INSERT INTO SYS_ROLE (ID, ROLE_CODE, ROLE_NAME, CREATE_TIME) '
+      "VALUES (?, 'R0031', '康复治疗师', '2026-11-08 09:00:00')",
+      [grantRoleId],
+    );
+    await db.execute(
+      'INSERT INTO SYS_USER '
+      '(ID, USER_CODE, PASSWORD, USER_NAME, USER_TYPE, HOSP_ID, DEPT_ID, '
+      'STATUS) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
+      [
+        newUuid(),
+        'grantuser09',
+        PasswordHelper.makeStoredPassword('Doctor@123'),
+        '组合用户',
+        'DOCTOR',
+        grantHospId,
+        deptOwnId,
+      ],
+    );
+    for (final deptId in [deptRehabId, deptNicuId]) {
+      await db.execute(
+        'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID, DEPT_ID) '
+        "SELECT U.ID, ?, ? FROM SYS_USER U WHERE U.USER_CODE = 'grantuser09'",
+        [grantRoleId, deptId],
+      );
+    }
+
+    // 选「康复科」：科室/院区/医院/角色全部取自所选授权组合
+    final rehab = await auth.login('grantuser09', 'Doctor@123', grantRoleId, deptId: deptRehabId);
+    expect(rehab.user.roleId, grantRoleId);
+    expect(rehab.user.roleName, '康复治疗师');
+    expect(rehab.user.deptId, deptRehabId);
+    expect(rehab.user.deptName, '康复科');
+    expect(rehab.user.campusId, grantCampusId);
+    expect(rehab.user.campusName, '北院区');
+    expect(rehab.user.hospId, grantHospId);
+    expect(rehab.user.hospName, '组合测试医院');
+
+    // 选「新生儿科」（无院区）：院区整体覆盖为空，不残留用户自身科室的院区
+    final nicu = await auth.login('grantuser09', 'Doctor@123', grantRoleId, deptId: deptNicuId);
+    expect(nicu.user.deptName, '新生儿科');
+    expect(nicu.user.campusId, isNull);
+    expect(nicu.user.campusName, isNull);
+
+    // 未指定科室（存量哨兵语义）：角色名照常下发，科室/院区保留用户自身归属
+    final own = await auth.login('grantuser09', 'Doctor@123', grantRoleId);
+    expect(own.user.roleName, '康复治疗师');
+    expect(own.user.deptId, deptOwnId);
+    expect(own.user.deptName, '儿童保健科');
+
+    // 角色存在但所选科室不在该用户的授权组合内：40301
+    await expectLater(
+      auth.login('grantuser09', 'Doctor@123', grantRoleId, deptId: deptOwnId),
+      throwsA(
+        isA<AuthException>().having((e) => e.code, 'code', 40301),
+      ),
+    );
   });
 
   test('登录校验所选角色归属：角色存在但未分配给该用户时 40301', () async {

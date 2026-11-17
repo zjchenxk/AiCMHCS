@@ -6,7 +6,9 @@ import 'package:server/services/menu_service.dart';
 import 'package:server/utils/log_helper.dart';
 
 /// POST /api/auth/login
-/// 请求体：{"username": "...", "password": "...", "role": "..."}
+/// 请求体：{"username": "...", "password": "...", "role": "...", "deptId": "..."}
+/// （role + deptId 为登录页所选的「角色-科室」授权组合；deptId 可缺省，
+/// 表示存量未指定科室的哨兵关联）。
 Future<Response> onRequest(RequestContext context) async {
   if (context.request.method != HttpMethod.post) {
     return Response.json(
@@ -32,19 +34,23 @@ Future<Response> onRequest(RequestContext context) async {
   final userCode = body['usercode'];
   final password = body['password'];
   final role = body['role'];
+  final deptId = body['deptId'];
   if (userCode is! String || password is! String || role is! String || userCode.trim().isEmpty || password.isEmpty || role.trim().isEmpty) {
     return _error(400, 40001, '用户名、密码和角色不能为空');
+  }
+  if (deptId != null && deptId is! String) {
+    return _error(400, 40002, '科室ID应为字符串');
   }
 
   final ip = _clientIp(context);
 
   unawaited(
-    LogHelper.info('server:routes/api/auth/login', content: '用户 $userCode 尝试登录，角色 $role，IP $ip'),
+    LogHelper.info('server:routes/api/auth/login', content: '用户 $userCode 尝试登录，角色 $role，科室 ${deptId ?? ''}，IP $ip'),
   );
 
   final auth = context.read<AuthService>();
   try {
-    final session = await auth.login(userCode, password, role, ip: ip);
+    final session = await auth.login(userCode, password, role, deptId: deptId as String?, ip: ip);
 
     // 角色已在登录时校验归属，随响应下发该角色已授权的模块/菜单
     // （ITEM_TYPE 1/2，操作类不下发），主界面侧边栏据此构建。
@@ -59,7 +65,7 @@ Future<Response> onRequest(RequestContext context) async {
           'sessionKey': session.sessionKey,
           'tokenType': 'Bearer',
           'expiresIn': auth.sessionTtl.inSeconds,
-          'user': session.user.copyWith(roleId: role).toJson(),
+          'user': session.user.toJson(),
           'menus': menus.map((m) => m.toJson()).toList(),
         },
       },

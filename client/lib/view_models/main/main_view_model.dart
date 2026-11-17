@@ -194,10 +194,12 @@ class MainViewModel extends ChangeNotifier {
 
   String get userName => loginUser.userName;
 
-  /// 当前登录角色名称（从该用户拥有的角色列表按当前角色 ID 解析；
-  /// 列表未加载、角色 ID 为空或不在列表中时为 null，界面按需隐藏。
-  /// 切换角色后 loginUser 已整体替换，本 getter 随新 roleId 解析新名称）
+  /// 当前登录角色名称：优先取登录接口按所选「角色-科室」授权组合下发的
+  /// roleName；未下发时回退按当前角色 ID 从角色组合列表解析（列表未加载、
+  /// 角色 ID 为空或不在列表中时为 null，界面按需隐藏）。
   String? get roleName {
+    final granted = loginUser.roleName?.trim() ?? '';
+    if (granted.isNotEmpty) return granted;
     final roleId = loginUser.roleId;
     if (roleId.isEmpty) return null;
     for (final role in _roles) {
@@ -291,12 +293,14 @@ class MainViewModel extends ChangeNotifier {
   String? _errorMsg;
   String? get errorMsg => _errorMsg;
 
-  /// 切换角色：调后端校验目标角色归属并更新会话角色，成功后以响应下发
-  /// 的用户信息与角色权限菜单刷新全局登录用户与侧边栏（菜单集整体更换，
-  /// 选中/展开/搜索态由 setRoleMenus 清空）。
+  /// 切换「角色-科室」授权组合：调后端校验目标组合归属并更新会话身份
+  /// 上下文，成功后以响应下发的用户信息（角色/科室/院区/医院）与角色
+  /// 权限菜单刷新全局登录用户与侧边栏（菜单集整体更换，选中/展开/搜索
+  /// 态由 setRoleMenus 清空）。
   ///param roleId: 目标角色 ID
+  ///param deptId: 目标角色适用科室 ID（空/缺省表示存量未指定科室的哨兵组合）
   ///returns: 是否切换成功（失败时 errorMsg 带提示，原会话与菜单不变）
-  Future<bool> switchRole(String roleId) async {
+  Future<bool> switchRole(String roleId, {String? deptId}) async {
     if (_switchingRole) return false;
     _switchingRole = true;
     _errorMsg = null;
@@ -304,7 +308,7 @@ class MainViewModel extends ChangeNotifier {
 
     try {
       final service = _accountService ?? app.getIt<AccountService>();
-      final result = await service.switchRole(roleId);
+      final result = await service.switchRole(roleId, deptId: deptId);
 
       // 更新全局登录用户（携带新角色 ID，供主界面信息栏与各业务页取用）
       app.loginUser = result.user;
