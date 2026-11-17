@@ -14,8 +14,8 @@ enum UserFormMode { empty, edit, create }
 /// 左侧为「科室 → 下级科室 → 用户」树（科室来自科室管理、用户挂其
 /// DEPT_ID 对应科室下，未挂科室的收入「未分配科室」虚拟节点）；医院
 /// 尚未设置任何科室时左侧显示引导提示（未添加科室，不能新增用户）。
-/// 右侧为选中用户的信息表单（含角色多选，角色来自本医院的角色列表）
-/// 或在某科室下新增用户的表单。
+/// 右侧为选中用户的信息表单（含角色多选与各角色适用科室选择，角色
+/// 来自本医院的角色列表）或在某科室下新增用户的表单。
 ///
 /// 增改成功后重拉用户列表并重建树，选中用户与展开状态尽量保留。
 /// 每次进入页面 loadData 都强制重拉——科室管理、角色管理等兄弟页面
@@ -53,6 +53,10 @@ class UserManagementViewModel extends ChangeNotifier {
 
   /// 表单当前勾选的角色 ID 集合（新增/保存时的目标全量）。
   final Set<String> _checkedRoleIds = {};
+
+  /// 各已选角色的适用科室集合（键为角色 ID；必填——勾选角色须至少
+  /// 选一个科室才能保存，保存时随角色一并全量覆盖）。
+  final Map<String, Set<String>> _roleDeptIds = {};
 
   /// 当前医院的科室列表（扁平）。
   List<Department> get departments => _departments;
@@ -96,6 +100,9 @@ class UserManagementViewModel extends ChangeNotifier {
   /// 表单当前勾选的角色 ID 集合。
   Set<String> get checkedRoleIds => _checkedRoleIds;
 
+  /// 各已选角色的适用科室集合（键为角色 ID，只读视图）。
+  Map<String, Set<String>> get roleDeptIds => _roleDeptIds;
+
   // ---------------- 加载 ----------------
 
   /// 加载登录用户所属医院的科室、用户与角色（进入页面时调用）。
@@ -138,6 +145,7 @@ class UserManagementViewModel extends ChangeNotifier {
         _createParent = null;
         _selectedUser = null;
         _checkedRoleIds.clear();
+        _roleDeptIds.clear();
       }
       _rebuildTree();
       _restoreSelection();
@@ -162,6 +170,7 @@ class UserManagementViewModel extends ChangeNotifier {
     _createParent = null;
     _creating = false;
     _checkedRoleIds.clear();
+    _roleDeptIds.clear();
   }
 
   /// 由扁平列表重建「科室→下级科室→用户」树（展开状态保留；用户挂
@@ -218,6 +227,7 @@ class UserManagementViewModel extends ChangeNotifier {
       _selectedUser = _findById(selectedId);
       if (_selectedUser == null) {
         _checkedRoleIds.clear();
+        _roleDeptIds.clear();
       }
     }
     final parentKey = _createParent?.key;
@@ -250,16 +260,26 @@ class UserManagementViewModel extends ChangeNotifier {
 
   // ---------------- 交互 ----------------
 
-  /// 选中用户并回显其角色（左侧树用户节点点击，右侧表单进入编辑态）。
+  /// 选中用户并回显其角色与各角色适用科室（左侧树用户节点点击，右侧
+  /// 表单进入编辑态）。
   void selectUser(User user) {
     if (_selectedUser?.id == user.id && !_creating) return;
     _selectedUser = user;
     _creating = false;
     _createParent = null;
+    _applyUserRoles(user);
+    notifyListeners();
+  }
+
+  /// 将用户已分配角色同步进表单勾选态：勾选集合 + 各角色适用科室
+  /// （存量数据未设置科室的角色无键，界面呈「待选择」必填态）。
+  void _applyUserRoles(User user) {
     _checkedRoleIds
       ..clear()
       ..addAll(user.roleIds);
-    notifyListeners();
+    _roleDeptIds
+      ..clear()
+      ..addAll({for (final entry in user.roleDeptIds.entries) entry.key: entry.value.toSet()});
   }
 
   /// 在指定科室节点下新增用户（右侧表单切新增态；虚拟节点与用户节点
@@ -270,6 +290,7 @@ class UserManagementViewModel extends ChangeNotifier {
     _createParent = deptNode;
     _selectedUser = null;
     _checkedRoleIds.clear();
+    _roleDeptIds.clear();
     notifyListeners();
   }
 
@@ -286,13 +307,22 @@ class UserManagementViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 切换角色勾选（表单角色多选）。
+  /// 切换角色勾选（表单角色多选）：勾上时初始化空的适用科室集合
+  /// （待选择，保存前须至少选一个科室），取消勾选时连带清除。
   void toggleRole(String roleId) {
     if (_checkedRoleIds.contains(roleId)) {
       _checkedRoleIds.remove(roleId);
+      _roleDeptIds.remove(roleId);
     } else {
       _checkedRoleIds.add(roleId);
+      _roleDeptIds[roleId] ??= {};
     }
+    notifyListeners();
+  }
+
+  /// 设置某角色的适用科室（对话框确认后全量覆盖；表单保存前校验非空）。
+  void setRoleDepts(String roleId, Set<String> deptIds) {
+    _roleDeptIds[roleId] = deptIds;
     notifyListeners();
   }
 
@@ -339,14 +369,13 @@ class UserManagementViewModel extends ChangeNotifier {
         signatureImage: signatureImage,
         status: status,
         roleIds: _orderedCheckedRoleIds(),
+        roleDeptIds: _orderedRoleDeptIds(),
       );
       await _refreshUsers();
       _creating = false;
       _createParent = null;
       _selectedUser = _findById(created.id);
-      _checkedRoleIds
-        ..clear()
-        ..addAll(created.roleIds);
+      _applyUserRoles(created);
       return true;
     } catch (e, st) {
       LogHelper.error('client:UserManagementViewModel.createUser', e, st);
@@ -370,12 +399,11 @@ class UserManagementViewModel extends ChangeNotifier {
         changes,
         password: (password == null || password.trim().isEmpty) ? null : password,
         roleIds: _orderedCheckedRoleIds(),
+        roleDeptIds: _orderedRoleDeptIds(),
       );
       await _refreshUsers();
       _selectedUser = _findById(updated.id);
-      _checkedRoleIds
-        ..clear()
-        ..addAll(updated.roleIds);
+      _applyUserRoles(updated);
       return true;
     } catch (e, st) {
       LogHelper.error('client:UserManagementViewModel.updateUser', e, st);
@@ -399,6 +427,13 @@ class UserManagementViewModel extends ChangeNotifier {
 
   /// 按角色列表顺序输出勾选的角色 ID（报文稳定便于排查）。
   List<String> _orderedCheckedRoleIds() => _roles.map((r) => r.id).where(_checkedRoleIds.contains).toList(growable: false);
+
+  /// 按角色列表顺序输出各已选角色的适用科室（报文稳定便于排查；键与
+  /// 勾选角色一一对应，表单保存前已校验每角色至少一个科室）。
+  Map<String, List<String>> _orderedRoleDeptIds() => {
+    for (final role in _roles)
+      if (_checkedRoleIds.contains(role.id)) role.id: (_roleDeptIds[role.id] ?? const <String>{}).toList(growable: false),
+  };
 
   // ---------------- 通用 ----------------
 

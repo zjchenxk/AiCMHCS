@@ -57,10 +57,10 @@ class FakeUserService extends UserService {
   Object? Function(String id)? onUpdate;
 
   /// 最近一次新增的入参（断言挂载与角色提交用）。
-  ({String? deptId, List<String> roleIds})? lastCreateArgs;
+  ({String? deptId, List<String> roleIds, Map<String, List<String>> roleDeptIds})? lastCreateArgs;
 
   /// 最近一次修改的入参（断言角色全量覆盖与口令重置用）。
-  ({List<String>? roleIds, String? password})? lastUpdateArgs;
+  ({List<String>? roleIds, Map<String, List<String>>? roleDeptIds, String? password})? lastUpdateArgs;
 
   void seed(
     String id,
@@ -69,6 +69,7 @@ class FakeUserService extends UserService {
     String userCode,
     String userName, {
     List<String> roleIds = const [],
+    Map<String, List<String>> roleDeptIds = const {},
     String status = '1',
   }) {
     store[id] = User(
@@ -79,6 +80,7 @@ class FakeUserService extends UserService {
       deptId: deptId,
       status: status,
       roleIds: roleIds,
+      roleDeptIds: roleDeptIds,
     );
     final n = int.parse(id);
     if (n >= nextId) nextId = n + 1;
@@ -109,13 +111,14 @@ class FakeUserService extends UserService {
     String? signatureImage,
     String? status,
     List<String> roleIds = const [],
+    Map<String, List<String>> roleDeptIds = const {},
   }) async {
     final error = onCreate?.call();
     if (error != null) throw error;
     if (store.values.any((u) => u.userCode == userCode)) {
       throw Exception('登录账号已存在：$userCode');
     }
-    lastCreateArgs = (deptId: deptId, roleIds: roleIds);
+    lastCreateArgs = (deptId: deptId, roleIds: roleIds, roleDeptIds: roleDeptIds);
     final id = '${nextId++}';
     final u = User(
       id: id,
@@ -134,6 +137,7 @@ class FakeUserService extends UserService {
       deptId: deptId,
       status: status ?? '1',
       roleIds: roleIds,
+      roleDeptIds: roleDeptIds,
     );
     store[id] = u;
     return u;
@@ -145,12 +149,13 @@ class FakeUserService extends UserService {
     Map<String, Object?> changes, {
     String? password,
     List<String>? roleIds,
+    Map<String, List<String>>? roleDeptIds,
   }) async {
     final error = onUpdate?.call(id);
     if (error != null) throw error;
     final u = store[id];
     if (u == null) throw Exception('用户不存在：$id');
-    lastUpdateArgs = (roleIds: roleIds, password: password);
+    lastUpdateArgs = (roleIds: roleIds, roleDeptIds: roleDeptIds, password: password);
     final updated = User(
       id: u.id,
       userCode: u.userCode,
@@ -168,6 +173,7 @@ class FakeUserService extends UserService {
       deptId: u.deptId,
       status: changes['status'] as String? ?? u.status,
       roleIds: roleIds ?? u.roleIds,
+      roleDeptIds: roleDeptIds ?? u.roleDeptIds,
     );
     store[id] = updated;
     return updated;
@@ -194,7 +200,17 @@ void main() {
       ..seed('201', '2', 'R101', '别家医院角色');
     userService = FakeUserService()
       ..seed('1', '1', '1', 'admin', '系统管理员')
-      ..seed('2', '1', '2', 'doctor01', '王心怡', roleIds: ['101'])
+      ..seed(
+        '2',
+        '1',
+        '2',
+        'doctor01',
+        '王心怡',
+        roleIds: ['101'],
+        roleDeptIds: {
+          '101': ['3'],
+        },
+      )
       ..seed('3', '1', '3', 'nurse01', '陈晓', roleIds: ['101', '102'])
       // 孤儿用户：DEPT_ID 为空
       ..seed('4', '1', null, 'teacher01', '李晓芳')
@@ -327,11 +343,13 @@ void main() {
     expect(viewModel.checkedRoleIds, {'102'});
   });
 
-  test('createUser：提交挂载科室与勾选角色，成功后选中新用户退出新增态', () async {
+  test('createUser：提交挂载科室与勾选角色（含适用科室），成功后选中新用户退出新增态', () async {
     await viewModel.loadData('1');
     final deptNode = viewModel.roots[1]; // 儿童心理科
     viewModel.startCreate(deptNode);
     viewModel.toggleRole('102');
+    // 勾选角色后设置适用科室（儿童心理门诊）
+    viewModel.setRoleDepts('102', {'3'});
 
     final ok = await viewModel.createUser(
       userCode: 'doctor02',
@@ -342,9 +360,13 @@ void main() {
     expect(ok, isTrue);
     expect(userService.lastCreateArgs?.deptId, '2');
     expect(userService.lastCreateArgs?.roleIds, ['102']);
+    expect(userService.lastCreateArgs?.roleDeptIds, {
+      '102': ['3'],
+    });
     expect(viewModel.formMode, UserFormMode.edit);
     expect(viewModel.selectedUser?.userCode, 'doctor02');
     expect(viewModel.checkedRoleIds, {'102'});
+    expect(viewModel.roleDeptIds['102'], {'3'});
     // 新用户出现在树上该科室之下
     final refreshed = viewModel.roots[1];
     expect(refreshed.children.any((c) => c.user?.userCode == 'doctor02'), isTrue);
@@ -365,22 +387,29 @@ void main() {
     expect(viewModel.errorMsg, contains('已存在'));
   });
 
-  test('updateUser：以表单勾选全量覆盖角色，成功后保持选中', () async {
+  test('updateUser：以表单勾选全量覆盖角色与适用科室，成功后保持选中', () async {
     await viewModel.loadData('1');
     final doctor = viewModel.users.firstWhere((u) => u.userCode == 'doctor01');
     viewModel.selectUser(doctor);
     expect(viewModel.checkedRoleIds, {'101'});
+    // 编辑回显既有适用科室
+    expect(viewModel.roleDeptIds['101'], {'3'});
 
-    // 勾掉 101、勾上 102
+    // 勾掉 101、勾上 102，并为新角色设适用科室
     viewModel.toggleRole('101');
     viewModel.toggleRole('102');
+    viewModel.setRoleDepts('102', {'1'});
 
     final ok = await viewModel.updateUser(doctor.id, {'userName': '王心怡医生'}, password: 'NewPass@123');
     expect(ok, isTrue);
     expect(userService.lastUpdateArgs?.roleIds, ['102']);
+    expect(userService.lastUpdateArgs?.roleDeptIds, {
+      '102': ['1'],
+    });
     expect(userService.lastUpdateArgs?.password, 'NewPass@123');
     expect(viewModel.selectedUser?.userName, '王心怡医生');
     expect(viewModel.checkedRoleIds, {'102'});
+    expect(viewModel.roleDeptIds['102'], {'1'});
   });
 
   test('updateUser：密码留空不改（不提交口令）；服务端报错时返回失败并带提示', () async {

@@ -173,11 +173,13 @@ class AuthService {
 
   /// 查询用户名拥有的角色列表（SYS_USER × SYS_USER_ROLE × SYS_ROLE 三表联查），
   /// 供登录页输入用户名后绑定角色下拉框；用户名不存在或未分配角色时返回空列表
-  /// （不区分两种情况，避免账号枚举）。
+  /// （不区分两种情况，避免账号枚举）。DISTINCT 去重：同一角色按科室细分
+  /// 授权（SYS_USER_ROLE 复合主键含 DEPT_ID）后会联出多行，登录下拉每角
+  /// 色只取一次。
   ///returns: 角色列表 [{id, roleName}]，ID 为字符串形式（网关所有列以字符串返回）
   Future<List<Map<String, String>>> listUserRoles(String userCode) async {
     final result = await _db.query(
-      'SELECT R.ID, R.ROLE_NAME '
+      'SELECT DISTINCT R.ID, R.ROLE_NAME '
       'FROM SYS_USER U '
       'JOIN SYS_USER_ROLE UR ON UR.USER_ID = U.ID '
       'JOIN SYS_ROLE R ON R.ID = UR.ROLE_ID '

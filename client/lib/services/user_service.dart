@@ -40,6 +40,8 @@ class UserService {
   ///param signatureImage: 手写签名（base64 图片）
   ///param status: 状态（1-启用 / 0-停用，缺省启用）
   ///param roleIds: 角色 ID 全量列表（可空）
+  ///param roleDeptIds: 各角色适用科室映射（{角色ID: [科室ID,...]}，空列表
+  /// = 未指定科室，视为适用全部科室）
   ///returns: 新增后的用户（含生成的 ID）
   Future<User> create({
     required String hospId,
@@ -58,6 +60,7 @@ class UserService {
     String? signatureImage,
     String? status,
     List<String> roleIds = const [],
+    Map<String, List<String>> roleDeptIds = const {},
   }) async {
     final data = await _base.post('/api/user/add', {
       'hospId': hospId,
@@ -76,6 +79,7 @@ class UserService {
       'signatureImage': signatureImage,
       'status': status,
       'roleIds': roleIds,
+      'roleDeptIds': roleDeptIds,
     });
     return User.fromJson(data['user'] as Map<String, dynamic>);
   }
@@ -87,13 +91,22 @@ class UserService {
   /// certId/signatureImage，值 null 表示清空；登录账号与归属不可改）
   ///param password: 非空时重置口令（留空/null 不改）
   ///param roleIds: 非 null 时全量覆盖角色关联（null 不动角色，空列表清空）
+  ///param roleDeptIds: 各角色适用科室映射（随 roleIds 一并全量覆盖，
+  /// {角色ID: [科室ID,...]}，空列表 = 未指定科室）
   ///returns: 修改后的用户
-  Future<User> update(String id, Map<String, Object?> changes, {String? password, List<String>? roleIds}) async {
+  Future<User> update(
+    String id,
+    Map<String, Object?> changes, {
+    String? password,
+    List<String>? roleIds,
+    Map<String, List<String>>? roleDeptIds,
+  }) async {
     final data = await _base.post('/api/user/update', {
       'id': id,
       ...changes,
       'password': ?password,
       'roleIds': ?roleIds,
+      'roleDeptIds': ?roleDeptIds,
     });
     return User.fromJson(data['user'] as Map<String, dynamic>);
   }

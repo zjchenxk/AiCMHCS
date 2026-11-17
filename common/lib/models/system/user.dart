@@ -23,6 +23,7 @@ class User {
     this.deptId,
     this.status,
     this.roleIds = const [],
+    this.roleDeptIds = const {},
   });
 
   /// 主键（自增 ID 的字符串形式）。
@@ -74,6 +75,10 @@ class User {
   /// 拥有的角色 ID 列表（SYS_USER_ROLE 关联）。
   final List<String> roleIds;
 
+  /// 各角色适用的科室 ID 列表（SYS_USER_ROLE 关联，键为角色 ID；空
+  /// 列表或缺省 = 未指定科室，视为适用全部科室）。
+  final Map<String, List<String>> roleDeptIds;
+
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
       id: json['id'] as String,
@@ -92,6 +97,12 @@ class User {
       hospId: json['hospId'] as String,
       status: json['status'] as String?,
       roleIds: (json['roleIds'] as List<dynamic>? ?? const []).whereType<String>().toList(growable: false),
+      roleDeptIds: (json['roleDeptIds'] as Map<String, dynamic>? ?? const {}).map(
+        (roleId, deptIds) => MapEntry(
+          roleId,
+          (deptIds as List<dynamic>? ?? const []).whereType<String>().toList(growable: false),
+        ),
+      ),
     );
   }
 
@@ -113,6 +124,7 @@ class User {
       'hospId': hospId,
       'status': status,
       'roleIds': roleIds,
+      'roleDeptIds': roleDeptIds,
     };
   }
 }

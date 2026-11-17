@@ -17,7 +17,8 @@ const unknownId = '99999999-9999-9999-9999-999999999999';
 final _uuidPattern = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$');
 
 /// 角色管理服务单元测试（SQLite :memory:）：列表、详情、新增校验与
-/// UUID 主键回读、字段级修改、删除连带清权限、菜单权限全量保存与查询。
+/// UUID 主键回读、字段级修改、删除连带清权限与用户角色关联、菜单权限
+/// 全量保存与查询。
 void main() {
   late SqliteGateway db;
   late RoleService service;
@@ -68,6 +69,13 @@ CREATE TABLE SYS_ROLE_PERMISSION (
   ROLE_ID TEXT NOT NULL, -- 角色ID
   MENU_ID TEXT NOT NULL, -- 菜单ID
   PRIMARY KEY (ROLE_ID, MENU_ID)
+)''');
+    await db.executeDirect('''
+CREATE TABLE SYS_USER_ROLE (
+  USER_ID TEXT NOT NULL, -- 用户ID
+  ROLE_ID TEXT NOT NULL, -- 角色ID
+  DEPT_ID TEXT NOT NULL, -- 科室ID（v18 起三元复合主键）
+  PRIMARY KEY (USER_ID, ROLE_ID, DEPT_ID)
 )''');
     // 医院：示例人民医院、儿童心理分院。
     Future<void> seedHospital(String id, String name) async {
@@ -243,13 +251,23 @@ CREATE TABLE SYS_ROLE_PERMISSION (
     );
   });
 
-  test('delete：删除角色连带清空权限关联；不存在报错', () async {
+  test('delete：删除角色连带清空权限与用户角色关联；不存在报错', () async {
     final role = await service.create(hospId: hosp1Id, roleCode: 'R001', roleName: '系统管理员');
     await service.savePermissions(role.id, [menu1Id, menu2Id]);
+    // 种子用户角色关联（含科室维度：同一用户两行不同科室）
+    Future<void> seedUserRole(String deptId) => db.execute(
+      'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID, DEPT_ID) VALUES (?, ?, ?)',
+      ['u0000001', role.id, deptId],
+    );
+
+    await seedUserRole('d0000001');
+    await seedUserRole('d0000002');
     expect(await service.delete(role.id), 1);
 
-    final remain = await db.query('SELECT COUNT(*) AS CNT FROM SYS_ROLE_PERMISSION');
-    expect(remain.rowsAsMaps.first['CNT'], '0');
+    final remainPerm = await db.query('SELECT COUNT(*) AS CNT FROM SYS_ROLE_PERMISSION');
+    expect(remainPerm.rowsAsMaps.first['CNT'], '0');
+    final remainUserRole = await db.query('SELECT COUNT(*) AS CNT FROM SYS_USER_ROLE');
+    expect(remainUserRole.rowsAsMaps.first['CNT'], '0');
     await expectLater(
       service.delete(role.id),
       throwsA(isA<RoleException>().having((e) => e.message, 'message', contains('不存在'))),

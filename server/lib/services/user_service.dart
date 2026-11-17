@@ -28,7 +28,9 @@ final class UserException implements Exception {
 ///
 /// 经 DatabaseGateway 访问 SYS_USER（HOSP_ID 关联 SYS_HOSPITAL、DEPT_ID
 /// 关联 SYS_DEPARTMENT，归属医院与挂载科室在新增时定死、不可改）与
-/// SYS_USER_ROLE（用户-角色多对多，复合主键 USER_ID+ROLE_ID）。PHONE /
+/// SYS_USER_ROLE（用户-角色-科室三元组多对多，复合主键 USER_ID+ROLE_ID+
+/// DEPT_ID；每个角色至少一个适用科室，v18 前的存量关联行以哨兵值占位）。
+/// PHONE /
 /// ID_CARD_NO 为 FieldCipher 密文存储并配 *_HMAC 盲索引列（本服务不提供
 /// 按敏感字段查询，盲索引仅随写入同步维护）。USER_CODE 全局唯一（表上
 /// 有 UK 约束兜底，本层先 COUNT 判重给出友好错误）。口令散列复用
@@ -44,6 +46,14 @@ class UserService {
 
   final DatabaseGateway _db;
   final FieldCipher _cipher;
+
+  /// SYS_USER_ROLE.DEPT_ID 的「未指定科室」哨兵占位值（全零 UUID）。
+  /// 不用空串占位：达梦按 Oracle 兼容语义把空串作 NULL（撞 NOT NULL）、
+  /// CHAR 定长列又按定长补空格，空串哨兵在达梦侧语义不稳定。仅作 v18
+  /// 迁移对存量关联行的回填占位——自科室必填起保存链路不再写入哨兵行
+  /// （勾选角色须至少设置一个适用科室），读取侧仍把哨兵行归一为空列表
+  /// 以兼容存量数据，协议层不出现哨兵值。
+  static const String unspecifiedDeptId = '00000000-0000-0000-0000-000000000000';
 
   /// 各字段长度上限（与表列宽对齐；PHONE / ID_CARD_NO 按明文长度校验，
   /// 密文由 FieldCipher 展开后仍远小于列宽）。
@@ -62,7 +72,8 @@ class UserService {
       'ID_CARD_NO, HIS_USER_CODE, MCHIS_USER_CODE, CERT_ID, '
       'AVATAR_IMAGE, SIGNATURE_IMAGE, DEPT_ID, HOSP_ID, STATUS';
 
-  /// 查询指定医院下的全部用户（按创建顺序），携带各自拥有的角色 ID。
+  /// 查询指定医院下的全部用户（按创建顺序），携带各自拥有的角色 ID 与
+  /// 各角色适用科室。
   Future<List<User>> listByHospital(String hospId) async {
     final hospValue = _id(hospId, '医院ID');
     final result = await _db.query(
@@ -70,11 +81,14 @@ class UserService {
       [hospValue],
     );
     final rows = result.rowsAsMaps.toList();
-    final roleIds = await _loadRoleIds(
+    final grants = await _loadRoleGrants(
       rows.map((row) => row['ID'] ?? '').where((v) => v.isNotEmpty),
     );
     return Future.wait(
-      rows.map((row) async => _fromRow(row, roleIds[row['ID']] ?? const [])),
+      rows.map((row) async {
+        final g = grants[row['ID']];
+        return _fromRow(row, g?.roleIds ?? const [], g?.roleDeptIds ?? const {});
+      }),
     );
   }
 
@@ -87,8 +101,9 @@ class UserService {
     if (result.rows.isEmpty) {
       throw UserException(400, 40001, '用户不存在：$id');
     }
-    final roleIds = await _loadRoleIds([id]);
-    return _fromRow(result.rowsAsMaps.first, roleIds[id] ?? const []);
+    final grants = await _loadRoleGrants([id]);
+    final g = grants[id];
+    return _fromRow(result.rowsAsMaps.first, g?.roleIds ?? const [], g?.roleDeptIds ?? const {});
   }
 
   /// 新增用户，返回新增后的对象。
@@ -96,8 +111,10 @@ class UserService {
   /// 校验：所属医院必须存在、挂载科室必须存在且属于该医院、登录账号
   /// 必填且全局唯一、姓名必填、用户类别与权限
   /// 级别必填、口令须满足等保三级复杂度（8-32 位、不含与账号相同的
-  /// 口令、至少三类字符）、角色必须存在且属于该医院；手机号 / 身份证号
-  /// 经 FieldCipher 加密并同步盲索引列。角色关联可为空。
+  /// 口令、至少三类字符）、角色必须存在且属于该医院、勾选角色必须
+  /// 至少设置一个适用科室且科室属于该医院；手机号 / 身份证号
+  /// 经 FieldCipher 加密并同步盲索引列。角色关联可为空（roleDeptIds
+  /// 以角色 ID 为键、键须覆盖全部勾选角色，哨兵值不出现在入参中）。
   Future<User> create({
     required String hospId,
     required String deptId,
@@ -115,6 +132,7 @@ class UserService {
     String? signatureImage,
     String? status,
     List<String> roleIds = const [],
+    Map<String, List<String>> roleDeptIds = const {},
   }) async {
     final hospValue = await _ensureHospital(hospId);
     final deptValue = await _ensureDepartment(hospValue, deptId);
@@ -133,6 +151,7 @@ class UserService {
     final signature = _optional(signatureImage, '手写签名', _signatureMaxLength);
     final statusValue = _parseStatus(status ?? '1');
     final roleValues = await _ensureRolesExist(hospValue, roleIds);
+    final roleDeptValues = await _ensureRoleDepts(hospValue, roleValues, roleDeptIds);
 
     final newId = newUuid();
     await _db.execute(
@@ -163,7 +182,7 @@ class UserService {
         formatTimestamp(DateTime.now()),
       ],
     );
-    await _saveRoles(newId, roleValues);
+    await _saveRoles(newId, roleValues, roleDeptValues);
     return getById(newId);
   }
 
@@ -175,8 +194,16 @@ class UserService {
   /// status / userType / permissionLevel 为必填不可清空）。登录账号
   /// （userCode）、归属医院、挂载科室（deptId）不可改；CREATE_TIME 不可
   /// 改，UPDATE_TIME 由本方法统一写入。password 非空时重置口令；roleIds
-  /// 非 null 时全量覆盖角色关联（null 表示本次不动角色）。
-  Future<User> update(String id, Map<String, Object?> changes, {String? password, List<String>? roleIds}) async {
+  /// 非 null 时全量覆盖角色关联（null 表示本次不动角色），roleDeptIds
+  /// 随之生效（以角色 ID 为键、键须覆盖全部勾选角色，每角色至少一个
+  /// 适用科室）。
+  Future<User> update(
+    String id,
+    Map<String, Object?> changes, {
+    String? password,
+    List<String>? roleIds,
+    Map<String, List<String>>? roleDeptIds,
+  }) async {
     const allowed = <String>{
       'userName',
       'userType',
@@ -225,6 +252,7 @@ class UserService {
     final statusValue = changes.containsKey('status') ? _parseStatus(changes['status']?.toString() ?? '') : null;
     final pwd = password == null || password.trim().isEmpty ? null : _requiredPassword(password, userCode: current.userCode);
     final roleValues = roleIds == null ? null : await _ensureRolesExist(current.hospId, roleIds);
+    final roleDeptValues = roleValues == null ? null : await _ensureRoleDepts(current.hospId, roleValues, roleDeptIds ?? const {});
 
     // 构建更新语句（键序即 changes 传入序）
     final setters = <String>[];
@@ -290,7 +318,7 @@ class UserService {
       );
     }
     if (roleValues != null) {
-      await _saveRoles(id, roleValues);
+      await _saveRoles(id, roleValues, roleDeptValues ?? const {});
     }
     return getById(id);
   }
@@ -339,7 +367,7 @@ class UserService {
 
   /// 从数据库行解析（手机号 / 身份证号解密为明文，传输由信封保护；
   /// 不带版本前缀的存量明文由 open 原样返回兜底）。
-  Future<User> _fromRow(Map<String, String?> row, List<String> roleIds) async => User(
+  Future<User> _fromRow(Map<String, String?> row, List<String> roleIds, Map<String, List<String>> roleDeptIds) async => User(
     id: row['ID'] ?? '',
     userCode: row['USER_CODE'] ?? '',
     userName: row['USER_NAME'] ?? '',
@@ -356,41 +384,100 @@ class UserService {
     hospId: row['HOSP_ID'] ?? '',
     status: row['STATUS'],
     roleIds: List.unmodifiable(roleIds),
+    roleDeptIds: Map.unmodifiable(roleDeptIds),
   );
 
-  /// 批量查询用户拥有的角色 ID（按 USER_ID 分组、ROLE_ID 升序）。
-  Future<Map<String, List<String>>> _loadRoleIds(Iterable<String> userIds) async {
+  /// 批量查询用户拥有的角色关联（按 USER_ID 分组、ROLE_ID+DEPT_ID 升序）。
+  /// 返回每用户的「去重角色 ID 列表 + 各角色适用科室 ID 列表」（DEPT_ID
+  /// 为未指定哨兵占位值的存量行归一为空列表，协议层不出现哨兵值）。
+  Future<Map<String, _RoleGrants>> _loadRoleGrants(Iterable<String> userIds) async {
     final ids = userIds.map((v) => v.trim()).where((v) => v.isNotEmpty).toSet().toList(growable: false);
     if (ids.isEmpty) return {};
     final placeholders = List.filled(ids.length, '?').join(', ');
     final result = await _db.query(
-      'SELECT USER_ID, ROLE_ID FROM SYS_USER_ROLE '
-      'WHERE USER_ID IN ($placeholders) ORDER BY ROLE_ID',
+      'SELECT USER_ID, ROLE_ID, DEPT_ID FROM SYS_USER_ROLE '
+      'WHERE USER_ID IN ($placeholders) ORDER BY ROLE_ID, DEPT_ID',
       ids,
     );
-    final grouped = <String, List<String>>{};
+    final grouped = <String, _RoleGrants>{};
     for (final row in result.rowsAsMaps) {
       final userId = row['USER_ID'];
       final roleId = row['ROLE_ID'];
+      final deptId = row['DEPT_ID'];
       if (userId == null || roleId == null) continue;
-      (grouped[userId] ??= []).add(roleId);
+      final grants = grouped[userId] ??= _RoleGrants();
+      if (!grants.roleIds.contains(roleId)) grants.roleIds.add(roleId);
+      if (deptId == null || deptId == unspecifiedDeptId) continue;
+      (grants.roleDeptIds[roleId] ??= []).add(deptId);
     }
     return grouped;
   }
 
   /// 全量覆盖保存用户角色（先清空既有关联再逐条插入，空列表即清空）。
-  Future<void> _saveRoles(String userId, List<String> roleIds) async {
+  /// 每个角色按适用科室逐科室一行（复合主键 USER_ID+ROLE_ID+DEPT_ID）；
+  /// 科室必填由 _ensureRoleDepts 兜底校验，此处不再产生哨兵占位行。
+  Future<void> _saveRoles(String userId, List<String> roleIds, Map<String, List<String>> roleDeptIds) async {
     final idValue = _id(userId, '用户ID');
     await _db.execute(
       'DELETE FROM SYS_USER_ROLE WHERE USER_ID = ?',
       [idValue],
     );
     for (final roleId in roleIds) {
-      await _db.execute(
-        'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID) VALUES (?, ?)',
-        [idValue, roleId],
-      );
+      for (final deptId in roleDeptIds[roleId] ?? const []) {
+        await _db.execute(
+          'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID, DEPT_ID) VALUES (?, ?, ?)',
+          [idValue, roleId, deptId],
+        );
+      }
     }
+  }
+
+  /// 校验角色适用科室：每个勾选角色必须至少设置一个适用科室（键须覆盖
+  /// 全部勾选角色），且科室 ID 全部存在于 SYS_DEPARTMENT 并属于指定医院。
+  /// 返回归一后的映射（科室 ID 去空格去重、剔除哨兵占位值——哨兵为存
+  /// 量回填占位，不会出现在协议入参中，此处兜底剔除防直调接口绕过）。
+  /// 调用前角色存在性已由 _ensureRolesExist 校验。
+  Future<Map<String, List<String>>> _ensureRoleDepts(
+    String hospId,
+    List<String> roleIds,
+    Map<String, List<String>> roleDeptIds,
+  ) async {
+    final roleIdSet = roleIds.toSet();
+    final normalized = <String, List<String>>{};
+    final all = <String>{};
+    for (final roleId in roleIdSet) {
+      final deptIds = (roleDeptIds[roleId] ?? const []).map((v) => _id(v, '科室ID')).where((v) => v != unspecifiedDeptId).toSet().toList(growable: false);
+      normalized[roleId] = deptIds;
+      all.addAll(deptIds);
+    }
+
+    // 必填兜底：带角色名提示首个未设置适用科室的角色（防绕过前端直调）
+    final emptyRole = normalized.entries.where((e) => e.value.isEmpty).map((e) => e.key).firstOrNull;
+    if (emptyRole != null) {
+      final roleName = await _roleName(emptyRole);
+      throw UserException(400, 40002, '请为角色「$roleName」选择适用科室');
+    }
+
+    if (all.isEmpty) return normalized;
+    final placeholders = List.filled(all.length, '?').join(', ');
+    final result = await _db.query(
+      'SELECT COUNT(*) AS CNT FROM SYS_DEPARTMENT '
+      'WHERE HOSP_ID = ? AND ID IN ($placeholders)',
+      [hospId, ...all],
+    );
+    if (int.parse(result.rowsAsMaps.first['CNT'] ?? '0') != all.length) {
+      throw const UserException(400, 40001, '存在无效的适用科室，请刷新后重试');
+    }
+    return normalized;
+  }
+
+  /// 查询角色名（不存在时回退原始 ID，用于错误提示）。
+  Future<String> _roleName(String roleId) async {
+    final result = await _db.query(
+      'SELECT ROLE_NAME FROM SYS_ROLE WHERE ID = ?',
+      [roleId],
+    );
+    return result.rowsAsMaps.first['ROLE_NAME']?.trim() ?? roleId;
   }
 
   /// 校验医院存在，返回其 ID。
@@ -519,4 +606,11 @@ class UserService {
     }
     return v;
   }
+}
+
+/// 单个用户的角色关联查询结果：去重角色 ID 列表 + 各角色适用科室 ID
+/// 列表（键为角色 ID，未指定哨兵值已归一为键缺省）。
+final class _RoleGrants {
+  final roleIds = <String>[];
+  final roleDeptIds = <String, List<String>>{};
 }

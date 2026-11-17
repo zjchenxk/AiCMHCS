@@ -62,6 +62,7 @@ class _FakeUserService extends UserService {
     String userCode,
     String userName, {
     List<String> roleIds = const [],
+    Map<String, List<String>> roleDeptIds = const {},
     String? userType,
     String? permissionLevel,
   }) {
@@ -75,6 +76,7 @@ class _FakeUserService extends UserService {
       deptId: deptId,
       status: '1',
       roleIds: roleIds,
+      roleDeptIds: roleDeptIds,
     );
     final n = int.parse(id);
     if (n >= nextId) nextId = n + 1;
@@ -103,6 +105,7 @@ class _FakeUserService extends UserService {
     String? signatureImage,
     String? status,
     List<String> roleIds = const [],
+    Map<String, List<String>> roleDeptIds = const {},
   }) async {
     lastCreateRoleIds = roleIds;
     final id = '${nextId++}';
@@ -116,6 +119,7 @@ class _FakeUserService extends UserService {
       deptId: deptId,
       status: status ?? '1',
       roleIds: roleIds,
+      roleDeptIds: roleDeptIds,
     );
     store[id] = u;
     return u;
@@ -127,6 +131,7 @@ class _FakeUserService extends UserService {
     Map<String, Object?> changes, {
     String? password,
     List<String>? roleIds,
+    Map<String, List<String>>? roleDeptIds,
   }) async {
     final u = store[id]!;
     final updated = User(
@@ -139,6 +144,7 @@ class _FakeUserService extends UserService {
       deptId: u.deptId,
       status: changes['status'] as String? ?? u.status,
       roleIds: roleIds ?? u.roleIds,
+      roleDeptIds: roleDeptIds ?? u.roleDeptIds,
     );
     store[id] = updated;
     return updated;
@@ -292,16 +298,36 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('护师'));
     await tester.pump();
+
+    // 适用科室必填：勾选角色但未选科室直接提交被拦截（不发出请求）
+    await tester.tap(find.widgetWithText(FilledButton, '添加'));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('请为角色「护师」选择适用科室'), findsOneWidget);
+    expect(userService.lastCreateRoleIds, isNull);
+    // 直接移除拦截提示 SnackBar（fake async 下 SnackBar 展示计时不推进，
+    // 留它挂着会把后续成功提示排到队尾）
+    tester.state<ScaffoldMessengerState>(find.byType(ScaffoldMessenger)).removeCurrentSnackBar();
+    await tester.pumpAndSettle();
+
+    // 打开适用科室对话框勾选儿童心理科，确定后提交成功
+    await tester.tap(find.text('请选择适用科室'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(CheckboxListTile, '儿童心理科'));
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, '确 定'));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.widgetWithText(FilledButton, '添加'));
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('新增成功'), findsOneWidget);
     await tester.pumpAndSettle();
 
-    // 新用户出现在树上并选中，角色按勾选提交
+    // 新用户出现在树上并选中，角色按勾选提交（含适用科室）
     expect(find.text('林静'), findsWidgets);
     expect(viewModel.formMode, UserFormMode.edit);
     expect(viewModel.selectedUser?.userCode, 'doctor02');
     expect(userService.lastCreateRoleIds, ['102']);
+    expect(viewModel.roleDeptIds['102'], {'2'});
   });
 
   testWidgets('修改选中用户姓名：保存后左侧树同步更新', (tester) async {
@@ -311,7 +337,20 @@ void main() {
 
     final departmentService = _FakeDepartmentService()..seed('1', '1', null, '儿童保健科');
     final roleService = _FakeRoleService()..seed('101', '1', 'R001', '医师');
-    final userService = _FakeUserService()..seed('2', '1', '1', 'doctor01', '王心怡', roleIds: ['101'], userType: 'DOCTOR', permissionLevel: '1');
+    final userService = _FakeUserService()
+      ..seed(
+        '2',
+        '1',
+        '1',
+        'doctor01',
+        '王心怡',
+        roleIds: ['101'],
+        roleDeptIds: {
+          '101': ['1'],
+        },
+        userType: 'DOCTOR',
+        permissionLevel: '1',
+      );
     final viewModel = UserManagementViewModel(
       userService: userService,
       departmentService: departmentService,

@@ -9,16 +9,16 @@ import 'package:http/testing.dart';
 
 /// 构造返回固定服务端时间的伪客户端。
 MockClient mockTimeClient(int Function() epochMsOf) => MockClient((request) async {
-      return http.Response(
-        jsonEncode({
-          'code': 0,
-          'message': 'ok',
-          'data': {'epochMs': epochMsOf(), 'serverTime': '1970-01-01 00:00:00'},
-        }),
-        200,
-        headers: {'Content-Type': 'application/json'},
-      );
-    });
+  return http.Response(
+    jsonEncode({
+      'code': 0,
+      'message': 'ok',
+      'data': {'epochMs': epochMsOf(), 'serverTime': '1970-01-01 00:00:00'},
+    }),
+    200,
+    headers: {'Content-Type': 'application/json'},
+  );
+});
 
 void main() {
   test('sync：按服务端时间推算 now()（偏移约 5 分钟）', () async {

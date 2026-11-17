@@ -12,6 +12,7 @@ import 'package:server/app_config.dart';
 import 'package:server/database/engine/database_gateway.dart';
 import 'package:server/database/engine/db_factory.dart';
 import 'package:server/database/migrator/schema_migrator.dart';
+import 'package:server/services/user_service.dart';
 import 'package:server/utils/field_cipher.dart';
 import 'package:server/utils/password_helper.dart';
 import 'package:server/utils/uuid_util.dart';
@@ -49,13 +50,14 @@ const demoHospitals = [
   ),
 ];
 
-/// 演示角色（角色编码/名称/分配的演示账号 userCode）：登录须携带
-/// 已分配角色（SYS_USER_ROLE），故随演示账号一并写入。
+/// 演示角色（角色编码/名称/分配的演示账号 userCode/适用科室编码列表）：
+/// 登录须携带已分配角色（SYS_USER_ROLE），故随演示账号一并写入；科室
+/// 必填（用户服务兜底校验），适用科室取 demoDepartments 内本院编码。
 const demoRoles = [
-  ('R1001', '系统管理员', ['admin']),
-  ('R1002', '儿童心理医生', ['doctor01']),
-  ('R1003', '教师', ['teacher01']),
-  ('R1004', '家长', ['parent01']),
+  ('R1001', '系统管理员', ['admin'], ['DDEMO001', 'DDEMO002', 'DDEMO003', 'DDEMO004']),
+  ('R1002', '儿童心理医生', ['doctor01'], ['DDEMO002', 'DDEMO003', 'DDEMO004']),
+  ('R1003', '教师', ['teacher01'], ['DDEMO001']),
+  ('R1004', '家长', ['parent01'], ['DDEMO001']),
 ];
 
 /// 演示院区：按 CODE 幂等写入，hospCode 取 demoHospitals 内代码。
@@ -143,10 +145,10 @@ Future<void> main() async {
       );
     }
     // 演示角色：按 CODE 幂等写入（归属示例人民医院），ID 收进 roleIds
-    // 供下方账号关联；同账号关联其专属角色
+    // 供下方「账号-角色-科室」关联段使用（关联在科室写入后统一处理）
     final roleIds = <String, String>{};
     final roleHospId = hospitalIds['HDEMO001'];
-    for (final (code, name, userCodes) in demoRoles) {
+    for (final (code, name, _, _) in demoRoles) {
       if (roleHospId == null) {
         print('  角色 $code 归属医院不存在，跳过');
         continue;
@@ -169,24 +171,6 @@ Future<void> main() async {
         print('  角色 $code $name 已写入');
       }
       roleIds[code] = roleId;
-      // 账号-角色关联幂等：先查后插（各库通用；INSERT OR IGNORE /
-      // ON CONFLICT 均为方言专属语法，不可用）
-      for (final userCode in userCodes) {
-        final linked = await db.query(
-          'SELECT COUNT(*) AS CNT FROM SYS_USER_ROLE UR '
-          'JOIN SYS_USER U ON U.ID = UR.USER_ID '
-          'WHERE UR.ROLE_ID = ? AND U.USER_CODE = ?',
-          [roleId, userCode],
-        );
-        if (int.parse(linked.rowsAsMaps.first['CNT'] ?? '0') > 0) {
-          continue;
-        }
-        await db.execute(
-          'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID) '
-          'SELECT U.ID, ? FROM SYS_USER U WHERE U.USER_CODE = ?',
-          [roleId, userCode],
-        );
-      }
     }
     // 演示院区：按 CODE 幂等写入，医院 ID 经上方 hospitalIds 映射取得，
     // ID 收进 campusIds 供下方演示科室挂载
@@ -265,6 +249,46 @@ Future<void> main() async {
       );
       deptIds[code] = deptId;
       print('  科室 $code $name 已写入');
+    }
+    // 演示账号-角色-科室关联：科室必填（用户服务保存链路兜底校验），
+    // 每角色按适用科室逐行幂等写入（先查 (USER_ID, ROLE_ID, DEPT_ID)
+    // 后插，各库通用）；顺带清理该账号该角色的哨兵占位行——v18 迁移
+    // 会把存量关联行回填为哨兵值，真实科室行落库后哨兵行即冗余
+    // （读取侧归一忽略，清掉保持数据干净）
+    for (final (code, _, userCodes, deptCodes) in demoRoles) {
+      final roleId = roleIds[code];
+      if (roleId == null) {
+        print('  角色 $code 未写入，跳过账号关联');
+        continue;
+      }
+      for (final userCode in userCodes) {
+        for (final deptCode in deptCodes) {
+          final deptId = deptIds[deptCode];
+          if (deptId == null) {
+            print('  科室 $deptCode 不存在，$userCode × 角色 $code 跳过该科室关联');
+            continue;
+          }
+          final linked = await db.query(
+            'SELECT COUNT(*) AS CNT FROM SYS_USER_ROLE UR '
+            'JOIN SYS_USER U ON U.ID = UR.USER_ID '
+            'WHERE UR.ROLE_ID = ? AND U.USER_CODE = ? AND UR.DEPT_ID = ?',
+            [roleId, userCode, deptId],
+          );
+          if (int.parse(linked.rowsAsMaps.first['CNT'] ?? '0') > 0) {
+            continue;
+          }
+          await db.execute(
+            'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID, DEPT_ID) '
+            'SELECT U.ID, ?, ? FROM SYS_USER U WHERE U.USER_CODE = ?',
+            [roleId, deptId, userCode],
+          );
+        }
+        await db.execute(
+          'DELETE FROM SYS_USER_ROLE WHERE DEPT_ID = ? AND ROLE_ID = ? '
+          'AND USER_ID IN (SELECT ID FROM SYS_USER WHERE USER_CODE = ?)',
+          [UserService.unspecifiedDeptId, roleId, userCode],
+        );
+      }
     }
     // 演示账号归属医院：未设置时绑到示例人民医院，供院区管理等按登录
     // 用户所属医院过滤的功能演示（幂等，只补空值不覆盖既有绑定）

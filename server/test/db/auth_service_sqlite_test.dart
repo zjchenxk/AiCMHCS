@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:server/database/engine/sqlite/sqlite_gateway.dart';
 import 'package:server/database/migrator/schema_migrator.dart';
 import 'package:server/services/auth_service.dart';
+import 'package:server/services/user_service.dart';
 import 'package:server/utils/field_cipher.dart';
 import 'package:server/utils/password_helper.dart';
 import 'package:server/utils/uuid_util.dart';
@@ -60,9 +61,10 @@ void main() {
       [roleAdminId],
     );
     await db.execute(
-      'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID) '
-      "SELECT U.ID, ? FROM SYS_USER U WHERE U.USER_CODE = 'admin'",
-      [roleAdminId],
+      'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID, DEPT_ID) '
+      "SELECT U.ID, ?, ? FROM SYS_USER U WHERE U.USER_CODE = 'admin'",
+      // DEPT_ID 写「未指定科室」哨兵值（v18 起列为 NOT NULL）
+      [roleAdminId, UserService.unspecifiedDeptId],
     );
   });
 
@@ -134,9 +136,9 @@ void main() {
       [roleDoctorId],
     );
     await db.execute(
-      'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID) '
-      "SELECT U.ID, ? FROM SYS_USER U WHERE U.USER_CODE = 'doctor09'",
-      [roleDoctorId],
+      'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID, DEPT_ID) '
+      "SELECT U.ID, ?, ? FROM SYS_USER U WHERE U.USER_CODE = 'doctor09'",
+      [roleDoctorId, UserService.unspecifiedDeptId],
     );
 
     final session = await auth.login('doctor09', 'Doctor@123', roleDoctorId);
@@ -164,9 +166,9 @@ void main() {
     );
     // 复用「关联下发」用例种子化的儿童心理医生角色（登录校验所选角色归属）
     await db.execute(
-      'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID) '
-      "SELECT U.ID, ? FROM SYS_USER U WHERE U.USER_CODE = 'legacy'",
-      [roleDoctorId],
+      'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID, DEPT_ID) '
+      "SELECT U.ID, ?, ? FROM SYS_USER U WHERE U.USER_CODE = 'legacy'",
+      [roleDoctorId, UserService.unspecifiedDeptId],
     );
     final session = await auth.login('legacy', 'Legacy@123', roleDoctorId);
     expect(session.user.phone, '13900000000');
@@ -217,13 +219,28 @@ void main() {
       [roleDoctor2Id, roleAdmin2Id],
     );
     await db.execute(
-      'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID) '
-      'SELECT U.ID, R.ID FROM SYS_USER U, SYS_ROLE R '
+      'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID, DEPT_ID) '
+      'SELECT U.ID, R.ID, ? FROM SYS_USER U, SYS_ROLE R '
       "WHERE U.USER_CODE = 'roleuser09' AND R.ID IN (?, ?)",
-      [roleAdmin2Id, roleDoctor2Id],
+      // 占位符按 SQL 文本序绑定：SELECT 哨兵值在前、WHERE IN 两角色在后
+      [UserService.unspecifiedDeptId, roleAdmin2Id, roleDoctor2Id],
+    );
+    // 儿童心理医生角色按科室细分授权：追加两个指定科室的关联行
+    // （复合主键 USER_ID+ROLE_ID+DEPT_ID），验证 DISTINCT 去重后登录
+    // 下拉每角色仍只出现一次
+    await db.execute(
+      'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID, DEPT_ID) '
+      "SELECT U.ID, ?, ? FROM SYS_USER U WHERE U.USER_CODE = 'roleuser09'",
+      [roleDoctor2Id, 'a0000000-0000-0000-0000-000000000006'],
+    );
+    await db.execute(
+      'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID, DEPT_ID) '
+      "SELECT U.ID, ?, ? FROM SYS_USER U WHERE U.USER_CODE = 'roleuser09'",
+      [roleDoctor2Id, 'a0000000-0000-0000-0000-000000000005'],
     );
 
-    // 角色按 ID 升序返回（固定 UUID 按字符串序：...0010 < ...0020）
+    // 角色按 ID 升序返回（固定 UUID 按字符串序：...0010 < ...0020），
+    // 多科室细分不产生重复项
     final roles = await auth.listUserRoles('roleuser09');
     expect(roles, [
       {'id': roleAdmin2Id, 'roleName': '系统管理员'},
@@ -283,9 +300,9 @@ void main() {
     // 种子：admin 追加分配第二个管理员角色（已在「查询用户角色列表」
     // 用例种子化），验证从管理员角色切到它
     await db.execute(
-      'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID) '
-      "SELECT U.ID, ? FROM SYS_USER U WHERE U.USER_CODE = 'admin'",
-      [roleAdmin2Id],
+      'INSERT INTO SYS_USER_ROLE (USER_ID, ROLE_ID, DEPT_ID) '
+      "SELECT U.ID, ?, ? FROM SYS_USER U WHERE U.USER_CODE = 'admin'",
+      [roleAdmin2Id, UserService.unspecifiedDeptId],
     );
 
     final session = await auth.login('admin', 'Admin@123', roleAdminId);

@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:client/widgets/glass_panel.dart';
+import 'package:common/model.dart';
 import 'package:client/utils/image_helper.dart';
 import 'package:client/utils/log_helper.dart';
 import 'package:common/utils/password_policy.dart';
@@ -14,7 +16,8 @@ import 'package:provider/provider.dart';
 // 编辑模式（回填选中用户，登录账号只读）与新增模式（表单清空待录，
 // 挂载科室为左侧树发起新增的节点）。以模式+目标为 ValueKey 由页面在
 // 切换时重建，实现清空/回填。含角色多选（FilterChip，全量随保存提交）
-// 与手写签名上传（分辨率校验后 base64 存库）。
+// 与各角色适用科室必填多选（毛玻璃对话框勾选，勾选角色须至少选一个
+// 科室方可保存）、手写签名上传（分辨率校验后 base64 存库）。
 // =====================================================================
 class UserInfoForm extends StatefulWidget {
   final UserManagementViewModel viewModel;
@@ -99,6 +102,11 @@ class _UserInfoFormState extends State<UserInfoForm> {
   // 滚动定位到首个报错字段（Scrollable.ensureVisible），输入框再附
   // requestFocus（键盘跟随、可直接修改），下拉框无焦点链仅滚动定位。
   final Map<GlobalKey<FormFieldState<String>>, FocusNode?> _fields = {};
+
+  // 各已勾选角色「适用科室」行的定位键（roleId → 行 GlobalKey）：科室
+  // 必填校验失败时滚动定位到首个未设置科室的角色行（角色行动态增减，
+  // 按角色 ID 复用；定位前检查 currentContext 是否已挂载）
+  final Map<String, GlobalKey> _roleDeptRowKeys = {};
   final GlobalKey<FormFieldState<String>> _userCodeKey = GlobalKey<FormFieldState<String>>();
   final GlobalKey<FormFieldState<String>> _userNameKey = GlobalKey<FormFieldState<String>>();
   final GlobalKey<FormFieldState<String>> _passwordKey = GlobalKey<FormFieldState<String>>();
@@ -205,15 +213,57 @@ class _UserInfoFormState extends State<UserInfoForm> {
     return t.isEmpty ? null : t;
   }
 
+  /// 角色适用科室必填校验：按角色列表顺序找首个「已勾选但未设置适用
+  /// 科室」的角色，返回 (角色ID, 角色名)；全部已设置返回 null。
+  (String, String)? _firstRoleWithoutDepts(UserManagementViewModel viewModel) {
+    for (final role in viewModel.roles) {
+      if (!viewModel.checkedRoleIds.contains(role.id)) continue;
+      if ((viewModel.roleDeptIds[role.id] ?? const <String>{}).isEmpty) {
+        return (role.id, role.roleName);
+      }
+    }
+    return null;
+  }
+
+  /// 滚动定位到指定角色的适用科室行（行可能未勾选未渲染，此时跳过）。
+  void _scrollToRoleDeptRow(String roleId) {
+    final rowContext = _roleDeptRowKeys[roleId]?.currentContext;
+    if (rowContext == null) return;
+    Scrollable.ensureVisible(
+      rowContext,
+      duration: const Duration(milliseconds: 300),
+      alignment: 0.15, // 报错行落在视口上部约 15% 处，与表单校验定位一致
+    );
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) {
       _scrollToFirstError();
       return;
     }
 
+    final viewModel = context.read<UserManagementViewModel>();
+    // 角色适用科室必填：勾选了角色但未设置科室时拦截保存并滚动定位
+    final missingDeptRole = _firstRoleWithoutDepts(viewModel);
+    if (missingDeptRole != null) {
+      _scrollToRoleDeptRow(missingDeptRole.$1);
+      final theme = Theme.of(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '请为角色「${missingDeptRole.$2}」选择适用科室',
+            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onError),
+          ),
+          backgroundColor: theme.colorScheme.error,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
     setState(() => _saving = true);
 
-    final viewModel = context.read<UserManagementViewModel>();
     final creating = viewModel.formMode == UserFormMode.create;
 
     final ok = creating
@@ -450,7 +500,7 @@ class _UserInfoFormState extends State<UserInfoForm> {
 
           // 角色授权
           _sectionTitle(theme, '角色授权'),
-          _buildRoleChips(theme, viewModel),
+          _buildRoleSection(theme, viewModel),
           const SizedBox(height: 32),
 
           // 操作按钮：新增模式可取消，编辑模式仅保存
@@ -677,8 +727,9 @@ class _UserInfoFormState extends State<UserInfoForm> {
     }
   }
 
-  /// 角色多选：本医院角色 FilterChip 全量列表（无角色库时给引导提示）。
-  Widget _buildRoleChips(ThemeData theme, UserManagementViewModel viewModel) {
+  /// 角色授权小节：本医院角色 FilterChip 多选 + 各已选角色的适用科室
+  /// 选择行（无角色库时给引导提示）。
+  Widget _buildRoleSection(ThemeData theme, UserManagementViewModel viewModel) {
     if (viewModel.roles.isEmpty) {
       return Text(
         '暂无角色，请先在「系统管理 → 角色管理」中创建',
@@ -687,21 +738,113 @@ class _UserInfoFormState extends State<UserInfoForm> {
         ),
       );
     }
-    return Wrap(
-      spacing: 8,
-      runSpacing: 4,
+    final selectedRoles = viewModel.roles.where((role) => viewModel.checkedRoleIds.contains(role.id)).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final role in viewModel.roles)
-          FilterChip(
-            label: Text(
-              role.roleName,
-              style: theme.textTheme.bodyMedium,
-            ),
-            selected: viewModel.checkedRoleIds.contains(role.id),
-            onSelected: viewModel.busy || _saving ? null : (_) => viewModel.toggleRole(role.id),
-          ),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: [
+            for (final role in viewModel.roles)
+              FilterChip(
+                label: Text(
+                  role.roleName,
+                  style: theme.textTheme.bodyMedium,
+                ),
+                selected: viewModel.checkedRoleIds.contains(role.id),
+                onSelected: viewModel.busy || _saving ? null : (_) => viewModel.toggleRole(role.id),
+              ),
+          ],
+        ),
+        // 每个已勾选的角色跟一行适用科室必选（未勾选的角色不展示，
+        // 勾选顺序与角色列表一致保证行序稳定）
+        for (final role in selectedRoles) _buildRoleDeptRow(theme, viewModel, role),
       ],
     );
+  }
+
+  /// 已选角色的适用科室行（必填）：左侧角色名，右侧仿输入框展示已选
+  /// 科室摘要（点击打开多选对话框）；未选科室显示 error 色「请选择适用
+  /// 科室」待补提示，行挂定位键供保存校验失败滚动定位。
+  Widget _buildRoleDeptRow(ThemeData theme, UserManagementViewModel viewModel, Role role) {
+    final selected = viewModel.roleDeptIds[role.id] ?? const <String>{};
+    final missing = selected.isEmpty;
+    final names = {for (final d in viewModel.departments) d.id: d.name};
+    final summary = missing ? '请选择适用科室' : selected.map((id) => names[id] ?? '未知科室').join('、');
+    return Padding(
+      key: _roleDeptRowKeys.putIfAbsent(role.id, () => GlobalKey()),
+      padding: const EdgeInsets.only(top: 12),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 140,
+            child: Text(
+              role.roleName,
+              style: theme.textTheme.bodyMedium,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Material(
+              color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                // 未设置科室的必填行用 error 色边框提示待补
+                side: BorderSide(
+                  color: missing ? theme.colorScheme.error.withValues(alpha: 0.5) : theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+                ),
+              ),
+              child: InkWell(
+                onTap: viewModel.busy || _saving ? null : () => _pickRoleDepts(viewModel, role),
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          summary,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            // 未设置科室的必填提示用 error 色待补文案
+                            color: missing ? theme.colorScheme.error : null,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(
+                        Icons.expand_more_outlined,
+                        size: 20,
+                        color: missing ? theme.colorScheme.error : theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 打开角色适用科室多选对话框（科室树序勾选），确认后写回 ViewModel
+  /// （取消返回 null 不改动）。
+  Future<void> _pickRoleDepts(UserManagementViewModel viewModel, Role role) async {
+    final result = await showDialog<Set<String>>(
+      context: context,
+      builder: (_) => _RoleDeptPickerDialog(
+        roleName: role.roleName,
+        departments: viewModel.departments,
+        selected: viewModel.roleDeptIds[role.id] ?? const <String>{},
+      ),
+    );
+    if (result != null) {
+      viewModel.setRoleDepts(role.id, result);
+    }
   }
 
   /// 安全解码图片 base64：空值或存量脏数据解码失败时记日志并返回
@@ -787,4 +930,174 @@ class _UserInfoFormState extends State<UserInfoForm> {
       ),
     );
   }
+}
+
+// =====================================================================
+// 角色适用科室多选对话框（毛玻璃，用户信息表单专用）
+//
+// 本院科室按树序（父在前子在后、同级按创建序、缩进表层级）勾选；
+// 适用科室必填——未勾选任何科室时确定按钮禁用（服务端亦兜底拦截）。
+// 确认返回勾选集合，取消返回 null 不改动表单状态。
+// =====================================================================
+class _RoleDeptPickerDialog extends StatefulWidget {
+  /// 构造函数：注入角色名（标题展示）、本院科室列表与当前勾选集合。
+  const _RoleDeptPickerDialog({required this.roleName, required this.departments, required this.selected});
+
+  /// 角色（适用科室的归属方，仅用于标题展示）。
+  final String roleName;
+
+  /// 本院科室列表（扁平，树序由本组件展开）。
+  final List<Department> departments;
+
+  /// 当前已勾选的科室 ID 集合（打开时回显）。
+  final Set<String> selected;
+
+  @override
+  State<_RoleDeptPickerDialog> createState() => _RoleDeptPickerDialogState();
+}
+
+class _RoleDeptPickerDialogState extends State<_RoleDeptPickerDialog> {
+  /// 勾选中的科室 ID（对话框内本地状态，确认才写回表单）。
+  late final Set<String> _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    // 回显当前勾选（拷贝一份，取消不污染表单状态）
+    _selected = Set.of(widget.selected);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final entries = flattenDeptTree(widget.departments);
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480, maxHeight: 560),
+        child: GlassPanel(
+          blur: 24,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 标题
+                Row(
+                  children: [
+                    Icon(
+                      Icons.assignment_outlined,
+                      color: theme.colorScheme.primary,
+                      size: 22,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '设置适用科室 — ${widget.roleName}',
+                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '请选择该角色适用的科室（可多选，必选）',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Flexible(
+                  child: entries.isEmpty
+                      ? Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 24),
+                          child: Center(
+                            child: Text(
+                              '本院尚未添加科室，请先在「系统管理 → 科室管理」中添加',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                              ),
+                            ),
+                          ),
+                        )
+                      : ListView(
+                          children: [
+                            for (final (dept, depth) in entries)
+                              CheckboxListTile(
+                                dense: true,
+                                controlAffinity: ListTileControlAffinity.leading,
+                                contentPadding: EdgeInsets.only(left: 8.0 + depth * 20.0, right: 8.0),
+                                title: Text(
+                                  dept.name,
+                                  style: theme.textTheme.bodyMedium,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                value: _selected.contains(dept.id),
+                                onChanged: (checked) => setState(
+                                  () => checked == true ? _selected.add(dept.id) : _selected.remove(dept.id),
+                                ),
+                              ),
+                          ],
+                        ),
+                ),
+                const SizedBox(height: 12),
+                // 全选/清空 + 取消/确定
+                Row(
+                  children: [
+                    TextButton.icon(
+                      onPressed: entries.isEmpty ? null : () => setState(() => _selected.addAll(entries.map((e) => e.$1.id))),
+                      icon: const Icon(Icons.select_all_outlined, size: 18),
+                      label: const Text('全选'),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton.icon(
+                      onPressed: _selected.isEmpty ? null : () => setState(_selected.clear),
+                      icon: const Icon(Icons.clear_all_outlined, size: 18),
+                      label: const Text('清空'),
+                    ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('取消'),
+                    ),
+                    const SizedBox(width: 12),
+                    // 适用科室必填：未勾选任何科室时确定不可用
+                    FilledButton(
+                      onPressed: _selected.isEmpty ? null : () => Navigator.pop(context, Set.of(_selected)),
+                      child: const Text('确 定'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 科室树序展开：父在前子在后、同级按列表创建序，返回 (科室, 层级深度)
+/// 供缩进展示。parentId 环路（脏数据）按展开数超过科室总数收敛，防止
+/// 无限递归。
+List<(Department, int)> flattenDeptTree(List<Department> departments) {
+  final byParent = <String?, List<Department>>{};
+  for (final dept in departments) {
+    final parent = (dept.parentId == null || dept.parentId!.isEmpty) ? null : dept.parentId;
+    (byParent[parent] ??= []).add(dept);
+  }
+  final out = <(Department, int)>[];
+  void walk(String? parent, int depth) {
+    for (final dept in byParent[parent] ?? const <Department>[]) {
+      out.add((dept, depth));
+      if (out.length > departments.length) return; // 环路兜底
+      walk(dept.id, depth + 1);
+    }
+  }
+
+  walk(null, 0);
+  return out;
 }

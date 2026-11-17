@@ -1,6 +1,7 @@
 // 用户管理服务集成测试（SQLite 内存库，走全量迁移建表——顺带验证
-// v12 的 SYS_USER_ROLE 结构）：新增校验与 UUID 主键回读、敏感字段加密
-// 与盲索引、列表携带角色 ID、字段级修改与口令重置、角色全量覆盖保存。
+// SYS_USER_ROLE 最新结构（v18 起含科室维度））：新增校验与 UUID 主键
+// 回读、敏感字段加密与盲索引、列表携带角色 ID、字段级修改与口令重置、
+// 角色全量覆盖保存（含各角色适用科室）。
 import 'dart:convert';
 
 import 'package:server/database/engine/sqlite/sqlite_gateway.dart';
@@ -95,6 +96,10 @@ void main() {
       idCardNo: '110101199001011234',
       avatarImage: 'aV1oYXZhX2Jhc2U2NA==',
       roleIds: [role101Id, role102Id],
+      roleDeptIds: {
+        role101Id: [dept11Id],
+        role102Id: [dept12Id],
+      },
     );
     expect(user.id, matches(_uuidPattern));
     expect(user.userCode, 'doctor01');
@@ -133,6 +138,9 @@ void main() {
       permissionLevel: '1',
       phone: '13900000111',
       roleIds: [role101Id],
+      roleDeptIds: {
+        role101Id: [dept11Id],
+      },
     );
     // newUuid() 带同毫秒单调计数器（字符串序=生成序），此延时仅为
     // 防御性保险，不依赖它保证排序
@@ -263,6 +271,9 @@ void main() {
       permissionLevel: '1',
       phone: '13900000111',
       roleIds: [role101Id],
+      roleDeptIds: {
+        role101Id: [dept11Id],
+      },
     );
     final updated = await service.update(
       created.id,
@@ -304,10 +315,21 @@ void main() {
       userType: 'DOCTOR',
       permissionLevel: '1',
       roleIds: [role101Id, role102Id],
+      roleDeptIds: {
+        role101Id: [dept11Id],
+        role102Id: [dept12Id],
+      },
     );
 
-    // 覆盖为单角色
-    var updated = await service.update(created.id, {}, roleIds: [role102Id]);
+    // 覆盖为单角色（适用科室必填随角色一并提交）
+    var updated = await service.update(
+      created.id,
+      {},
+      roleIds: [role102Id],
+      roleDeptIds: {
+        role102Id: [dept11Id],
+      },
+    );
     expect(updated.roleIds, [role102Id]);
 
     // 空列表清空
@@ -315,10 +337,115 @@ void main() {
     expect(updated.roleIds, isEmpty);
 
     // null 不动角色：先补回再验证
-    await service.update(created.id, {}, roleIds: [role101Id]);
+    await service.update(
+      created.id,
+      {},
+      roleIds: [role101Id],
+      roleDeptIds: {
+        role101Id: [dept11Id],
+      },
+    );
     updated = await service.update(created.id, {'userName': '王医生'});
     expect(updated.userName, '王医生');
     expect(updated.roleIds, [role101Id]);
+  });
+
+  test('update：roleDeptIds 随角色全量覆盖、未设科室角色报错、哨兵入参剔除', () async {
+    // 科室必填：映射键未覆盖全部勾选角色时，带角色名报错（首个缺失者）
+    await expectLater(
+      service.create(
+        hospId: hosp1Id,
+        deptId: dept11Id,
+        userCode: 'doctor01',
+        userName: '王心怡',
+        password: 'Doctor@123',
+        userType: 'DOCTOR',
+        permissionLevel: '1',
+        roleIds: [role101Id, role102Id],
+        roleDeptIds: {
+          role101Id: [dept11Id, dept12Id],
+        },
+      ),
+      throwsA(isA<UserException>().having((e) => e.message, 'message', '请为角色「角色102」选择适用科室')),
+    );
+
+    // 补齐映射后创建成功：每角色至少一个适用科室
+    final created = await service.create(
+      hospId: hosp1Id,
+      deptId: dept11Id,
+      userCode: 'doctor01',
+      userName: '王心怡',
+      password: 'Doctor@123',
+      userType: 'DOCTOR',
+      permissionLevel: '1',
+      roleIds: [role101Id, role102Id],
+      roleDeptIds: {
+        role101Id: [dept11Id, dept12Id],
+        role102Id: [dept11Id],
+      },
+    );
+    expect(created.roleDeptIds, {
+      role101Id: [dept11Id, dept12Id],
+      role102Id: [dept11Id],
+    });
+
+    // 库内落行：每角色每科室一行，不再产生哨兵占位行
+    final rows = await db.query(
+      'SELECT ROLE_ID, DEPT_ID FROM SYS_USER_ROLE WHERE USER_ID = ? '
+      'ORDER BY ROLE_ID, DEPT_ID',
+      [created.id],
+    );
+    expect(rows.rows, [
+      [role101Id, dept11Id],
+      [role101Id, dept12Id],
+      [role102Id, dept11Id],
+    ]);
+
+    // update 覆盖为空映射（键缺失）同样按必填拦截
+    await expectLater(
+      service.update(created.id, {}, roleIds: [role101Id, role102Id], roleDeptIds: {}),
+      throwsA(isA<UserException>().having((e) => e.message, 'message', '请为角色「角色101」选择适用科室')),
+    );
+
+    // 跨医院科室 / 未知科室均拒绝
+    await expectLater(
+      service.update(
+        created.id,
+        {},
+        roleIds: [role101Id],
+        roleDeptIds: {
+          role101Id: [dept21Id],
+        },
+      ),
+      throwsA(isA<UserException>().having((e) => e.message, 'message', contains('无效的适用科室'))),
+    );
+    await expectLater(
+      service.update(
+        created.id,
+        {},
+        roleIds: [role101Id],
+        roleDeptIds: {
+          role101Id: [unknownId],
+        },
+      ),
+      throwsA(isA<UserException>().having((e) => e.message, 'message', contains('无效的适用科室'))),
+    );
+
+    // 入参中的哨兵占位值兜底剔除（防直调接口绕过）：归一为真实科室
+    final normalized = await service.update(
+      created.id,
+      {},
+      roleIds: [role101Id],
+      roleDeptIds: {
+        role101Id: [UserService.unspecifiedDeptId, dept11Id],
+      },
+    );
+    expect(normalized.roleDeptIds[role101Id], [dept11Id]);
+
+    // 角色全清（roleIds 空列表）不涉科室必填，正常保存
+    final cleared = await service.update(created.id, {}, roleIds: [], roleDeptIds: {});
+    expect(cleared.roleIds, isEmpty);
+    expect(cleared.roleDeptIds, isEmpty);
   });
 
   test('update：登录账号/归属/挂载科室/未知字段不可改、用户不存在报错', () async {

@@ -150,13 +150,19 @@ class RoleService {
 
   /// 删除角色，返回删除行数（0 或 1）。
   ///
-  /// 连带删除该角色在 SYS_ROLE_PERMISSION 中的全部权限关联（当前无
-  /// 其他表引用角色，无需前置校验）。
+  /// 连带删除该角色在 SYS_ROLE_PERMISSION 的全部权限关联与在
+  /// SYS_USER_ROLE 的全部用户角色关联（v18 起用户角色含科室维度，
+  /// 不清理会留下孤儿关联行：登录校验只查 SYS_USER_ROLE 行存在性，
+  /// 角色删除后关联行失去 JOIN 目标但数据仍在，属冗余脏数据）。
   Future<int> delete(String id) async {
     await getById(id);
     final idValue = _id(id, '角色ID');
     await _db.execute(
       'DELETE FROM SYS_ROLE_PERMISSION WHERE ROLE_ID = ?',
+      [idValue],
+    );
+    await _db.execute(
+      'DELETE FROM SYS_USER_ROLE WHERE ROLE_ID = ?',
       [idValue],
     );
     return _db.execute('DELETE FROM SYS_ROLE WHERE ID = ?', [idValue]);
