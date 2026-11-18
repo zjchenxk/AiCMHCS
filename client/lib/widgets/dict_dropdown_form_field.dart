@@ -95,20 +95,34 @@ class _DictDropdownFormFieldState extends State<DictDropdownFormField> {
       }
     }
 
+    // 下拉候选项：字典就绪后按数据项构建；存量值不在当前字典项中
+    // （字典项被删除/改值）时补一个同名候选项，避免下拉断言崩溃，
+    // 用户可重新选择现行字典项。
+    final options = ready
+        ? items
+              .map(
+                (e) => DropdownMenuItem(
+                  value: e.itemValue,
+                  child: Text(e.itemValue, style: theme.textTheme.bodyMedium),
+                ),
+              )
+              .toList()
+        : <DropdownMenuItem<String>>[];
+    if (ready && initialValue != null && !options.any((e) => e.value == initialValue)) {
+      options.insert(
+        0,
+        DropdownMenuItem(
+          value: initialValue,
+          child: Text(initialValue, style: theme.textTheme.bodyMedium),
+        ),
+      );
+    }
+
     return DropdownButtonFormField<String>(
       key: widget.formFieldKey,
       initialValue: initialValue,
       isExpanded: true,
-      items: ready
-          ? items
-                .map(
-                  (e) => DropdownMenuItem(
-                    value: e.itemValue,
-                    child: Text(e.itemValue, style: theme.textTheme.bodyMedium),
-                  ),
-                )
-                .toList()
-          : null,
+      items: ready ? options : null,
       hint: Text(
         items == null ? '加载中...' : (items.isEmpty ? '字典未配置' : '请选择${widget.label}'),
         style: theme.textTheme.bodyMedium,
