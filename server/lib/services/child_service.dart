@@ -27,6 +27,10 @@ final class ChildException implements Exception {
 /// 儿童整档：基本信息 + 扩展信息（可空）+ 监护人列表。
 typedef ChildArchive = (ChildInfo, ChildExtInfo?, List<ChildGuardianInfo>);
 
+/// 高级组合查询结果页：当前页儿童列表 + 总条数 + 夹取后的页码与页大小
+/// （服务端分页）。
+typedef ChildAdvancedQueryPage = (List<ChildInfo> children, int total, int page, int pageSize);
+
 /// 整档归属上下文（医院 + 科室/院区）：新增时取自创建人令牌会话，
 /// 修改时沿用档案原值；随整档写入 CHILD_* 各表的 *_ID/*_NAME 归属列。
 typedef _ArchiveScope = ({String hospId, String hospName, String? deptId, String? deptName, String? campusId, String? campusName});
@@ -212,6 +216,163 @@ class ChildService {
       return null;
     }
     return v;
+  }
+
+  /// 高级组合查询本院儿童档案（条件之间为「与」关系，服务端分页）。
+  ///
+  /// 与 [search] 的多条件「或」检索互补：本方法面向高级搜索逐字段填写
+  /// 场景，支持建档/出生日期区间（CHECK_TIME/BIRTH_DATE，DATE 列字符串
+  /// 绑定比较，起止均含端点）、性别、孕周/体重数值区间（经 CHILD_EXT_INFO
+  /// EXISTS 子查询，CHILD_ID 为该表主键）与监护人姓名（经
+  /// CHILD_GUARDIAN_INFO EXISTS 子查询）。文本条件均为精确匹配：姓名/
+  /// 证件号码/联系电话/监护人姓名走 *_HMAC 盲索引等值（密文列不支持
+  /// 模糊），就诊卡号为明文等值；单个文本条件超长时静默跳过。允许全空
+  /// 条件（相当于分页浏览全院档案）。分页参数 page（默认 1）/pageSize
+  /// （默认 20）越界时静默夹取（page ≥ 1、pageSize 1-100），只对当前页
+  /// 行解密。
+  ///returns: (当前页儿童列表, 总条数, 夹取后的页码, 夹取后的页大小)
+  Future<ChildAdvancedQueryPage> advancedQuery({
+    required String hospId,
+    String? checkTimeFrom,
+    String? checkTimeTo,
+    String? birthDateFrom,
+    String? birthDateTo,
+    String? name,
+    String? sex,
+    String? visitCardNo,
+    String? certificateNo,
+    String? phone,
+    String? guardianName,
+    int? gestationalWeekFrom,
+    int? gestationalWeekTo,
+    int? birthWeightFrom,
+    int? birthWeightTo,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    final scope = hospId.trim();
+    if (scope.isEmpty) {
+      return const (<ChildInfo>[], 0, 1, 20);
+    }
+    final checkFrom = _optionalDate(checkTimeFrom, '建档日期起始');
+    final checkTo = _optionalDate(checkTimeTo, '建档日期截止');
+    final birthFrom = _optionalDate(birthDateFrom, '出生日期起始');
+    final birthTo = _optionalDate(birthDateTo, '出生日期截止');
+    final namePlain = _searchCond(name, _plainNameMaxLength);
+    final sexValue = _optionalFlag(sex, '性别', const {'1', '2'});
+    final cardNo = _searchCond(visitCardNo, _cardNoMaxLength);
+    final certPlain = _searchCond(certificateNo, _plainCertMaxLength);
+    final phonePlain = _searchCond(phone, _plainPhoneMaxLength);
+    final guardianPlain = _searchCond(guardianName, _plainNameMaxLength);
+    final weekFrom = _rangeSmallInt(gestationalWeekFrom, '出生孕周起始');
+    final weekTo = _rangeSmallInt(gestationalWeekTo, '出生孕周截止');
+    final weightFrom = _rangeSmallInt(birthWeightFrom, '出生体重起始');
+    final weightTo = _rangeSmallInt(birthWeightTo, '出生体重截止');
+    final safePageSize = pageSize.clamp(1, 100);
+    final safePage = page < 1 ? 1 : page;
+    final offset = (safePage - 1) * safePageSize;
+
+    // 条件串与参数按同一顺序成对构造，保证占位符与参数位次一致。
+    final conditions = <String>[];
+    final params = <Object?>[];
+    if (checkFrom != null) {
+      conditions.add('CHECK_TIME >= ?');
+      params.add(checkFrom);
+    }
+    if (checkTo != null) {
+      conditions.add('CHECK_TIME <= ?');
+      params.add(checkTo);
+    }
+    if (birthFrom != null) {
+      conditions.add('BIRTH_DATE >= ?');
+      params.add(birthFrom);
+    }
+    if (birthTo != null) {
+      conditions.add('BIRTH_DATE <= ?');
+      params.add(birthTo);
+    }
+    if (namePlain != null) {
+      conditions.add('NAME_HMAC = ?');
+      params.add(await _cipher.mac(FieldCipher.childNamePurpose, namePlain));
+    }
+    if (sexValue != null) {
+      conditions.add('SEX = ?');
+      params.add(sexValue);
+    }
+    if (cardNo != null) {
+      conditions.add('VISIT_CARD_NO = ?');
+      params.add(cardNo);
+    }
+    if (certPlain != null) {
+      conditions.add('CERTIFICATE_NO_HMAC = ?');
+      params.add(await _cipher.mac(FieldCipher.certificateNoPurpose, certPlain));
+    }
+    if (phonePlain != null) {
+      conditions.add('PHONE_HMAC = ?');
+      params.add(await _cipher.mac(FieldCipher.childPhonePurpose, phonePlain));
+    }
+    if (guardianPlain != null) {
+      conditions.add(
+        'EXISTS (SELECT 1 FROM CHILD_GUARDIAN_INFO G '
+        'WHERE G.CHILD_ID = CHILD_INFO.ID AND G.NAME_HMAC = ?)',
+      );
+      params.add(await _cipher.mac(FieldCipher.guardianNamePurpose, guardianPlain));
+    }
+    if (weekFrom != null || weekTo != null) {
+      final weekConds = <String>[];
+      if (weekFrom != null) {
+        weekConds.add('E.GESTATIONAL_WEEK >= ?');
+        params.add(weekFrom);
+      }
+      if (weekTo != null) {
+        weekConds.add('E.GESTATIONAL_WEEK <= ?');
+        params.add(weekTo);
+      }
+      conditions.add(
+        'EXISTS (SELECT 1 FROM CHILD_EXT_INFO E '
+        'WHERE E.CHILD_ID = CHILD_INFO.ID AND (${weekConds.join(' AND ')}))',
+      );
+    }
+    if (weightFrom != null || weightTo != null) {
+      final weightConds = <String>[];
+      if (weightFrom != null) {
+        weightConds.add('E.BIRTH_WEIGHT >= ?');
+        params.add(weightFrom);
+      }
+      if (weightTo != null) {
+        weightConds.add('E.BIRTH_WEIGHT <= ?');
+        params.add(weightTo);
+      }
+      conditions.add(
+        'EXISTS (SELECT 1 FROM CHILD_EXT_INFO E '
+        'WHERE E.CHILD_ID = CHILD_INFO.ID AND (${weightConds.join(' AND ')}))',
+      );
+    }
+
+    final whereClause = conditions.isEmpty ? 'HOSP_ID = ?' : 'HOSP_ID = ? AND (${conditions.join(' AND ')})';
+    final whereParams = <Object?>[scope, ...params];
+
+    final countResult = await _db.query(
+      'SELECT COUNT(*) AS CNT FROM CHILD_INFO WHERE $whereClause',
+      whereParams,
+    );
+    final total = int.tryParse(countResult.rowsAsMaps.first['CNT']?.trim() ?? '') ?? 0;
+
+    // 页码参数为服务端解析并夹取后的整数（无注入面），LIMIT/OFFSET 直接
+    // 内联：达梦对 LIMIT 子句绑定参数无验证先例，内联整数在达梦 /
+    // SQLite / PostgreSQL 三方言下语义确定一致。
+    final result = await _db.query(
+      'SELECT ${_childColumns.join(', ')} FROM CHILD_INFO '
+      'WHERE $whereClause '
+      'ORDER BY CREATE_TIME DESC, ID DESC '
+      'LIMIT $safePageSize OFFSET $offset',
+      whereParams,
+    );
+    final children = <ChildInfo>[];
+    for (final row in result.rowsAsMaps) {
+      children.add(await _childFromRow(row));
+    }
+    return (children, total, safePage, safePageSize);
   }
 
   /// 装载儿童整档（基本信息 + 扩展信息 + 监护人列表），不存在或非本院
@@ -1223,6 +1384,15 @@ class ChildService {
       throw ChildException(400, 40002, '$label应为 0-32767 的整数：$value');
     }
     return v;
+  }
+
+  /// 可空小整数区间端点校验（SMALLINT 列数值范围检索，0-32767）。
+  int? _rangeSmallInt(int? value, String label) {
+    if (value == null) return null;
+    if (value < 0 || value > 32767) {
+      throw ChildException(400, 40002, '$label应为 0-32767 的整数：$value');
+    }
+    return value;
   }
 
   /// 可空小数校验（DECIMAL(5,1) 列，0-9999.9），字符串原样绑定。

@@ -32,15 +32,17 @@ void main() {
     String? phone = '13800138000',
     String? healthNo = 'H0001',
     String addressDetails = '景山前街4号',
+    String checkTime = '2026-11-14',
+    String birthDate = '2026-01-01',
   }) => ChildInfo(
     id: '',
-    checkTime: '2026-11-14',
+    checkTime: checkTime,
     visitCardNo: visitCardNo,
     patientId: patientId,
     ecardId: ecardId,
     name: name,
     sex: sex,
-    birthDate: '2026-01-01',
+    birthDate: birthDate,
     birthTime: '08:30',
     country: '中国',
     nation: '汉族',
@@ -277,15 +279,15 @@ CREATE TABLE CHILD_PHOTO (
     hospName: '',
   );
 
-  ChildExtInfo buildExt({String apgar1 = '8'}) => ChildExtInfo(
+  ChildExtInfo buildExt({String apgar1 = '8', String gestationalWeek = '38', String birthWeight = '3200'}) => ChildExtInfo(
     childId: '',
     creatorId: '',
     creatorName: '',
     hospId: '',
     hospName: '',
-    gestationalWeek: '38',
+    gestationalWeek: gestationalWeek,
     gestationalDay: '2',
-    birthWeight: '3200',
+    birthWeight: birthWeight,
     birthLength: '50.5',
     birthHeadCirc: '34.5',
     gravidity: '1',
@@ -680,6 +682,154 @@ CREATE TABLE CHILD_PHOTO (
     await expectLater(
       service.findDuplicates(hospId: '1', name: '王小明', sex: '1', birthDate: '20260101'),
       throwsA(isA<ChildException>().having((e) => e.message, 'message', contains('出生日期'))),
+    );
+  });
+
+  // 高级组合查询测试数据：医院 1 依次建档 王小明（38 周/3200g，监护人
+  // 王大壮）→ 李小红（40 周/2800g，女，无证件/电话）→ 张小刚（无扩展
+  // 信息无监护人、无证件/电话，保证盲索引条件各自唯一命中），医院 2
+  // 一条同名档案用于隔离断言。列表查询按「CREATE_TIME DESC, ID DESC」
+  // 排序（UUID v7 单调递增），即建档顺序的倒序：张小刚 → 李小红 → 王小明。
+  Future<void> seedAdvanced() async {
+    Future<ChildInfo> save(ChildInfo child, {ChildExtInfo? ext, List<ChildGuardianInfo> guardians = const [], String hospId = '1'}) async {
+      final created = await service.create(
+        child: child,
+        ext: ext,
+        guardians: guardians,
+        creatorId: '9',
+        creatorName: '张医生',
+        hospId: hospId,
+        hospName: hospId == '1' ? '示例人民医院' : '示例二院',
+      );
+      return created.$1;
+    }
+
+    await save(buildChild(), ext: buildExt(), guardians: [buildGuardian()]);
+    await save(
+      buildChild(
+        name: '李小红',
+        sex: '2',
+        visitCardNo: 'JZK202601002',
+        certificateNo: null,
+        phone: null,
+        healthNo: null,
+        checkTime: '2026-10-01',
+        birthDate: '2025-06-15',
+      ),
+      ext: buildExt(gestationalWeek: '40', birthWeight: '2800'),
+    );
+    await save(
+      buildChild(name: '张小刚', visitCardNo: 'JZK202601003', certificateNo: null, phone: null, checkTime: '2026-11-01', birthDate: '2026-03-20'),
+    );
+    await save(buildChild(visitCardNo: 'JZK-OUT'), hospId: '2');
+  }
+
+  test('advancedQuery：全空条件分页浏览，页切片与 total 一致、越界与夹取', () async {
+    await seedAdvanced();
+    final page1 = await service.advancedQuery(hospId: '1', pageSize: 2);
+    expect(page1.$2, 3);
+    expect(page1.$3, 1);
+    expect(page1.$4, 2);
+    expect(page1.$1.map((c) => c.name), ['张小刚', '李小红'], reason: '按创建时间倒序（新建在前），每页 2 条');
+
+    final page2 = await service.advancedQuery(hospId: '1', page: 2, pageSize: 2);
+    expect(page2.$2, 3);
+    expect(page2.$3, 2);
+    expect(page2.$1.map((c) => c.name), ['王小明']);
+    expect(page2.$1.single.phone, '13800138000', reason: '当前页行解密下发');
+
+    // 页码越界 → 空页但 total 不变
+    final pageOver = await service.advancedQuery(hospId: '1', page: 9, pageSize: 2);
+    expect(pageOver.$1, isEmpty);
+    expect(pageOver.$2, 3);
+
+    // page/pageSize 非法值静默夹取（page ≥ 1、pageSize 1-100）
+    final clamped = await service.advancedQuery(hospId: '1', page: 0, pageSize: 500);
+    expect(clamped.$3, 1);
+    expect(clamped.$4, 100);
+  });
+
+  test('advancedQuery：文本条件 AND 组合、盲索引与监护人姓名 EXISTS', () async {
+    await seedAdvanced();
+    // 姓名 + 性别 AND 组合
+    final combo = await service.advancedQuery(hospId: '1', name: '王小明', sex: '1');
+    expect(combo.$2, 1);
+    expect(combo.$1.single.name, '王小明');
+    // 同名异性别 → AND 语义不命中
+    final mismatch = await service.advancedQuery(hospId: '1', name: '王小明', sex: '2');
+    expect(mismatch.$1, isEmpty);
+    expect(mismatch.$2, 0);
+
+    // 证件号码/联系电话盲索引等值、就诊卡号明文等值
+    expect((await service.advancedQuery(hospId: '1', certificateNo: '110101202601011234')).$1.single.name, '王小明');
+    expect((await service.advancedQuery(hospId: '1', phone: '13800138000')).$1.single.name, '王小明');
+    expect((await service.advancedQuery(hospId: '1', visitCardNo: 'JZK202601002')).$1.single.name, '李小红');
+
+    // 监护人姓名走 CHILD_GUARDIAN_INFO EXISTS + 盲索引
+    final byGuardian = await service.advancedQuery(hospId: '1', guardianName: '王大壮');
+    expect(byGuardian.$2, 1);
+    expect(byGuardian.$1.single.name, '王小明');
+    final guardianMiss = await service.advancedQuery(hospId: '1', guardianName: '不存在的监护人');
+    expect(guardianMiss.$1, isEmpty);
+    expect(guardianMiss.$2, 0);
+  });
+
+  test('advancedQuery：建档/出生日期区间比较，起止端点均含', () async {
+    await seedAdvanced();
+    // 建档日期区间 2026-11-01 ~ 2026-11-30 → 王小明(11-14) + 张小刚(11-01)
+    final nov = await service.advancedQuery(hospId: '1', checkTimeFrom: '2026-11-01', checkTimeTo: '2026-11-30');
+    expect(nov.$1.map((c) => c.name), ['张小刚', '王小明']);
+    // 端点单日：恰为张小刚建档日（含端点）
+    final exact = await service.advancedQuery(hospId: '1', checkTimeFrom: '2026-11-01', checkTimeTo: '2026-11-01');
+    expect(exact.$1.map((c) => c.name), ['张小刚']);
+    // 出生日期区间 → 仅李小红（2025-06-15）
+    final birth = await service.advancedQuery(hospId: '1', birthDateFrom: '2025-01-01', birthDateTo: '2025-12-31');
+    expect(birth.$1.map((c) => c.name), ['李小红']);
+    // 起止倒挂 → 空结果（客户端已前置校验，服务端不再纠正）
+    final inverted = await service.advancedQuery(hospId: '1', checkTimeFrom: '2026-12-01', checkTimeTo: '2026-01-01');
+    expect(inverted.$1, isEmpty);
+  });
+
+  test('advancedQuery：孕周/体重区间经 CHILD_EXT_INFO EXISTS 过滤', () async {
+    await seedAdvanced();
+    // 孕周下限 39 → 仅李小红（40 周）；无扩展信息的张小刚不命中
+    final weekFrom = await service.advancedQuery(hospId: '1', gestationalWeekFrom: 39);
+    expect(weekFrom.$1.map((c) => c.name), ['李小红']);
+    // 孕周区间 38-40 → 王小明 + 李小红
+    final weekRange = await service.advancedQuery(hospId: '1', gestationalWeekFrom: 38, gestationalWeekTo: 40);
+    expect(weekRange.$1.map((c) => c.name), ['李小红', '王小明']);
+    // 体重下限 3000 → 仅王小明（3200g）
+    final weightFrom = await service.advancedQuery(hospId: '1', birthWeightFrom: 3000);
+    expect(weightFrom.$1.map((c) => c.name), ['王小明']);
+    // 体重上限 2900 → 仅李小红（2800g）
+    final weightTo = await service.advancedQuery(hospId: '1', birthWeightTo: 2900);
+    expect(weightTo.$1.map((c) => c.name), ['李小红']);
+  });
+
+  test('advancedQuery：跨医院隔离与非法参数校验', () async {
+    await seedAdvanced();
+    // 医院 2 仅可见自己的档案
+    final other = await service.advancedQuery(hospId: '2');
+    expect(other.$2, 1);
+    expect(other.$1.single.name, '王小明');
+    expect(other.$1.single.visitCardNo, 'JZK-OUT');
+    // 空 hospId → 空结果
+    final noScope = await service.advancedQuery(hospId: '');
+    expect(noScope.$1, isEmpty);
+    expect(noScope.$2, 0);
+
+    // 非法日期格式 / 性别 / 数值区间端点 → 40002
+    await expectLater(
+      service.advancedQuery(hospId: '1', checkTimeFrom: '2026/01/01'),
+      throwsA(isA<ChildException>().having((e) => e.code, 'code', 40002)),
+    );
+    await expectLater(
+      service.advancedQuery(hospId: '1', sex: '3'),
+      throwsA(isA<ChildException>().having((e) => e.message, 'message', contains('性别'))),
+    );
+    await expectLater(
+      service.advancedQuery(hospId: '1', gestationalWeekFrom: 40000),
+      throwsA(isA<ChildException>().having((e) => e.message, 'message', contains('出生孕周'))),
     );
   });
 }

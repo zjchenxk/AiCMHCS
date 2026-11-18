@@ -5,6 +5,7 @@ import 'package:client/utils/role_display.dart';
 import 'package:client/utils/theme_color_mapper.dart';
 import 'package:client/utils/theme_data.dart';
 import 'package:client/views/help/help_center_page.dart';
+import 'package:client/widgets/child_advanced_search_dialog.dart';
 import 'package:client/widgets/child_pick_dialog.dart';
 import 'package:client/widgets/glass_panel.dart';
 import 'package:material_ui/material_ui.dart';
@@ -270,94 +271,13 @@ class _MainPageState extends State<MainPage> {
     }
   }
 
-  /// 高级搜索条件弹窗（查询逻辑暂未实现，仅展示条件输入框）。
+  /// 高级搜索对话框：多条件组合查询 + 分页（组件见
+  /// child_advanced_search_dialog.dart），选定儿童写入当前儿童上下文。
   Future<void> _showAdvancedSearchDialog() async {
-    final theme = Theme.of(context);
-    final nameCtrl = TextEditingController();
-    final cardCtrl = TextEditingController();
-    final certCtrl = TextEditingController();
-    final phoneCtrl = TextEditingController();
-    try {
-      await showDialog<void>(
-        context: context,
-        builder: (dialogContext) => Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: GlassPanel(
-              blur: 24,
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.tune, color: theme.colorScheme.primary, size: 22),
-                        const SizedBox(width: 10),
-                        Text(
-                          '高级搜索',
-                          style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    for (final (label, controller) in <(String, TextEditingController)>[
-                      ('姓名', nameCtrl),
-                      ('就诊卡号', cardCtrl),
-                      ('证件号码', certCtrl),
-                      ('电话号码', phoneCtrl),
-                    ]) ...[
-                      TextField(
-                        controller: controller,
-                        style: theme.textTheme.bodyMedium,
-                        decoration: InputDecoration(
-                          labelText: label,
-                          labelStyle: theme.textTheme.bodyMedium,
-                          filled: true,
-                          fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3)),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: theme.colorScheme.primary),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    Text(
-                      '高级搜索功能开发中，暂不支持按组合条件检索',
-                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
-                    ),
-                    const SizedBox(height: 20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        FilledButton(
-                          onPressed: () => Navigator.of(dialogContext).pop(),
-                          child: const Text('关闭'),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-    } finally {
-      nameCtrl.dispose();
-      cardCtrl.dispose();
-      certCtrl.dispose();
-      phoneCtrl.dispose();
-    }
+    final selected = await showChildAdvancedSearchDialog(context);
+    if (selected == null || !mounted) return;
+    context.read<MainViewModel>().setCurrentChild(selected);
+    _toast('已选定儿童：${selected.name}');
   }
 
   /// 浮窗式提示（搜索结果反馈）。

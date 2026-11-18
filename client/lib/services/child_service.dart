@@ -5,6 +5,9 @@ import 'package:common/model.dart';
 /// 儿童整档：基本信息 + 扩展信息（可空）+ 监护人列表。
 typedef ChildArchive = (ChildInfo, ChildExtInfo?, List<ChildGuardianInfo>);
 
+/// 高级组合查询结果页：当前页儿童列表 + 总条数（服务端分页）。
+typedef ChildAdvancedQueryPage = (List<ChildInfo> children, int total);
+
 /// 儿童建档服务：基于 BaseService 走后端 /api/child/*（自动加解密信封、
 /// 携带 token）。归属医院与创建人由服务端从登录会话推导，客户端无需
 /// 传入；敏感字段在 JSON 协议中为服务端解密后的明文，传输由信封保护。
@@ -47,6 +50,53 @@ class ChildService {
     });
     final list = data['children'] as List<dynamic>? ?? const [];
     return list.whereType<Map<String, dynamic>>().map(ChildInfo.fromJson).toList();
+  }
+
+  /// 高级组合查询本院儿童档案（条件之间为「与」关系，服务端分页）：
+  /// 日期区间 yyyy-MM-dd、性别码值、文本条件精确匹配（姓名/证件号码/
+  /// 联系电话/监护人姓名走盲索引，不支持模糊）、孕周按周数与体重按克
+  /// 数值区间。page/pageSize 由服务端夹取（默认 1 / 20）。
+  ///returns: (当前页儿童列表, 总条数)
+  Future<ChildAdvancedQueryPage> advancedQuery({
+    String? checkTimeFrom,
+    String? checkTimeTo,
+    String? birthDateFrom,
+    String? birthDateTo,
+    String? name,
+    String? sex,
+    String? visitCardNo,
+    String? certificateNo,
+    String? phone,
+    String? guardianName,
+    int? gestationalWeekFrom,
+    int? gestationalWeekTo,
+    int? birthWeightFrom,
+    int? birthWeightTo,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    final data = await _base.post('/api/child/advancedQuery', {
+      'checkTimeFrom': checkTimeFrom,
+      'checkTimeTo': checkTimeTo,
+      'birthDateFrom': birthDateFrom,
+      'birthDateTo': birthDateTo,
+      'name': name,
+      'sex': sex,
+      'visitCardNo': visitCardNo,
+      'certificateNo': certificateNo,
+      'phone': phone,
+      'guardianName': guardianName,
+      'gestationalWeekFrom': gestationalWeekFrom,
+      'gestationalWeekTo': gestationalWeekTo,
+      'birthWeightFrom': birthWeightFrom,
+      'birthWeightTo': birthWeightTo,
+      'page': page,
+      'pageSize': pageSize,
+    });
+    final list = data['children'] as List<dynamic>? ?? const [];
+    final children = list.whereType<Map<String, dynamic>>().map(ChildInfo.fromJson).toList();
+    final total = (data['total'] as num?)?.toInt() ?? children.length;
+    return (children, total);
   }
 
   /// 装载儿童整档（基本信息 + 扩展信息 + 监护人列表）。
