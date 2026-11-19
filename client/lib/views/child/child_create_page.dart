@@ -5,6 +5,7 @@ import 'package:client/views/base/base_page.dart';
 import 'package:client/views/child/child_basic_info_form.dart';
 import 'package:client/views/child/child_ext_info_form.dart';
 import 'package:client/views/child/child_guardian_panel.dart';
+import 'package:client/views/child/child_high_risk_factor_panel.dart';
 import 'package:client/widgets/camera_capture_dialog.dart';
 import 'package:client/widgets/child_pick_dialog.dart';
 import 'package:client/widgets/glass_panel.dart';
@@ -56,7 +57,7 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     // Tab 切换时刷新（内容区为 IndexedStack，index 变更即切换显示）
     _tabController.addListener(_onTabChanged);
     _viewModel = context.read<ChildCreateViewModel>();
@@ -151,6 +152,10 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
     final currentChildId = mainViewModel.child.id;
     if (currentChildId.isNotEmpty) {
       await _viewModel.selectChild(currentChildId);
+    } else {
+      // 未选定儿童时也要载入高危因素字典（五色卡片数据源；selectChild
+      // 内部已含该加载）
+      await _viewModel.loadHighRiskData();
     }
     // 无修改/删除权限（无查询入口）、也未选定儿童 → 直接进入新增录入态
     //（仅有新增权限场景）
@@ -399,6 +404,7 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
                             const Tab(text: '基本信息'),
                             const Tab(text: '扩展信息'),
                             Tab(text: '监护人（${vm.guardians.length}）'),
+                            Tab(text: '高危因素（${vm.checkedHighRiskIds.length}）'),
                           ],
                         ),
                         const Divider(height: 1),
@@ -433,6 +439,10 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
                               Padding(
                                 padding: const EdgeInsets.only(top: 8),
                                 child: ChildGuardianPanel(viewModel: vm, editable: editing),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: ChildHighRiskFactorPanel(viewModel: vm, editable: editing),
                               ),
                             ],
                           ),

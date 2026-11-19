@@ -4,6 +4,7 @@
 // 列表增删改（不做权限控制）。
 import 'package:client/services/admin_divisions_service.dart';
 import 'package:client/services/child_service.dart';
+import 'package:client/services/high_risk_factor_service.dart';
 import 'package:client/services/menu_service.dart';
 import 'package:client/view_models/child/child_create_view_model.dart';
 import 'package:common/model.dart';
@@ -36,6 +37,9 @@ class FakeChildService extends ChildService {
   String? lastDuplicateCheckExcludeId;
   List<ChildInfo> Function(String? excludeId)? onDuplicateCheck;
 
+  /// 最近一次保存携带的高危因素 ID 列表（断言整单透传用）。
+  List<String>? lastHighRiskFactorIds;
+
   @override
   Future<List<ChildInfo>> duplicateCheck({required String name, required String sex, required String birthDate, String? excludeId}) async {
     lastDuplicateCheckExcludeId = excludeId;
@@ -52,8 +56,10 @@ class FakeChildService extends ChildService {
     List<ChildGuardianInfo> guardians = const [],
     String? photoBase64,
     String? avatarBase64,
+    List<String>? highRiskFactorIds,
   }) async {
     createCalls++;
+    lastHighRiskFactorIds = highRiskFactorIds;
     final id = '${nextId++}';
     final stored = ChildInfo.fromJson(child.toJson()..['id'] = id);
     archives[id] = (stored, ext, guardians);
@@ -68,9 +74,11 @@ class FakeChildService extends ChildService {
     List<ChildGuardianInfo> guardians = const [],
     String? photoBase64,
     String? avatarBase64,
+    List<String>? highRiskFactorIds,
   }) async {
     updateCalls++;
     lastUpdatedId = id;
+    lastHighRiskFactorIds = highRiskFactorIds;
     final stored = ChildInfo.fromJson(child.toJson()..['id'] = id);
     archives[id] = (stored, ext, guardians);
     return archives[id]!;
@@ -82,6 +90,12 @@ class FakeChildService extends ChildService {
     archives.remove(id);
     return 1;
   }
+
+  /// 儿童已保存的高危因素记录（loadHighRiskData 回显用，默认空）。
+  List<ChildHighRiskFactor> savedHighRiskFactors = const [];
+
+  @override
+  Future<List<ChildHighRiskFactor>> highRiskFactors(String childId) async => savedHighRiskFactors;
 }
 
 /// 内存版行政区划服务：两级级联即可覆盖回显用例。
@@ -106,6 +120,33 @@ class FakeAdminDivisionsService extends AdminDivisionsService {
 
   @override
   Future<List<Village>?> getVillagesByTown(String townCode) async => const [];
+}
+
+/// 内存版高危因素服务：字典清单可预置，quickCreate 直接构造返回项。
+class FakeHighRiskFactorService extends HighRiskFactorService {
+  List<BaseHighRiskFactor> dict = const [];
+
+  /// 最近一次 quickCreate 入参（断言默认大类/颜色映射用）。
+  ({String? color, String? name})? lastQuickCreate;
+
+  @override
+  Future<List<BaseHighRiskFactor>> queryAll() async => dict;
+
+  @override
+  Future<BaseHighRiskFactor> quickCreate({required String riskColor, required String riskFactorName}) async {
+    lastQuickCreate = (color: riskColor, name: riskFactorName);
+    return BaseHighRiskFactor(
+      id: 'new-factor',
+      riskFactorCategory: '其它',
+      riskFactorCode: const {'黄色': '02990000', '橙色': '03990000', '红色': '04990000', '紫色': '05990000'}[riskColor] ?? '',
+      riskFactorName: riskFactorName,
+      riskColor: riskColor,
+      creatorId: '1',
+      creatorName: '系统管理员',
+      hospId: '1',
+      hospName: '示例人民医院',
+    );
+  }
 }
 
 ChildInfo _child(String id) => ChildInfo(
@@ -141,6 +182,7 @@ ChildInfo _child(String id) => ChildInfo(
 ChildCreateViewModel _buildViewModel({
   required Set<String> operationCodes,
   FakeChildService? childService,
+  FakeHighRiskFactorService? highRiskFactorService,
 }) {
   final menu = FakeMenuService(operationCodes);
   final child = childService ?? FakeChildService();
@@ -148,6 +190,7 @@ ChildCreateViewModel _buildViewModel({
     childService: child,
     menuService: menu,
     adminDivisionsService: FakeAdminDivisionsService(),
+    highRiskFactorService: highRiskFactorService ?? FakeHighRiskFactorService(),
   );
 }
 
@@ -331,5 +374,81 @@ void main() {
     vm.startEdit();
     await vm.checkDuplicate(_child('1'));
     expect(service.lastDuplicateCheckExcludeId, '1');
+  });
+
+  test('高危因素：互斥勾选、快速新增自动勾选并保留已选、保存透传 ID 列表', () async {
+    BaseHighRiskFactor factor(String id, String color, String name) => BaseHighRiskFactor(
+      id: id,
+      riskFactorCode: 'CODE-$id',
+      riskFactorName: name,
+      riskColor: color,
+      creatorId: '1',
+      creatorName: '系统管理员',
+      hospId: '1',
+      hospName: '示例人民医院',
+    );
+    final dict = [
+      factor('G1', '绿色', ChildCreateViewModel.noneHighRiskFactorName),
+      factor('G2', '绿色', '早产儿'),
+      factor('R1', '红色', '妊娠期高血压'),
+      factor('Y1', '黄色', '低出生体重'),
+    ];
+    final riskService = FakeHighRiskFactorService()..dict = dict;
+    final childService = FakeChildService();
+
+    final vm = _buildViewModel(
+      operationCodes: {ChildCreateViewModel.opCreate},
+      childService: childService,
+      highRiskFactorService: riskService,
+    );
+    await vm.loadPermissions();
+    await vm.startCreate();
+    await vm.loadHighRiskData();
+    expect(vm.highRiskDict, hasLength(4));
+    // 新增态默认勾选绿色「无高危因素」（需求：新增默认选中该项）
+    expect(vm.checkedHighRiskIds, {'G1'});
+    expect(vm.greenNoneChecked, isTrue);
+
+    // 勾选绿色「无高危因素」→ 其余四色不可再勾（互斥标志位 + 界面禁用）
+    vm.toggleHighRiskFactor(dict[0], true);
+    expect(vm.checkedHighRiskIds, {'G1'});
+    expect(vm.greenNoneChecked, isTrue);
+    expect(vm.anyNonGreenChecked, isFalse);
+    expect(vm.canToggleHighRisk(dict[0], editable: true), isTrue, reason: '已选项可取消');
+    expect(vm.canToggleHighRisk(dict[2], editable: true), isFalse, reason: '「无高危因素」勾选后四色禁用');
+    expect(vm.canToggleHighRisk(dict[1], editable: true), isTrue, reason: '绿色其余项不受互斥影响');
+    expect(vm.canToggleHighRisk(dict[0], editable: false), isFalse, reason: '浏览态一律禁用');
+
+    // 反向：勾选红色项 → 绿色「无高危因素」被清除且该项转为禁用
+    vm.toggleHighRiskFactor(dict[2], true);
+    expect(vm.checkedHighRiskIds, {'R1'});
+    expect(vm.greenNoneChecked, isFalse);
+    expect(vm.anyNonGreenChecked, isTrue);
+    expect(vm.canToggleHighRisk(dict[0], editable: true), isFalse, reason: '四色已勾选时「无高危因素」禁用');
+
+    // 绿色普通项与红色项可并存（仅「无高危因素」与四色互斥）
+    vm.toggleHighRiskFactor(dict[1], true);
+    expect(vm.checkedHighRiskIds, {'R1', 'G2'});
+
+    // 快速新增（黄色）→ 自动勾选且保留已选项
+    vm.addCreatedFactor(await riskService.quickCreate(riskColor: '黄色', riskFactorName: '新发现高危'));
+    expect(vm.checkedHighRiskIds, {'R1', 'G2', 'new-factor'});
+    expect(vm.highRiskDict.any((f) => f.id == 'new-factor'), isTrue);
+
+    // 整单保存透传勾选集合
+    await vm.save(child: _child(''));
+    expect(childService.lastHighRiskFactorIds, containsAll(['R1', 'G2', 'new-factor']));
+
+    // 全部取消后保存 → 显式传空列表（清空库内记录，而非"不改动"）
+    vm.startEdit();
+    for (final id in [...vm.checkedHighRiskIds]) {
+      vm.toggleHighRiskFactor(
+        dict.firstWhere((f) => f.id == id, orElse: () => dict[0]),
+        false,
+      );
+    }
+    expect(vm.checkedHighRiskIds, isEmpty);
+    await vm.save(child: _child('1'));
+    expect(childService.lastHighRiskFactorIds, isEmpty);
   });
 }

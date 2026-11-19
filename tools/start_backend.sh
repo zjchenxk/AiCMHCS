@@ -20,6 +20,12 @@ fi
 echo "== 构建后端 =="
 FROG="$LOCALAPPDATA/Pub/Cache/bin/dart_frog.bat"
 if [ ! -f "$FROG" ]; then FROG="dart_frog"; fi
+# dart_frog build 在中途失败（如 build 目录被旧进程占用）时会残留
+# server/pubspec_overrides.yaml：其中的 resolution: null 会覆盖本包的
+# resolution: workspace，使此后所有 pub 操作报「does not have
+# resolution: workspace」。负责删除它的 tool/fix_build_overrides.dart
+# 在 build 成功后才运行，故构建前先清理，保证失败可自愈。
+rm -f pubspec_overrides.yaml
 "$FROG" build
 
 # 修复 dart_frog 对 pub workspace 共享包生成的坏 path（见脚本头注释）

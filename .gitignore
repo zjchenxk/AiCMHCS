@@ -11,5 +11,10 @@ server/data/
 # 含产物内的运行数据——字段加密密钥、SQLite 数据文件）
 server/build/
 
+# dart_frog build 误生成的覆盖文件（含 resolution: null 与坏 path，
+# 会让 workspace 成员解析失败；正常由 tool/fix_build_overrides.dart 删除，
+# 构建中途失败时会残留——构建前由 start_backend.sh 清理）
+server/pubspec_overrides.yaml
+
 # PowerDesigner 本地工作区缓存与日志（建模文件 documents/AICMHCS.pdma 本体提交）
 documents/.AICMHCS/

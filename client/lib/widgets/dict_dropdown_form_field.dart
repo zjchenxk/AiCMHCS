@@ -123,6 +123,11 @@ class _DictDropdownFormFieldState extends State<DictDropdownFormField> {
       initialValue: initialValue,
       isExpanded: true,
       items: ready ? options : null,
+      // 可编辑性显式由 enabled 决定（material_ui 1.8.0 起新增该参数，
+      // 显式传入不依赖「onChanged 为 null 即禁用」的兼容路径）；禁用态
+      // 下 onChanged 不会触发。调用方可以不传 onChanged（值经
+      // formFieldKey 在提交时统一收集），此时下拉同样可正常选择
+      enabled: enabled,
       hint: Text(
         items == null ? '加载中...' : (items.isEmpty ? '字典未配置' : '请选择${widget.label}'),
         style: theme.textTheme.bodyMedium,
@@ -130,13 +135,9 @@ class _DictDropdownFormFieldState extends State<DictDropdownFormField> {
       decoration: _glassDecoration(theme, widget.label, required: widget.required),
       style: theme.textTheme.bodyMedium,
       validator: widget.validator ?? (widget.required ? (v) => (v == null || v.trim().isEmpty) ? '请选择${widget.label}' : null : null),
-      // 可编辑性仅由 enabled 决定：调用方可以不传 onChanged（值经
-      // formFieldKey 在提交时统一收集），此时下拉同样可正常选择
-      onChanged: enabled
-          ? (v) {
-              widget.onChanged?.call(v);
-            }
-          : null,
+      onChanged: (v) {
+        widget.onChanged?.call(v);
+      },
     );
   }
 

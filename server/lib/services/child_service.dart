@@ -408,6 +408,7 @@ class ChildService {
     List<ChildGuardianInfo> guardians = const [],
     String? photoBase64,
     String? avatarBase64,
+    List<String>? highRiskFactorIds,
   }) async {
     final scope = (
       hospId: _requireId(hospId, '医院ID'),
@@ -483,6 +484,9 @@ class ChildService {
     if (photoBase64 != null || avatarBase64 != null) {
       await _savePhoto(newId, photoBase64, avatarBase64, creator, creatorText, scope);
     }
+    if (highRiskFactorIds != null) {
+      await _saveHighRiskFactors(newId, highRiskFactorIds, creator, creatorText, scope);
+    }
     return load(newId, hospId);
   }
 
@@ -494,7 +498,16 @@ class ChildService {
   /// 扩展信息），重插行沿用档案原科室/院区归属；photoBase64/
   /// avatarBase64 同时提供时追加一条拍照记录（随档案保存一并入库，
   /// 同样沿用档案归属）。
-  Future<ChildArchive> update({required String id, required ChildInfo child, required String hospId, ChildExtInfo? ext, List<ChildGuardianInfo> guardians = const [], String? photoBase64, String? avatarBase64}) async {
+  Future<ChildArchive> update({
+    required String id,
+    required ChildInfo child,
+    required String hospId,
+    ChildExtInfo? ext,
+    List<ChildGuardianInfo> guardians = const [],
+    String? photoBase64,
+    String? avatarBase64,
+    List<String>? highRiskFactorIds,
+  }) async {
     final current = await _requireChild(id, hospId);
     final idValue = _requireId(id, '儿童ID');
     final creator = _requireId(current.creatorId, '创建人ID');
@@ -566,11 +579,14 @@ class ChildService {
     if (photoBase64 != null || avatarBase64 != null) {
       await _savePhoto(idValue, photoBase64, avatarBase64, creator, creatorText, scope);
     }
+    if (highRiskFactorIds != null) {
+      await _saveHighRiskFactors(idValue, highRiskFactorIds, creator, creatorText, scope);
+    }
     return load(id, hospId);
   }
 
-  /// 删除儿童档案（连带删除扩展信息、监护人与全部拍照记录），返回删除
-  /// 行数（0 或 1）。
+  /// 删除儿童档案（连带删除扩展信息、监护人、全部拍照记录与高危因素
+  /// 记录），返回删除行数（0 或 1）。
   Future<int> delete(String id, String hospId) async {
     await _requireChild(id, hospId);
     final idValue = _requireId(id, '儿童ID');
@@ -578,6 +594,7 @@ class ChildService {
     await _db.execute('DELETE FROM CHILD_GUARDIAN_INFO WHERE CHILD_ID = ?', [idValue]);
     await _db.execute('DELETE FROM CHILD_EXT_INFO WHERE CHILD_ID = ?', [idValue]);
     await _db.execute('DELETE FROM CHILD_PHOTO WHERE CHILD_ID = ?', [idValue]);
+    await _db.execute('DELETE FROM CHILD_HIGH_RISK_FACTOR WHERE CHILD_ID = ?', [idValue]);
     return _db.execute('DELETE FROM CHILD_INFO WHERE ID = ? AND HOSP_ID = ?', [idValue, scope]);
   }
 
@@ -700,6 +717,120 @@ class ChildService {
       ],
     );
   }
+
+  // ---------------- 儿童高危因素（CHILD_HIGH_RISK_FACTOR） ----------------
+
+  /// 查询儿童已保存的高危因素记录（随档案保存整表替换，按创建时间/ID
+  /// 倒序返回）。
+  Future<List<ChildHighRiskFactor>> listHighRiskFactors(String childId, String hospId) async {
+    final scope = hospId.trim();
+    if (scope.isEmpty) {
+      return const [];
+    }
+    final result = await _db.query(
+      'SELECT ID, CHILD_ID, HIGH_RISK_FACTOR, RISK_FACTOR_CODE, '
+      'RISK_FACTOR_NAME, RISK_COLOR, RISK_LEVEL, RISK_SCORE, CREATOR_ID, '
+      'CREATOR_NAME, DEPT_ID, DEPT_NAME, CAMPUS_ID, CAMPUS_NAME, HOSP_ID, '
+      'HOSP_NAME, CREATE_TIME, UPDATE_TIME FROM CHILD_HIGH_RISK_FACTOR '
+      'WHERE CHILD_ID = ? AND HOSP_ID = ? ORDER BY CREATE_TIME DESC, ID DESC',
+      [childId, scope],
+    );
+    return result.rowsAsMaps.map(_highRiskFactorFromRow).toList(growable: false);
+  }
+
+  /// 覆盖保存儿童勾选的高危因素集合（先删后插；随档案【保存】一并调用）。
+  ///
+  /// factorIds **先全量校验**高危因素字典行存在且属本院（跨院/缺失一律
+  /// 40001，校验失败时不执行删除，保留旧集合——不落半途状态），再行
+  /// 删除插入；RISK_FACTOR_CODE/NAME/COLOR/LEVEL/SCORE 取字典权威值
+  /// 落库为快照（字典项后续改名/改级不影响历史档案）；行主键为
+  /// `newUuid()`。
+  Future<void> _saveHighRiskFactors(String childId, List<String> factorIds, String creatorId, String creator, _ArchiveScope scope) async {
+    // 先全量校验并解析字典快照（去重保序），全部通过后才动表
+    final snapshots = <({String id, String code, String name, String? color, String? level, String? score})>[];
+    final seen = <String>{};
+    for (final factorId in factorIds) {
+      final idValue = _requireId(factorId, '高危因素ID');
+      if (!seen.add(idValue)) {
+        continue;
+      }
+      final dict = await _requireHighRiskFactorDict(idValue, scope.hospId);
+      snapshots.add((id: idValue, code: dict.code, name: dict.name, color: dict.color, level: dict.level, score: dict.score));
+    }
+
+    await _db.execute('DELETE FROM CHILD_HIGH_RISK_FACTOR WHERE CHILD_ID = ?', [childId]);
+    for (final snapshot in snapshots) {
+      await _db.execute(
+        'INSERT INTO CHILD_HIGH_RISK_FACTOR (ID, CHILD_ID, HIGH_RISK_FACTOR, '
+        'RISK_FACTOR_CODE, RISK_FACTOR_NAME, RISK_COLOR, RISK_LEVEL, '
+        'RISK_SCORE, CREATOR_ID, CREATOR_NAME, DEPT_ID, DEPT_NAME, '
+        'CAMPUS_ID, CAMPUS_NAME, HOSP_ID, HOSP_NAME, CREATE_TIME) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          newUuid(),
+          childId,
+          snapshot.id,
+          snapshot.code,
+          snapshot.name,
+          snapshot.color,
+          snapshot.level,
+          snapshot.score,
+          creatorId,
+          creator,
+          scope.deptId,
+          scope.deptName,
+          scope.campusId,
+          scope.campusName,
+          scope.hospId,
+          scope.hospName,
+          formatTimestamp(DateTime.now()),
+        ],
+      );
+    }
+  }
+
+  /// 校验高危因素字典行存在且属本院，返回其快照字段（编码/名称/颜色/
+  /// 等级/分值）。
+  Future<({String code, String name, String? color, String? level, String? score})> _requireHighRiskFactorDict(String factorId, String hospId) async {
+    final result = await _db.query(
+      'SELECT RISK_FACTOR_CODE, RISK_FACTOR_NAME, RISK_COLOR, RISK_LEVEL, '
+      'RISK_SCORE FROM BASE_HIGH_RISK_FACTOR WHERE ID = ? AND HOSP_ID = ?',
+      [_requireId(factorId, '高危因素ID'), hospId],
+    );
+    if (result.rows.isEmpty) {
+      throw ChildException(400, 40001, '高危因素不存在或不可用：$factorId');
+    }
+    final row = result.rowsAsMaps.first;
+    return (
+      code: row['RISK_FACTOR_CODE'] ?? '',
+      name: row['RISK_FACTOR_NAME'] ?? '',
+      color: row['RISK_COLOR'],
+      level: row['RISK_LEVEL'],
+      score: row['RISK_SCORE'],
+    );
+  }
+
+  /// 从数据库行解析儿童高危因素记录。
+  ChildHighRiskFactor _highRiskFactorFromRow(Map<String, String?> row) => ChildHighRiskFactor(
+    id: row['ID'],
+    childId: row['CHILD_ID'] ?? '',
+    highRiskFactorId: row['HIGH_RISK_FACTOR'] ?? '',
+    riskFactorCode: row['RISK_FACTOR_CODE'] ?? '',
+    riskFactorName: row['RISK_FACTOR_NAME'] ?? '',
+    riskColor: row['RISK_COLOR'],
+    riskLevel: row['RISK_LEVEL'],
+    riskScore: row['RISK_SCORE'],
+    creatorId: row['CREATOR_ID'] ?? '',
+    creatorName: row['CREATOR_NAME'] ?? '',
+    deptId: row['DEPT_ID'],
+    deptName: row['DEPT_NAME'],
+    campusId: row['CAMPUS_ID'],
+    campusName: row['CAMPUS_NAME'],
+    hospId: row['HOSP_ID'] ?? '',
+    hospName: row['HOSP_NAME'] ?? '',
+    createTime: row['CREATE_TIME'],
+    updateTime: row['UPDATE_TIME'],
+  );
 
   // ---------------- 内部辅助 ----------------
 

@@ -105,28 +105,33 @@ class ChildService {
     return _parseArchive(data);
   }
 
-  /// 新增儿童档案（整档保存：child 必填，ext/guardians/photo 可选），
-  /// 返回入库后的整档（child 含生成的 ID）；photo 两字段同时非空时随
-  /// 档案一并插入一条拍照记录。
-  Future<ChildArchive> create({required ChildInfo child, ChildExtInfo? ext, List<ChildGuardianInfo> guardians = const [], String? photoBase64, String? avatarBase64}) async {
+  /// 新增儿童档案（整档保存：child 必填，ext/guardians/photo/
+  /// highRiskFactorIds 可选），返回入库后的整档（child 含生成的 ID）；
+  /// photo 两字段同时非空时随档案一并插入一条拍照记录；
+  /// highRiskFactorIds 为 null 表示不改动高危因素，显式传列表（含空
+  /// 列表——表示清空）则整表替换。
+  Future<ChildArchive> create({required ChildInfo child, ChildExtInfo? ext, List<ChildGuardianInfo> guardians = const [], String? photoBase64, String? avatarBase64, List<String>? highRiskFactorIds}) async {
     final data = await _base.post('/api/child/add', {
       'child': child.toJson(),
       'ext': ext?.toJson(),
       'guardians': guardians.map((g) => g.toJson()).toList(),
       'photo': buildPhotoPayload(photoBase64, avatarBase64),
+      'highRiskFactorIds': highRiskFactorIds,
     });
     return _parseArchive(data);
   }
 
   /// 修改儿童档案（整档保存：基本信息全量更新、病人ID不可改；ext 传
-  /// null 即清空扩展信息；监护人全量覆盖；photo 同新增）。
-  Future<ChildArchive> update({required String id, required ChildInfo child, ChildExtInfo? ext, List<ChildGuardianInfo> guardians = const [], String? photoBase64, String? avatarBase64}) async {
+  /// null 即清空扩展信息；监护人全量覆盖；photo/highRiskFactorIds 同
+  /// 新增）。
+  Future<ChildArchive> update({required String id, required ChildInfo child, ChildExtInfo? ext, List<ChildGuardianInfo> guardians = const [], String? photoBase64, String? avatarBase64, List<String>? highRiskFactorIds}) async {
     final data = await _base.post('/api/child/update', {
       'id': id,
       'child': child.toJson(),
       'ext': ext?.toJson(),
       'guardians': guardians.map((g) => g.toJson()).toList(),
       'photo': buildPhotoPayload(photoBase64, avatarBase64),
+      'highRiskFactorIds': highRiskFactorIds,
     });
     return _parseArchive(data);
   }
@@ -152,6 +157,14 @@ class ChildService {
     final data = await _base.post('/api/child/photoQuery', {'childId': childId});
     final photo = data['photo'];
     return photo is Map<String, dynamic> ? ChildPhoto.fromJson(photo) : null;
+  }
+
+  /// 查询儿童已保存的高危因素记录（随档案保存整表替换，列表按创建
+  /// 时间/ID 倒序），无记录返回空列表。
+  Future<List<ChildHighRiskFactor>> highRiskFactors(String childId) async {
+    final data = await _base.post('/api/child/highRiskFactorQuery', {'childId': childId});
+    final list = data['factors'] as List<dynamic>? ?? const [];
+    return list.whereType<Map<String, dynamic>>().map(ChildHighRiskFactor.fromJson).toList();
   }
 
   /// 移除儿童当天全部拍照记录，返回 (移除条数, 移除后的最近记录——null

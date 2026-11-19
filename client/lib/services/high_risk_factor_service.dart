@@ -65,4 +65,18 @@ class HighRiskFactorService {
     final data = await _base.post('/api/highRiskFactor/delete', {'id': id});
     return data['deleted'] as int;
   }
+
+  /// 快速新增高危因素（儿童建档页拍照入口旁的快速新增场景）：大类默认
+  /// 「其它」、编码按高危颜色默认映射（黄色 02990000 / 橙色 03990000 /
+  /// 红色 04990000 / 紫色 05990000），允许同编码重复、等级与分值为空。
+  ///param riskColor: 高危颜色（黄/橙/红/紫四选一）
+  ///param riskFactorName: 高危因素名称
+  ///returns: 新增后的高危因素（含生成的 ID）
+  Future<BaseHighRiskFactor> quickCreate({required String riskColor, required String riskFactorName}) async {
+    final data = await _base.post('/api/highRiskFactor/quickAdd', {
+      'riskColor': riskColor,
+      'riskFactorName': riskFactorName,
+    });
+    return BaseHighRiskFactor.fromJson(data['factor'] as Map<String, dynamic>);
+  }
 }

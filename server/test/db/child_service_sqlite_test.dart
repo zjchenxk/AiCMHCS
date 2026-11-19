@@ -250,6 +250,69 @@ CREATE TABLE CHILD_PHOTO (
   CREATE_TIME TEXT NOT NULL,
   UPDATE_TIME TEXT
 )''');
+    await db.executeDirect('''
+CREATE TABLE CHILD_HIGH_RISK_FACTOR (
+  ID TEXT PRIMARY KEY NOT NULL,
+  CHILD_ID TEXT NOT NULL,
+  HIGH_RISK_FACTOR TEXT NOT NULL,
+  RISK_FACTOR_CODE TEXT NOT NULL,
+  RISK_FACTOR_NAME TEXT NOT NULL,
+  RISK_COLOR TEXT,
+  RISK_LEVEL TEXT,
+  RISK_SCORE INTEGER,
+  CREATOR_ID TEXT NOT NULL,
+  CREATOR_NAME TEXT NOT NULL,
+  DEPT_ID TEXT,
+  DEPT_NAME TEXT,
+  CAMPUS_ID TEXT,
+  CAMPUS_NAME TEXT,
+  HOSP_ID TEXT NOT NULL,
+  HOSP_NAME TEXT NOT NULL,
+  CREATE_TIME TEXT NOT NULL,
+  UPDATE_TIME TEXT
+)''');
+    await db.executeDirect('''
+CREATE TABLE BASE_HIGH_RISK_FACTOR (
+  ID TEXT PRIMARY KEY NOT NULL,
+  RISK_FACTOR_CATEGORY TEXT,
+  RISK_FACTOR_SUBCATEGORY TEXT,
+  RISK_FACTOR_CODE TEXT NOT NULL,
+  RISK_FACTOR_NAME TEXT NOT NULL,
+  RISK_COLOR TEXT,
+  RISK_LEVEL TEXT,
+  RISK_SCORE INTEGER,
+  CREATOR_ID TEXT NOT NULL,
+  CREATOR_NAME TEXT NOT NULL,
+  HOSP_ID TEXT NOT NULL,
+  HOSP_NAME TEXT NOT NULL,
+  CREATE_TIME TEXT NOT NULL,
+  UPDATE_TIME TEXT
+)''');
+    // 高危因素字典种子：本院两行（绿/红）+ 跨院一行
+    for (final entry in [
+      {'id': 'HRF-1', 'code': '01990001', 'name': '无母亲及胎儿、新生儿的高危因素', 'color': '绿色', 'level': null, 'score': null, 'hosp': '1'},
+      {'id': 'HRF-2', 'code': '04990001', 'name': '妊娠期高血压', 'color': '红色', 'level': 'Ⅱ', 'score': '85', 'hosp': '1'},
+      {'id': 'HRF-9', 'code': '04990001', 'name': '妊娠期高血压（跨院）', 'color': '红色', 'level': 'Ⅱ', 'score': '85', 'hosp': '2'},
+    ]) {
+      await db.execute(
+        'INSERT INTO BASE_HIGH_RISK_FACTOR (ID, RISK_FACTOR_CODE, RISK_FACTOR_NAME, '
+        'RISK_COLOR, RISK_LEVEL, RISK_SCORE, CREATOR_ID, CREATOR_NAME, HOSP_ID, '
+        'HOSP_NAME, CREATE_TIME) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          entry['id'],
+          entry['code'],
+          entry['name'],
+          entry['color'],
+          entry['level'],
+          entry['score'] == null ? null : int.parse(entry['score']!),
+          '9',
+          '张医生',
+          entry['hosp'],
+          entry['hosp'] == '1' ? '示例人民医院' : '示例儿童医院',
+          '2026-11-19 10:00:00',
+        ],
+      );
+    }
     service = ChildService(db, cipher);
   });
 
@@ -828,8 +891,77 @@ CREATE TABLE CHILD_PHOTO (
       throwsA(isA<ChildException>().having((e) => e.message, 'message', contains('性别'))),
     );
     await expectLater(
-      service.advancedQuery(hospId: '1', gestationalWeekFrom: 40000),
-      throwsA(isA<ChildException>().having((e) => e.message, 'message', contains('出生孕周'))),
+      service.findDuplicates(hospId: '1', name: '王小明', sex: '1', birthDate: '20260101'),
+      throwsA(isA<ChildException>().having((e) => e.message, 'message', contains('出生日期'))),
     );
+  });
+
+  test('高危因素：随档案保存整表替换、字典快照落库、非法/跨院 ID 拒绝、删除级联', () async {
+    final created = await service.create(
+      child: buildChild(),
+      highRiskFactorIds: const ['HRF-1', 'HRF-2'],
+      creatorId: '9',
+      creatorName: '张医生',
+      hospId: '1',
+      hospName: '示例人民医院',
+    );
+    final childId = created.$1.id;
+
+    // 两条记录，字典权威值落库为快照（含颜色/等级/分值）
+    final factors = await service.listHighRiskFactors(childId, '1');
+    expect(factors, hasLength(2));
+    final red = factors.firstWhere((f) => f.riskFactorCode == '04990001');
+    expect(red.highRiskFactorId, 'HRF-2');
+    expect(red.riskFactorName, '妊娠期高血压');
+    expect(red.riskColor, '红色');
+    expect(red.riskLevel, 'Ⅱ');
+    expect(red.riskScore, '85');
+    expect(red.deptId, isNull);
+    expect(red.hospId, '1');
+
+    // 再次保存单个 → 整表替换（旧的清除）
+    await service.update(
+      id: childId,
+      child: buildChild(),
+      highRiskFactorIds: const ['HRF-1'],
+      hospId: '1',
+    );
+    final afterReplace = await service.listHighRiskFactors(childId, '1');
+    expect(afterReplace, hasLength(1));
+    expect(afterReplace.first.highRiskFactorId, 'HRF-1');
+
+    // 字典中不存在的 ID / 跨院 ID → 拒绝且不落库
+    await expectLater(
+      service.update(
+        id: childId,
+        child: buildChild(),
+        highRiskFactorIds: const ['HRF-404'],
+        hospId: '1',
+      ),
+      throwsA(isA<ChildException>().having((e) => e.message, 'message', contains('高危因素不存在'))),
+    );
+    await expectLater(
+      service.update(
+        id: childId,
+        child: buildChild(),
+        highRiskFactorIds: const ['HRF-9'],
+        hospId: '1',
+      ),
+      throwsA(isA<ChildException>().having((e) => e.message, 'message', contains('高危因素不存在'))),
+    );
+    // 拒绝后保留上次保存的集合（未被清空）
+    expect(await service.listHighRiskFactors(childId, '1'), hasLength(1));
+
+    // 显式传空列表 → 清空全部高危因素记录（区别于 null = 不改动）
+    await service.update(id: childId, child: buildChild(), highRiskFactorIds: const [], hospId: '1');
+    expect(await service.listHighRiskFactors(childId, '1'), isEmpty);
+    // 传 null（不传该参数）→ 不动已有记录
+    await service.update(id: childId, child: buildChild(), highRiskFactorIds: const ['HRF-2'], hospId: '1');
+    await service.update(id: childId, child: buildChild(), hospId: '1');
+    expect(await service.listHighRiskFactors(childId, '1'), hasLength(1));
+
+    // 删除档案 → 高危因素记录级联删除
+    expect(await service.delete(childId, '1'), 1);
+    expect(await service.listHighRiskFactors(childId, '1'), isEmpty);
   });
 }

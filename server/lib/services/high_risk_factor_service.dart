@@ -157,6 +157,63 @@ class HighRiskFactorService {
     return getById(newId);
   }
 
+  /// 快速新增高危因素（儿童建档页高危因素 TAB 的「新增高危因素」场景）。
+  ///
+  /// 与 [create] 的差异：大类固定「其它」、编码按高危颜色默认映射
+  /// （黄色 02990000 / 橙色 03990000 / 红色 04990000 / 紫色 05990000）、
+  /// 等级与分值为空，且**不走编码同医院唯一性校验**（需求明确允许默认
+  /// 编码重复，同一默认编码可多次新增）。hospId/hospName/creatorId/
+  /// creatorName 由路由层从登录会话推导传入。
+  Future<BaseHighRiskFactor> quickCreate({
+    required String riskColor,
+    required String riskFactorName,
+    required String hospId,
+    required String hospName,
+    required String creatorId,
+    required String creatorName,
+  }) async {
+    const fallbackCodes = {
+      '黄色': '02990000',
+      '橙色': '03990000',
+      '红色': '04990000',
+      '紫色': '05990000',
+    };
+    final color = _optionalColor(riskColor);
+    final code = fallbackCodes[color];
+    if (code == null) {
+      throw HighRiskFactorException(400, 40002, '高危颜色应为黄色/橙色/红色/紫色：$riskColor');
+    }
+    final name = _required(riskFactorName, '高危因素名称', _nameMaxLength);
+    final hospIdValue = _id(hospId, '医院ID');
+    final hosp = _required(hospName, '医院名称', _hospNameMaxLength);
+    final creatorIdValue = _id(creatorId, '创建人ID');
+    final creator = _required(creatorName, '创建人姓名', _creatorNameMaxLength);
+
+    final newId = newUuid();
+    await _db.execute(
+      'INSERT INTO BASE_HIGH_RISK_FACTOR (ID, RISK_FACTOR_CATEGORY, '
+      'RISK_FACTOR_SUBCATEGORY, RISK_FACTOR_CODE, RISK_FACTOR_NAME, '
+      'RISK_COLOR, RISK_LEVEL, RISK_SCORE, CREATOR_ID, CREATOR_NAME, '
+      'HOSP_ID, HOSP_NAME, CREATE_TIME) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        newId,
+        '其它',
+        code,
+        name,
+        color,
+        null,
+        null,
+        creatorIdValue,
+        creator,
+        hospIdValue,
+        hosp,
+        formatTimestamp(DateTime.now()),
+      ],
+    );
+    return getById(newId);
+  }
+
   /// 修改高危因素（changes 为本次要更新的字段集合，键与 JSON 契约
   /// 一致；值为 null 表示清空该列——仅可空列允许）。编码同医院内唯一。
   Future<BaseHighRiskFactor> update(String id, Map<String, Object?> changes) async {

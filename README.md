@@ -72,7 +72,10 @@ AiCMHCS/
 ├── tools/
 │   ├── init_db.sh            # 达梦初始化（01 脚本 + 迁移 + 演示账号）
 │   ├── start_backend.sh      # 构建并启动后端（8080 端口）
-│   └── serve_frontend.sh     # 构建并静态托管前端（5173 端口）
+│   ├── serve_frontend.sh     # 构建并静态托管前端（5173 端口）
+│   ├── deploy_test.sh        # 一键发布测试版（构建 + 部署前端副本）
+│   ├── start_backend_test.sh # 启动测试后端（8090 端口，从 server/build 运行）
+│   └── serve_frontend_test.sh  # 托管测试前端（5273 端口）
 └── README.md
 ```
 
@@ -130,6 +133,77 @@ cd client && flutter run -d chrome # 或 -d web-server --web-port 5173
 | doctor01 | Doctor@123 | 儿童心理医生 |
 | teacher01 | Teacher@123 | 教师 |
 | parent01 | Parent@123 | 家长 |
+
+## 测试环境（本机部署）
+
+与开发环境同机隔离的测试部署：共用开发库（达梦 AICMHCS 模式，结构迁移由
+测试后端启动时自动执行，无需单独初始化），以端口与部署目录区分，两套环境
+可同时运行。
+
+| 服务 | 地址 | 说明 |
+|---|---|---|
+| 测试前端 | http://localhost:5273 | 静态托管部署副本 `D:\AiCMHCS-Test\frontend`（apiUrl 已指向测试后端） |
+| 测试后端 | http://localhost:8090 | 从 `server/build` 生产产物运行，数据库为开发库 DM8 |
+
+### 发布与启动（Git Bash，仓库根目录）
+
+```bash
+./tools/deploy_test.sh          # 发布新版本：构建后端 + 前端并部署前端副本
+./tools/start_backend_test.sh   # 启动测试后端（:8090）
+./tools/serve_frontend_test.sh  # 托管测试前端（:5273）
+```
+
+### 开机自启（Windows 计划任务）
+
+已注册两个「用户登录时触发」的计划任务（创建时经 UAC 管理员权限），登录
+Windows 后测试环境自动可用：后端任务延迟 1 分钟触发，避开开机时 DM8 服务
+的初始化窗口期；前端即时触发。**服务在后台隐藏运行，无控制台窗口**——任务
+经 wscript 调用部署根 `D:\AiCMHCS-Test\` 下的隐藏启动器 vbs（`*_hidden.vbs`，
+常驻等待服务进程退出），vbs 再调用同名 bat 启动入口（bat 内部调用 `tools/`
+对应脚本，自带端口清理，重复触发安全），运行输出落到 `D:\AiCMHCS-Test\logs\`
+（backend.log / frontend.log，每次启动覆盖）。
+
+| 任务名 | 触发 | 作用 |
+|---|---|---|
+| AiCMHCS-TestBackend | 用户登录（延迟 1 分钟） | 拉起测试后端 :8090 |
+| AiCMHCS-TestFrontend | 用户登录 | 托管测试前端 :5273 |
+
+管理命令（cmd 直接运行；Git Bash 需加 `MSYS_NO_PATHCONV=1` 前缀）：
+
+```bash
+schtasks /Run /TN AiCMHCS-TestBackend               # 启动测试后端
+schtasks /End /TN AiCMHCS-TestBackend               # 停止测试后端（wscript 常驻，任务保持运行中）
+schtasks /End /TN AiCMHCS-TestBackend && schtasks /Run /TN AiCMHCS-TestBackend  # 重启
+schtasks /Delete /TN AiCMHCS-TestBackend /F         # 删除任务（需管理员权限）
+```
+
+注意：wscript 常驻等待期间任务保持「正在运行」状态，此时直接 `/Run` 会被
+拒绝，须先 `/End` 再 `/Run`；`/End` 会终止整个进程树（即停止服务）。双击
+bat 仍可带窗口手动运行（关掉窗口即停止服务）。改动任务定义或启动器后可
+以管理员身份运行 `D:\AiCMHCS-Test\register_tasks.cmd` 重新注册。
+
+### 隔离机制
+
+- 后端工作目录为 `server/build`，运行数据落在 `server/build/data`（与开发的
+  `server/data` 互不影响）；因与开发环境共用数据库，经 `AICMHCS_FIELD_KEY_FILE`
+  绝对路径沿用开发字段加密密钥 `server/data/aicmhcs.field.key`，否则存量
+  敏感字段（手机号/证件号）无法解密；
+- 前端部署副本的后端地址在部署时改写其 `assets/assets/config.json`
+  （rootBundle 运行时读取，改文件即生效，无需重新构建）；仓库内
+  `client/assets/config.json` 仍指向开发后端 8080，开发调试不受影响；
+- `server/build` 产物对仓库内共享包有相对路径依赖，不能拷出仓库运行；
+- 注意：测试环境的增删改会直接写入开发库；开发环境若以生产模式运行
+  （`tools/start_backend.sh` 会重建 `server/build`），测试后端下次启动前
+  重跑 `deploy_test.sh` 保持版本一致。
+
+### 测试环境可配置环境变量
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| AICMHCS_TEST_ROOT | /d/AiCMHCS-Test | 测试环境部署根目录（前端副本所在处） |
+| AICMHCS_TEST_API | http://localhost:8090 | 部署时写入前端的测试后端地址 |
+| AICMHCS_TEST_PORT | 8090 | 测试后端端口 |
+| AICMHCS_TEST_WEB_PORT | 5273 | 测试前端托管端口 |
 
 ## API
 

@@ -3,6 +3,7 @@ import 'package:client/utils/captured_photo.dart';
 import 'package:client/utils/relative_time.dart';
 import 'package:client/services/admin_divisions_service.dart';
 import 'package:client/services/child_service.dart';
+import 'package:client/services/high_risk_factor_service.dart';
 import 'package:client/services/menu_service.dart';
 import 'package:client/utils/log_helper.dart';
 import 'package:common/model.dart';
@@ -13,26 +14,35 @@ import 'package:flutter/foundation.dart';
 enum ChildFormMode { empty, browse, create, edit }
 
 /// 儿童建档视图模型：操作权限（按钮灰化）、整档装载与增删改流转、
-/// 新增/修改/删除流转、监护人本地工作列表（随整单保存）、五级居住
-/// 地址级联（基本信息表单用）。
+/// 新增/修改/删除流转、监护人本地工作列表（随整单保存）、高危因素
+/// 勾选集合（五色卡片树随整单保存）、五级居住地址级联（基本信息表单
+/// 用）。
 ///
 /// 数据流：主界面顶部搜索选定「当前儿童」后，建档页经 [selectChild]
 /// 自动载入整档进入浏览态；【新增】/【修改】进入录入态，三个 Tab 表单
 /// 各自持控制器，【保存】时由页面收集表单数据经 [save] 整单提交；
 /// 监护人行的增删改仅操作本地列表（不做权限控制），随整单保存一并
-/// 入库。
+/// 入库；高危因素勾选集合亦随整单保存（绿色「无高危因素」与其余四色
+/// 互斥）。
 class ChildCreateViewModel extends ChangeNotifier {
   /// 构造函数：可选注入服务（缺省经服务定位器取，便于测试覆写）。
-  ChildCreateViewModel({ChildService? childService, MenuService? menuService, AdminDivisionsService? adminDivisionsService})
-    : _childService = childService ?? getIt<ChildService>(),
-      _menuService = menuService ?? getIt<MenuService>(),
-      _divisionsService = adminDivisionsService ?? getIt<AdminDivisionsService>();
+  ChildCreateViewModel({
+    ChildService? childService,
+    MenuService? menuService,
+    AdminDivisionsService? adminDivisionsService,
+    HighRiskFactorService? highRiskFactorService,
+  }) : _childService = childService ?? getIt<ChildService>(),
+       _menuService = menuService ?? getIt<MenuService>(),
+       _divisionsService = adminDivisionsService ?? getIt<AdminDivisionsService>(),
+       _highRiskFactorService = highRiskFactorService ?? getIt<HighRiskFactorService>();
 
   final ChildService _childService;
 
   final MenuService _menuService;
 
   final AdminDivisionsService _divisionsService;
+
+  final HighRiskFactorService _highRiskFactorService;
 
   // ---------------- 操作权限（SYS_MENU 操作项 ITEM_CODE） ----------------
 
@@ -238,6 +248,7 @@ class ChildCreateViewModel extends ChangeNotifier {
       _pendingPhoto = null;
       await initAddressFromChild(child);
       await loadLatestPhoto();
+      await loadHighRiskData();
       return true;
     } catch (e, st) {
       LogHelper.error('client:ChildCreateViewModel.selectChild', e, st);
@@ -256,9 +267,14 @@ class ChildCreateViewModel extends ChangeNotifier {
     _guardians = [];
     _latestPhoto = null;
     _pendingPhoto = null;
+    _checkedHighRiskIds.clear();
     _mode = ChildFormMode.create;
+    // 新增态默认勾选绿色卡片【无母亲及胎儿、新生儿的高危因素】
+    // （字典未加载时为空操作，后续 loadHighRiskData 会再兜底一次）
+    _applyDefaultHighRiskSelection();
     clearAdminDivisions();
     await getProvinces();
+    notifyListeners();
   }
 
   /// 进入修改录入态（保留已载入档案数据，表单可编辑）。
@@ -299,6 +315,7 @@ class ChildCreateViewModel extends ChangeNotifier {
     try {
       final guardianList = guardians ?? _guardians;
       final pending = _pendingPhoto;
+      final highRiskFactorIds = _checkedHighRiskIds.toList();
       final ChildArchive archive;
       if (_mode == ChildFormMode.edit) {
         archive = await _childService.update(
@@ -308,6 +325,7 @@ class ChildCreateViewModel extends ChangeNotifier {
           guardians: guardianList,
           photoBase64: pending?.photoBase64,
           avatarBase64: pending?.avatarBase64,
+          highRiskFactorIds: highRiskFactorIds,
         );
       } else {
         archive = await _childService.create(
@@ -316,6 +334,7 @@ class ChildCreateViewModel extends ChangeNotifier {
           guardians: guardianList,
           photoBase64: pending?.photoBase64,
           avatarBase64: pending?.avatarBase64,
+          highRiskFactorIds: highRiskFactorIds,
         );
       }
       _child = archive.$1;
@@ -323,7 +342,9 @@ class ChildCreateViewModel extends ChangeNotifier {
       _guardians = archive.$3;
       _mode = ChildFormMode.browse;
       _pendingPhoto = null;
+      _checkedHighRiskIds.clear();
       await loadLatestPhoto();
+      await loadHighRiskData();
       return true;
     } catch (e, st) {
       LogHelper.error('client:ChildCreateViewModel.save', e, st);
@@ -392,6 +413,134 @@ class ChildCreateViewModel extends ChangeNotifier {
   void removeGuardianAt(int index) {
     if (index < 0 || index >= _guardians.length) return;
     _guardians.removeAt(index);
+    notifyListeners();
+  }
+
+  // ---------------- 高危因素勾选集合（随整单保存） ----------------
+
+  /// 绿色卡片的「无高危因素」特殊项名称（与其余四色互斥）。
+  static const String noneHighRiskFactorName = '无母亲及胎儿、新生儿的高危因素';
+
+  List<BaseHighRiskFactor> _highRiskDict = const [];
+
+  /// 高危因素字典全量清单（本院，五色卡片数据源）。
+  List<BaseHighRiskFactor> get highRiskDict => _highRiskDict;
+
+  final Set<String> _checkedHighRiskIds = {};
+
+  /// 已勾选的高危因素 ID 集合（随【保存】整表替换入库）。
+  Set<String> get checkedHighRiskIds => Set.unmodifiable(_checkedHighRiskIds);
+
+  /// 字典中的绿色「无高危因素」特殊项（未配置时为 null）。
+  BaseHighRiskFactor? get _noneFactor {
+    for (final f in _highRiskDict) {
+      if (f.riskColor == '绿色' && f.riskFactorName == noneHighRiskFactorName) {
+        return f;
+      }
+    }
+    return null;
+  }
+
+  /// 新增态默认勾选绿色【无母亲及胎儿、新生儿的高危因素】（已有勾选
+  /// 或字典未加载/未配置该项时不做任何事——用户手动取消后可保持空选）。
+  void _applyDefaultHighRiskSelection() {
+    if (_checkedHighRiskIds.isNotEmpty) return;
+    final none = _noneFactor;
+    if (none != null) {
+      _checkedHighRiskIds.add(none.id);
+    }
+  }
+
+  /// 绿色「无高危因素」是否已勾选（勾选后其余四色复选框禁用）。
+  bool get greenNoneChecked {
+    final none = _noneFactor;
+    return none != null && _checkedHighRiskIds.contains(none.id);
+  }
+
+  /// 其余四色是否存在已勾选项（存在则绿色「无高危因素」复选框禁用）。
+  bool get anyNonGreenChecked => _checkedHighRiskIds.any((id) {
+    for (final f in _highRiskDict) {
+      if (f.id == id) {
+        return f.riskColor != null && f.riskColor != '绿色';
+      }
+    }
+    return false;
+  });
+
+  /// 指定高危因素当前是否可勾选（浏览态一律禁用；互斥规则：绿色「无
+  /// 高危因素」勾选后仅其余四色禁用，反向四色已勾选时「无高危因素」
+  /// 禁用；绿色卡片其余项不受互斥影响）。
+  bool canToggleHighRisk(BaseHighRiskFactor factor, {required bool editable}) {
+    if (!editable) return false;
+    final isNone = factor.riskColor == '绿色' && factor.riskFactorName == noneHighRiskFactorName;
+    if (greenNoneChecked && factor.riskColor != '绿色') return false;
+    if (anyNonGreenChecked && isNone) return false;
+    return true;
+  }
+
+  /// 加载高危因素数据：字典全量清单 + 当前儿童已保存的勾选集合（浏览/
+  /// 修改态回显勾选）；新增态（未建档）默认勾选绿色【无母亲及胎儿、
+  /// 新生儿的高危因素】。
+  Future<void> loadHighRiskData() async {
+    try {
+      _highRiskDict = await _highRiskFactorService.queryAll();
+    } catch (e, st) {
+      LogHelper.error('client:ChildCreateViewModel.loadHighRiskData(dict)', e, st);
+      _highRiskDict = const [];
+    }
+    final id = currentChildId;
+    if (id.isNotEmpty) {
+      try {
+        final rows = await _childService.highRiskFactors(id);
+        _checkedHighRiskIds
+          ..clear()
+          ..addAll(rows.map((f) => f.highRiskFactorId));
+      } catch (e, st) {
+        LogHelper.error('client:ChildCreateViewModel.loadHighRiskData(checked)', e, st);
+        _checkedHighRiskIds.clear();
+      }
+    } else {
+      _checkedHighRiskIds.clear();
+      _applyDefaultHighRiskSelection();
+    }
+    notifyListeners();
+  }
+
+  /// 切换某高危因素的勾选状态（互斥规则：勾选绿色「无高危因素」清空
+  /// 其余四色；勾选其余四色任一项则取消绿色「无高危因素」）。
+  void toggleHighRiskFactor(BaseHighRiskFactor factor, bool checked) {
+    final none = _noneFactor;
+    final isNone = none != null && factor.id == none.id;
+    if (!checked) {
+      _checkedHighRiskIds.remove(factor.id);
+    } else if (isNone) {
+      _checkedHighRiskIds
+        ..clear()
+        ..add(factor.id);
+    } else if (factor.riskColor != '绿色') {
+      if (none != null) {
+        _checkedHighRiskIds.remove(none.id);
+      }
+      _checkedHighRiskIds.add(factor.id);
+    } else {
+      _checkedHighRiskIds.add(factor.id);
+    }
+    notifyListeners();
+  }
+
+  /// 快速新增高危因素成功后：刷新字典清单并自动勾选新增项（保留其余
+  /// 已勾选项；新增项为黄/橙/红/紫时按互斥规则清除绿色「无高危因素」）。
+  void addCreatedFactor(BaseHighRiskFactor factor) {
+    if (!_highRiskDict.any((f) => f.id == factor.id)) {
+      _highRiskDict = [..._highRiskDict, factor];
+    }
+    _checkedHighRiskIds.add(factor.id);
+    if (factor.riskColor != null && factor.riskColor != '绿色') {
+      final none = _noneFactor;
+      if (none != null) {
+        _checkedHighRiskIds.remove(none.id);
+      }
+    }
     notifyListeners();
   }
 
