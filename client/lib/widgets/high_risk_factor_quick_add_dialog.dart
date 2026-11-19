@@ -86,8 +86,8 @@ class _HighRiskFactorQuickAddDialogState extends State<HighRiskFactorQuickAddDia
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.add_circle_outline, color: theme.colorScheme.primary, size: 22),
-                      const SizedBox(width: 10),
+                      //Icon(Icons.add_circle_outline, color: theme.colorScheme.primary, size: 22),
+                      //const SizedBox(width: 10),
                       Text(
                         '新增高危因素',
                         style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold),
@@ -103,7 +103,7 @@ class _HighRiskFactorQuickAddDialogState extends State<HighRiskFactorQuickAddDia
                         .map(
                           (c) => DropdownMenuItem(
                             value: c,
-                            child: Text('$c高危因素', style: theme.textTheme.bodyMedium),
+                            child: Text(c, style: theme.textTheme.bodyMedium),
                           ),
                         )
                         .toList(),

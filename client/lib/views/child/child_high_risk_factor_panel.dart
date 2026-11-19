@@ -99,7 +99,15 @@ class _ChildHighRiskFactorPanelState extends State<ChildHighRiskFactorPanel> {
     final id = _matchIds[index];
     final factor = widget.viewModel.highRiskDict.firstWhere(
       (f) => f.id == id,
-      orElse: () => const BaseHighRiskFactor(id: '', riskFactorCode: '', riskFactorName: '', creatorId: '', creatorName: '', hospId: '', hospName: ''),
+      orElse: () => const BaseHighRiskFactor(
+        id: '',
+        riskFactorCode: '',
+        riskFactorName: '',
+        creatorId: '',
+        creatorName: '',
+        hospId: '',
+        hospName: '',
+      ),
     );
     // 祖先节点展开后子项才可见
     if (factor.riskFactorCategory?.isNotEmpty ?? false) {
@@ -211,7 +219,7 @@ class _ChildHighRiskFactorPanelState extends State<ChildHighRiskFactorPanel> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  '$colorName高危因素',
+                  colorName,
                   style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(width: 8),
@@ -226,7 +234,7 @@ class _ChildHighRiskFactorPanelState extends State<ChildHighRiskFactorPanel> {
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
               child: Text(
-                '暂无$colorName高危因素',
+                '暂无$colorName项目',
                 style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
               ),
             )
@@ -259,7 +267,7 @@ class _ChildHighRiskFactorPanelState extends State<ChildHighRiskFactorPanel> {
       if (hasCategory) {
         final catKey = 'cat:$colorName|$category';
         final expanded = !_collapsedKeys.contains(catKey);
-        rows.add(_treeHeader(theme, catKey, category, editable, catFactors.length, Icons.folder_outlined, depth: 0));
+        rows.add(_treeHeader(theme, catKey, category, editable, catFactors.length, Icons.folder, depth: 0));
         if (!expanded) continue;
       }
       // 大类下再按小类分桶（小类可空）
@@ -299,7 +307,7 @@ class _ChildHighRiskFactorPanelState extends State<ChildHighRiskFactorPanel> {
         padding: EdgeInsets.only(left: 12.0 + depth * 18.0, top: 4, bottom: 4),
         child: Row(
           children: [
-            Icon(expanded ? Icons.folder_open_outlined : Icons.folder_outlined, size: 16, color: theme.colorScheme.onSurfaceVariant),
+            Icon(expanded ? Icons.indeterminate_check_box_outlined : Icons.add_box_outlined, size: 16, color: theme.colorScheme.onSurfaceVariant),
             const SizedBox(width: 6),
             Expanded(
               child: Text(name, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: depth == 0 ? FontWeight.bold : null)),
@@ -328,7 +336,7 @@ class _ChildHighRiskFactorPanelState extends State<ChildHighRiskFactorPanel> {
         value: checked,
         onChanged: canToggle ? (v) => vm.toggleHighRiskFactor(factor, v ?? false) : null,
         title: Text(
-          '${factor.riskFactorName}（${factor.riskFactorCode}）',
+          factor.riskFactorName,
           style: theme.textTheme.bodyMedium,
         ),
       ),
