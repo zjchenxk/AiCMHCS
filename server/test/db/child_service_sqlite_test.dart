@@ -260,6 +260,7 @@ CREATE TABLE CHILD_HIGH_RISK_FACTOR (
   RISK_COLOR TEXT,
   RISK_LEVEL TEXT,
   RISK_SCORE INTEGER,
+  REMARK TEXT,
   CREATOR_ID TEXT NOT NULL,
   CREATOR_NAME TEXT NOT NULL,
   DEPT_ID TEXT,
@@ -292,6 +293,7 @@ CREATE TABLE BASE_HIGH_RISK_FACTOR (
     for (final entry in [
       {'id': 'HRF-1', 'code': '01990001', 'name': '无母亲及胎儿、新生儿的高危因素', 'color': '绿色', 'level': null, 'score': null, 'hosp': '1'},
       {'id': 'HRF-2', 'code': '04990001', 'name': '妊娠期高血压', 'color': '红色', 'level': 'Ⅱ', 'score': '85', 'hosp': '1'},
+      {'id': 'HRF-3', 'code': '02990001', 'name': '低出生体重', 'color': '黄色', 'level': 'Ⅰ', 'score': '60', 'hosp': '1'},
       {'id': 'HRF-9', 'code': '04990001', 'name': '妊娠期高血压（跨院）', 'color': '红色', 'level': 'Ⅱ', 'score': '85', 'hosp': '2'},
     ]) {
       await db.execute(
@@ -899,7 +901,7 @@ CREATE TABLE BASE_HIGH_RISK_FACTOR (
   test('高危因素：随档案保存整表替换、字典快照落库、非法/跨院 ID 拒绝、删除级联', () async {
     final created = await service.create(
       child: buildChild(),
-      highRiskFactorIds: const ['HRF-1', 'HRF-2'],
+      highRiskFactors: const [(factorId: 'HRF-3', remark: null), (factorId: 'HRF-2', remark: '备注二')],
       creatorId: '9',
       creatorName: '张医生',
       hospId: '1',
@@ -915,6 +917,7 @@ CREATE TABLE BASE_HIGH_RISK_FACTOR (
     expect(red.riskFactorName, '妊娠期高血压');
     expect(red.riskColor, '红色');
     expect(red.riskLevel, 'Ⅱ');
+    expect(red.remark, '备注二'); // 备注随选入行落 REMARK 列
     expect(red.riskScore, '85');
     expect(red.deptId, isNull);
     expect(red.hospId, '1');
@@ -923,19 +926,19 @@ CREATE TABLE BASE_HIGH_RISK_FACTOR (
     await service.update(
       id: childId,
       child: buildChild(),
-      highRiskFactorIds: const ['HRF-1'],
+      highRiskFactors: const [(factorId: 'HRF-3', remark: null)],
       hospId: '1',
     );
     final afterReplace = await service.listHighRiskFactors(childId, '1');
     expect(afterReplace, hasLength(1));
-    expect(afterReplace.first.highRiskFactorId, 'HRF-1');
+    expect(afterReplace.first.highRiskFactorId, 'HRF-3');
 
     // 字典中不存在的 ID / 跨院 ID → 拒绝且不落库
     await expectLater(
       service.update(
         id: childId,
         child: buildChild(),
-        highRiskFactorIds: const ['HRF-404'],
+        highRiskFactors: const [(factorId: 'HRF-404', remark: null)],
         hospId: '1',
       ),
       throwsA(isA<ChildException>().having((e) => e.message, 'message', contains('高危因素不存在'))),
@@ -944,7 +947,7 @@ CREATE TABLE BASE_HIGH_RISK_FACTOR (
       service.update(
         id: childId,
         child: buildChild(),
-        highRiskFactorIds: const ['HRF-9'],
+        highRiskFactors: const [(factorId: 'HRF-9', remark: null)],
         hospId: '1',
       ),
       throwsA(isA<ChildException>().having((e) => e.message, 'message', contains('高危因素不存在'))),
@@ -953,12 +956,16 @@ CREATE TABLE BASE_HIGH_RISK_FACTOR (
     expect(await service.listHighRiskFactors(childId, '1'), hasLength(1));
 
     // 显式传空列表 → 清空全部高危因素记录（区别于 null = 不改动）
-    await service.update(id: childId, child: buildChild(), highRiskFactorIds: const [], hospId: '1');
+    await service.update(id: childId, child: buildChild(), highRiskFactors: const [], hospId: '1');
     expect(await service.listHighRiskFactors(childId, '1'), isEmpty);
     // 传 null（不传该参数）→ 不动已有记录
-    await service.update(id: childId, child: buildChild(), highRiskFactorIds: const ['HRF-2'], hospId: '1');
+    await service.update(id: childId, child: buildChild(), highRiskFactors: const [(factorId: 'HRF-2', remark: null)], hospId: '1');
     await service.update(id: childId, child: buildChild(), hospId: '1');
     expect(await service.listHighRiskFactors(childId, '1'), hasLength(1));
+
+    // 绿色【无高危因素】标记项 → 不入库（服务端过滤兜底）
+    await service.update(id: childId, child: buildChild(), highRiskFactors: const [(factorId: 'HRF-1', remark: null)], hospId: '1');
+    expect(await service.listHighRiskFactors(childId, '1'), isEmpty, reason: '绿色无高危因素项仅作界面标记不落库');
 
     // 删除档案 → 高危因素记录级联删除
     expect(await service.delete(childId, '1'), 1);

@@ -315,7 +315,7 @@ class ChildCreateViewModel extends ChangeNotifier {
     try {
       final guardianList = guardians ?? _guardians;
       final pending = _pendingPhoto;
-      final highRiskFactorIds = _checkedHighRiskIds.toList();
+      final highRiskFactors = _buildHighRiskSelections();
       final ChildArchive archive;
       if (_mode == ChildFormMode.edit) {
         archive = await _childService.update(
@@ -325,7 +325,7 @@ class ChildCreateViewModel extends ChangeNotifier {
           guardians: guardianList,
           photoBase64: pending?.photoBase64,
           avatarBase64: pending?.avatarBase64,
-          highRiskFactorIds: highRiskFactorIds,
+          highRiskFactors: highRiskFactors,
         );
       } else {
         archive = await _childService.create(
@@ -334,7 +334,7 @@ class ChildCreateViewModel extends ChangeNotifier {
           guardians: guardianList,
           photoBase64: pending?.photoBase64,
           avatarBase64: pending?.avatarBase64,
-          highRiskFactorIds: highRiskFactorIds,
+          highRiskFactors: highRiskFactors,
         );
       }
       _child = archive.$1;
@@ -428,8 +428,52 @@ class ChildCreateViewModel extends ChangeNotifier {
 
   final Set<String> _checkedHighRiskIds = {};
 
-  /// 已勾选的高危因素 ID 集合（随【保存】整表替换入库）。
+  /// 已勾选的高危因素 ID 集合（随【保存】整表替换入库；绿色「无高危
+  /// 因素」标记项不代表真实高危，保存时过滤、不落库）。
   Set<String> get checkedHighRiskIds => Set.unmodifiable(_checkedHighRiskIds);
+
+  /// Tab 标签显示的高危因素计数：排除绿色【无高危因素】标记项（该标记
+  /// 不代表真实高危、不落库，仅勾选它时计数显示为 0）。
+  int get savedHighRiskCount {
+    final none = _noneFactor;
+    var count = _checkedHighRiskIds.length;
+    if (none != null && _checkedHighRiskIds.contains(none.id)) {
+      count--;
+    }
+    return count;
+  }
+
+  /// 指定颜色卡片中已勾选的高危因素数（供快捷导航按钮展示选中项计数；
+  /// 绿色卡片另含「无高危因素」标记项，按需由调用方决定是否展示）。
+  int checkedHighRiskCountOfColor(String colorName) {
+    var count = 0;
+    for (final f in _highRiskDict) {
+      if (f.riskColor == colorName && _checkedHighRiskIds.contains(f.id)) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  /// 高危因素备注（factorId → 备注文本；随整单保存落 CHILD_HIGH_RISK_FACTOR.REMARK）。
+  final Map<String, String> _highRiskRemarks = {};
+
+  /// 当前各高危因素的备注映射（无备注的项不出现）。
+  Map<String, String> get highRiskRemarks => Map.unmodifiable(_highRiskRemarks);
+
+  /// 取某高危因素的备注（无则为空串）。
+  String highRiskRemarkOf(String factorId) => _highRiskRemarks[factorId] ?? '';
+
+  /// 设置/清除某高危因素的备注（空串清除）。
+  void setHighRiskRemark(String factorId, String remark) {
+    final v = remark.trim();
+    if (v.isEmpty) {
+      _highRiskRemarks.remove(factorId);
+    } else {
+      _highRiskRemarks[factorId] = v;
+    }
+    notifyListeners();
+  }
 
   /// 字典中的绿色「无高危因素」特殊项（未配置时为 null）。
   BaseHighRiskFactor? get _noneFactor {
@@ -441,8 +485,9 @@ class ChildCreateViewModel extends ChangeNotifier {
     return null;
   }
 
-  /// 新增态默认勾选绿色【无母亲及胎儿、新生儿的高危因素】（已有勾选
-  /// 或字典未加载/未配置该项时不做任何事——用户手动取消后可保持空选）。
+  /// 无勾选时默认勾选绿色【无母亲及胎儿、新生儿的高危因素】（新增态
+  /// 与浏览态「库内无高危因素记录」共用；已有勾选或字典未加载/未配置
+  /// 该项时不做任何事——用户手动取消后可保持空选）。
   void _applyDefaultHighRiskSelection() {
     if (_checkedHighRiskIds.isNotEmpty) return;
     final none = _noneFactor;
@@ -451,13 +496,14 @@ class ChildCreateViewModel extends ChangeNotifier {
     }
   }
 
-  /// 绿色「无高危因素」是否已勾选（勾选后其余四色复选框禁用）。
+  /// 绿色「无高危因素」是否已勾选。
   bool get greenNoneChecked {
     final none = _noneFactor;
     return none != null && _checkedHighRiskIds.contains(none.id);
   }
 
-  /// 其余四色是否存在已勾选项（存在则绿色「无高危因素」复选框禁用）。
+  /// 其余四色是否存在已勾选项（仅语义查询，用于互斥清除判断；不再用于
+  /// 界面灰化——需求改为「自动清除对方选择」而非禁用）。
   bool get anyNonGreenChecked => _checkedHighRiskIds.any((id) {
     for (final f in _highRiskDict) {
       if (f.id == id) {
@@ -467,20 +513,14 @@ class ChildCreateViewModel extends ChangeNotifier {
     return false;
   });
 
-  /// 指定高危因素当前是否可勾选（浏览态一律禁用；互斥规则：绿色「无
-  /// 高危因素」勾选后仅其余四色禁用，反向四色已勾选时「无高危因素」
-  /// 禁用；绿色卡片其余项不受互斥影响）。
-  bool canToggleHighRisk(BaseHighRiskFactor factor, {required bool editable}) {
-    if (!editable) return false;
-    final isNone = factor.riskColor == '绿色' && factor.riskFactorName == noneHighRiskFactorName;
-    if (greenNoneChecked && factor.riskColor != '绿色') return false;
-    if (anyNonGreenChecked && isNone) return false;
-    return true;
-  }
+  /// 指定高危因素当前是否可勾选（仅浏览态禁用；互斥项不灰化——勾选
+  /// 绿色「无高危因素」会自动清除四色勾选、反之亦然，见
+  /// [toggleHighRiskFactor]）。
+  bool canToggleHighRisk(BaseHighRiskFactor factor, {required bool editable}) => editable;
 
-  /// 加载高危因素数据：字典全量清单 + 当前儿童已保存的勾选集合（浏览/
-  /// 修改态回显勾选）；新增态（未建档）默认勾选绿色【无母亲及胎儿、
-  /// 新生儿的高危因素】。
+  /// 加载高危因素数据：字典全量清单 + 当前儿童已保存的勾选与备注（浏览/
+  /// 修改态回显）；无已保存记录（新增态或库内为空）时默认勾选绿色
+  /// 【无母亲及胎儿、新生儿的高危因素】。
   Future<void> loadHighRiskData() async {
     try {
       _highRiskDict = await _highRiskFactorService.queryAll();
@@ -489,34 +529,55 @@ class ChildCreateViewModel extends ChangeNotifier {
       _highRiskDict = const [];
     }
     final id = currentChildId;
+    _checkedHighRiskIds.clear();
+    _highRiskRemarks.clear();
     if (id.isNotEmpty) {
       try {
         final rows = await _childService.highRiskFactors(id);
-        _checkedHighRiskIds
-          ..clear()
-          ..addAll(rows.map((f) => f.highRiskFactorId));
+        _checkedHighRiskIds.addAll(rows.map((f) => f.highRiskFactorId));
+        for (final row in rows) {
+          final remark = row.remark?.trim() ?? '';
+          if (remark.isNotEmpty) {
+            _highRiskRemarks[row.highRiskFactorId] = remark;
+          }
+        }
       } catch (e, st) {
         LogHelper.error('client:ChildCreateViewModel.loadHighRiskData(checked)', e, st);
-        _checkedHighRiskIds.clear();
       }
-    } else {
-      _checkedHighRiskIds.clear();
-      _applyDefaultHighRiskSelection();
     }
+    // 无已保存记录（新增态或库内为空）→ 默认勾选绿色「无高危因素」标记项
+    _applyDefaultHighRiskSelection();
     notifyListeners();
+  }
+
+  /// 构建提交给服务端的高危因素选择项：过滤绿色【无高危因素】标记项
+  /// （仅界面标记，不落库），其余项附各自备注。
+  List<({String factorId, String? remark})> _buildHighRiskSelections() {
+    final none = _noneFactor;
+    return [
+      for (final id in _checkedHighRiskIds)
+        if (none == null || id != none.id) (factorId: id, remark: _highRiskRemarks[id]),
+    ];
   }
 
   /// 切换某高危因素的勾选状态（互斥规则：勾选绿色「无高危因素」清空
   /// 其余四色；勾选其余四色任一项则取消绿色「无高危因素」）。
+  /// 切换某高危因素的勾选状态（互斥规则：勾选绿色「无高危因素」清空
+  /// 其余四色勾选；勾选其余四色任一项则取消绿色「无高危因素」）。
+  ///
+  /// 取消勾选时同步清除该项已录入的备注（备注依附于选中项）；互斥清除
+  /// 四色勾选时同样清除其备注，避免残留数据。
   void toggleHighRiskFactor(BaseHighRiskFactor factor, bool checked) {
     final none = _noneFactor;
     final isNone = none != null && factor.id == none.id;
     if (!checked) {
       _checkedHighRiskIds.remove(factor.id);
+      _highRiskRemarks.remove(factor.id);
     } else if (isNone) {
       _checkedHighRiskIds
         ..clear()
         ..add(factor.id);
+      _highRiskRemarks.clear();
     } else if (factor.riskColor != '绿色') {
       if (none != null) {
         _checkedHighRiskIds.remove(none.id);

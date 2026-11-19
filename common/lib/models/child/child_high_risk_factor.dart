@@ -21,6 +21,7 @@ class ChildHighRiskFactor {
     this.riskColor,
     this.riskLevel,
     this.riskScore,
+    this.remark,
     this.deptId,
     this.deptName,
     this.campusId,
@@ -52,6 +53,9 @@ class ChildHighRiskFactor {
 
   /// 高危分值（字符串形式的整数）。
   final String? riskScore;
+
+  /// 备注（保存当时的录入内容快照）。
+  final String? remark;
 
   /// 创建人 ID。
   final String creatorId;
@@ -93,6 +97,7 @@ class ChildHighRiskFactor {
       riskColor: json['riskColor'] as String?,
       riskLevel: json['riskLevel'] as String?,
       riskScore: json['riskScore'] as String?,
+      remark: json['remark'] as String?,
       creatorId: json['creatorId'] as String? ?? '',
       creatorName: json['creatorName'] as String? ?? '',
       deptId: json['deptId'] as String?,
@@ -116,6 +121,7 @@ class ChildHighRiskFactor {
       'riskColor': riskColor,
       'riskLevel': riskLevel,
       'riskScore': riskScore,
+      'remark': remark,
       'creatorId': creatorId,
       'creatorName': creatorName,
       'deptId': deptId,

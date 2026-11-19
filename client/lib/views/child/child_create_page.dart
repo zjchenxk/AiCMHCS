@@ -404,7 +404,7 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
                             const Tab(text: '基本信息'),
                             const Tab(text: '扩展信息'),
                             Tab(text: '监护人（${vm.guardians.length}）'),
-                            Tab(text: '高危因素（${vm.checkedHighRiskIds.length}）'),
+                            Tab(text: '高危因素（${vm.savedHighRiskCount}）'),
                           ],
                         ),
                         const Divider(height: 1),

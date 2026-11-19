@@ -106,32 +106,41 @@ class ChildService {
   }
 
   /// 新增儿童档案（整档保存：child 必填，ext/guardians/photo/
-  /// highRiskFactorIds 可选），返回入库后的整档（child 含生成的 ID）；
+  /// highRiskFactors 可选），返回入库后的整档（child 含生成的 ID）；
   /// photo 两字段同时非空时随档案一并插入一条拍照记录；
-  /// highRiskFactorIds 为 null 表示不改动高危因素，显式传列表（含空
-  /// 列表——表示清空）则整表替换。
-  Future<ChildArchive> create({required ChildInfo child, ChildExtInfo? ext, List<ChildGuardianInfo> guardians = const [], String? photoBase64, String? avatarBase64, List<String>? highRiskFactorIds}) async {
+  /// highRiskFactors 为 null 表示不改动高危因素，显式传列表（含空列表
+  /// ——表示清空）则整表替换；元素为 {factorId, remark}（备注随选入行
+  /// 落库）。
+  Future<ChildArchive> create({required ChildInfo child, ChildExtInfo? ext, List<ChildGuardianInfo> guardians = const [], String? photoBase64, String? avatarBase64, List<({String factorId, String? remark})>? highRiskFactors}) async {
     final data = await _base.post('/api/child/add', {
       'child': child.toJson(),
       'ext': ext?.toJson(),
       'guardians': guardians.map((g) => g.toJson()).toList(),
       'photo': buildPhotoPayload(photoBase64, avatarBase64),
-      'highRiskFactorIds': highRiskFactorIds,
+      'highRiskFactors': highRiskFactors?.map((f) => {'factorId': f.factorId, 'remark': f.remark}).toList(),
     });
     return _parseArchive(data);
   }
 
   /// 修改儿童档案（整档保存：基本信息全量更新、病人ID不可改；ext 传
-  /// null 即清空扩展信息；监护人全量覆盖；photo/highRiskFactorIds 同
+  /// null 即清空扩展信息；监护人全量覆盖；photo/highRiskFactors 同
   /// 新增）。
-  Future<ChildArchive> update({required String id, required ChildInfo child, ChildExtInfo? ext, List<ChildGuardianInfo> guardians = const [], String? photoBase64, String? avatarBase64, List<String>? highRiskFactorIds}) async {
+  Future<ChildArchive> update({
+    required String id,
+    required ChildInfo child,
+    ChildExtInfo? ext,
+    List<ChildGuardianInfo> guardians = const [],
+    String? photoBase64,
+    String? avatarBase64,
+    List<({String factorId, String? remark})>? highRiskFactors,
+  }) async {
     final data = await _base.post('/api/child/update', {
       'id': id,
       'child': child.toJson(),
       'ext': ext?.toJson(),
       'guardians': guardians.map((g) => g.toJson()).toList(),
       'photo': buildPhotoPayload(photoBase64, avatarBase64),
-      'highRiskFactorIds': highRiskFactorIds,
+      'highRiskFactors': highRiskFactors?.map((f) => {'factorId': f.factorId, 'remark': f.remark}).toList(),
     });
     return _parseArchive(data);
   }

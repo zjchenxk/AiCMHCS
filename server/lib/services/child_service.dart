@@ -86,6 +86,10 @@ class ChildService {
   static const int _birthHospitalMaxLength = 100;
   static const int _maternalNoMaxLength = 20;
   static const int _guardianRelationMaxLength = 30;
+
+  /// 高危因素备注长度上限（与 CHILD_HIGH_RISK_FACTOR.REMARK 列宽对齐）。
+  static const int _remarkMaxLength = 100;
+
   static const int _employerMaxLength = 100;
 
   /// 0/1 布尔列合法取值。
@@ -408,7 +412,7 @@ class ChildService {
     List<ChildGuardianInfo> guardians = const [],
     String? photoBase64,
     String? avatarBase64,
-    List<String>? highRiskFactorIds,
+    List<({String factorId, String? remark})>? highRiskFactors,
   }) async {
     final scope = (
       hospId: _requireId(hospId, '医院ID'),
@@ -484,8 +488,8 @@ class ChildService {
     if (photoBase64 != null || avatarBase64 != null) {
       await _savePhoto(newId, photoBase64, avatarBase64, creator, creatorText, scope);
     }
-    if (highRiskFactorIds != null) {
-      await _saveHighRiskFactors(newId, highRiskFactorIds, creator, creatorText, scope);
+    if (highRiskFactors != null) {
+      await _saveHighRiskFactors(newId, highRiskFactors, creator, creatorText, scope);
     }
     return load(newId, hospId);
   }
@@ -506,7 +510,7 @@ class ChildService {
     List<ChildGuardianInfo> guardians = const [],
     String? photoBase64,
     String? avatarBase64,
-    List<String>? highRiskFactorIds,
+    List<({String factorId, String? remark})>? highRiskFactors,
   }) async {
     final current = await _requireChild(id, hospId);
     final idValue = _requireId(id, '儿童ID');
@@ -579,8 +583,8 @@ class ChildService {
     if (photoBase64 != null || avatarBase64 != null) {
       await _savePhoto(idValue, photoBase64, avatarBase64, creator, creatorText, scope);
     }
-    if (highRiskFactorIds != null) {
-      await _saveHighRiskFactors(idValue, highRiskFactorIds, creator, creatorText, scope);
+    if (highRiskFactors != null) {
+      await _saveHighRiskFactors(idValue, highRiskFactors, creator, creatorText, scope);
     }
     return load(id, hospId);
   }
@@ -720,6 +724,10 @@ class ChildService {
 
   // ---------------- 儿童高危因素（CHILD_HIGH_RISK_FACTOR） ----------------
 
+  /// 绿色「无高危因素」特选项名称：仅作界面「无高危」标记，**不落库**
+  /// （保存时过滤；浏览时库内无记录则界面默认勾选该项）。
+  static const String noneHighRiskFactorName = '无母亲及胎儿、新生儿的高危因素';
+
   /// 查询儿童已保存的高危因素记录（随档案保存整表替换，按创建时间/ID
   /// 倒序返回）。
   Future<List<ChildHighRiskFactor>> listHighRiskFactors(String childId, String hospId) async {
@@ -729,9 +737,9 @@ class ChildService {
     }
     final result = await _db.query(
       'SELECT ID, CHILD_ID, HIGH_RISK_FACTOR, RISK_FACTOR_CODE, '
-      'RISK_FACTOR_NAME, RISK_COLOR, RISK_LEVEL, RISK_SCORE, CREATOR_ID, '
-      'CREATOR_NAME, DEPT_ID, DEPT_NAME, CAMPUS_ID, CAMPUS_NAME, HOSP_ID, '
-      'HOSP_NAME, CREATE_TIME, UPDATE_TIME FROM CHILD_HIGH_RISK_FACTOR '
+      'RISK_FACTOR_NAME, RISK_COLOR, RISK_LEVEL, RISK_SCORE, REMARK, '
+      'CREATOR_ID, CREATOR_NAME, DEPT_ID, DEPT_NAME, CAMPUS_ID, CAMPUS_NAME, '
+      'HOSP_ID, HOSP_NAME, CREATE_TIME, UPDATE_TIME FROM CHILD_HIGH_RISK_FACTOR '
       'WHERE CHILD_ID = ? AND HOSP_ID = ? ORDER BY CREATE_TIME DESC, ID DESC',
       [childId, scope],
     );
@@ -743,19 +751,32 @@ class ChildService {
   /// factorIds **先全量校验**高危因素字典行存在且属本院（跨院/缺失一律
   /// 40001，校验失败时不执行删除，保留旧集合——不落半途状态），再行
   /// 删除插入；RISK_FACTOR_CODE/NAME/COLOR/LEVEL/SCORE 取字典权威值
-  /// 落库为快照（字典项后续改名/改级不影响历史档案）；行主键为
-  /// `newUuid()`。
-  Future<void> _saveHighRiskFactors(String childId, List<String> factorIds, String creatorId, String creator, _ArchiveScope scope) async {
-    // 先全量校验并解析字典快照（去重保序），全部通过后才动表
-    final snapshots = <({String id, String code, String name, String? color, String? level, String? score})>[];
+  /// 落库为快照（字典项后续改名/改级不影响历史档案）；remark 为本次
+  /// 录入的备注（字典项自身无备注列），随选入行落 REMARK 列；绿色
+  /// 【无高危因素】特选项为纯界面标记，**不落库**（此处过滤兜底）；
+  /// 行主键为 `newUuid()`。
+  Future<void> _saveHighRiskFactors(String childId, List<({String factorId, String? remark})> selections, String creatorId, String creator, _ArchiveScope scope) async {
+    // 先全量校验并解析字典快照（去重保序，过滤「无高危因素」标记项）
+    final snapshots = <({String id, String code, String name, String? color, String? level, String? score, String? remark})>[];
     final seen = <String>{};
-    for (final factorId in factorIds) {
-      final idValue = _requireId(factorId, '高危因素ID');
+    for (final selection in selections) {
+      final idValue = _requireId(selection.factorId, '高危因素ID');
       if (!seen.add(idValue)) {
         continue;
       }
       final dict = await _requireHighRiskFactorDict(idValue, scope.hospId);
-      snapshots.add((id: idValue, code: dict.code, name: dict.name, color: dict.color, level: dict.level, score: dict.score));
+      if (dict.color == '绿色' && dict.name == noneHighRiskFactorName) {
+        continue;
+      }
+      snapshots.add((
+        id: idValue,
+        code: dict.code,
+        name: dict.name,
+        color: dict.color,
+        level: dict.level,
+        score: dict.score,
+        remark: _optional(selection.remark, '备注', _remarkMaxLength),
+      ));
     }
 
     await _db.execute('DELETE FROM CHILD_HIGH_RISK_FACTOR WHERE CHILD_ID = ?', [childId]);
@@ -763,9 +784,9 @@ class ChildService {
       await _db.execute(
         'INSERT INTO CHILD_HIGH_RISK_FACTOR (ID, CHILD_ID, HIGH_RISK_FACTOR, '
         'RISK_FACTOR_CODE, RISK_FACTOR_NAME, RISK_COLOR, RISK_LEVEL, '
-        'RISK_SCORE, CREATOR_ID, CREATOR_NAME, DEPT_ID, DEPT_NAME, '
+        'RISK_SCORE, REMARK, CREATOR_ID, CREATOR_NAME, DEPT_ID, DEPT_NAME, '
         'CAMPUS_ID, CAMPUS_NAME, HOSP_ID, HOSP_NAME, CREATE_TIME) '
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
           newUuid(),
           childId,
@@ -775,6 +796,7 @@ class ChildService {
           snapshot.color,
           snapshot.level,
           snapshot.score,
+          snapshot.remark,
           creatorId,
           creator,
           scope.deptId,
@@ -820,6 +842,7 @@ class ChildService {
     riskColor: row['RISK_COLOR'],
     riskLevel: row['RISK_LEVEL'],
     riskScore: row['RISK_SCORE'],
+    remark: row['REMARK'],
     creatorId: row['CREATOR_ID'] ?? '',
     creatorName: row['CREATOR_NAME'] ?? '',
     deptId: row['DEPT_ID'],

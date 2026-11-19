@@ -42,7 +42,7 @@ Future<Response> onRequest(RequestContext context) async {
       guardians: parseGuardians(body['guardians']),
       photoBase64: parsePhotoField(body['photo'], 'photoBase64'),
       avatarBase64: parsePhotoField(body['photo'], 'avatarBase64'),
-      highRiskFactorIds: parseHighRiskFactorIds(body['highRiskFactorIds']),
+      highRiskFactors: parseHighRiskFactors(body['highRiskFactors']),
       hospId: hospId,
     );
     return Response.json(
@@ -91,14 +91,27 @@ String? parsePhotoField(Object? value, String field) {
   return null;
 }
 
-/// 解析高危因素 ID 列表：请求体缺失该键（null）返回 null 表示本次保存
+/// 解析高危因素选择项列表：请求体缺失该键（null）返回 null 表示本次保存
 /// 不改动高危因素；显式传数组（含空数组）返回解析后的列表，空列表表示
-/// 清空该儿童全部高危因素记录。
-List<String>? parseHighRiskFactorIds(Object? value) {
+/// 清空该儿童全部高危因素记录。元素为 {factorId, remark} 对象；兼容纯
+/// 字符串数组（旧协议，按无备注处理）。
+List<({String factorId, String? remark})>? parseHighRiskFactors(Object? value) {
   if (value is! List) {
     return null;
   }
-  return value.whereType<String>().map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+  final items = <({String factorId, String? remark})>[];
+  for (final raw in value) {
+    if (raw is String) {
+      final id = raw.trim();
+      if (id.isNotEmpty) items.add((factorId: id, remark: null));
+    } else if (raw is Map<String, dynamic>) {
+      final id = (raw['factorId'] as String?)?.trim() ?? '';
+      if (id.isEmpty) continue;
+      final remark = (raw['remark'] as String?)?.trim();
+      items.add((factorId: id, remark: (remark == null || remark.isEmpty) ? null : remark));
+    }
+  }
+  return items;
 }
 
 Response _error(int status, int code, String message) => Response.json(

@@ -38,7 +38,7 @@ class FakeChildService extends ChildService {
   List<ChildInfo> Function(String? excludeId)? onDuplicateCheck;
 
   /// 最近一次保存携带的高危因素 ID 列表（断言整单透传用）。
-  List<String>? lastHighRiskFactorIds;
+  List<({String factorId, String? remark})>? lastHighRiskFactors;
 
   @override
   Future<List<ChildInfo>> duplicateCheck({required String name, required String sex, required String birthDate, String? excludeId}) async {
@@ -56,10 +56,10 @@ class FakeChildService extends ChildService {
     List<ChildGuardianInfo> guardians = const [],
     String? photoBase64,
     String? avatarBase64,
-    List<String>? highRiskFactorIds,
+    List<({String factorId, String? remark})>? highRiskFactors,
   }) async {
     createCalls++;
-    lastHighRiskFactorIds = highRiskFactorIds;
+    lastHighRiskFactors = highRiskFactors;
     final id = '${nextId++}';
     final stored = ChildInfo.fromJson(child.toJson()..['id'] = id);
     archives[id] = (stored, ext, guardians);
@@ -74,11 +74,11 @@ class FakeChildService extends ChildService {
     List<ChildGuardianInfo> guardians = const [],
     String? photoBase64,
     String? avatarBase64,
-    List<String>? highRiskFactorIds,
+    List<({String factorId, String? remark})>? highRiskFactors,
   }) async {
     updateCalls++;
     lastUpdatedId = id;
-    lastHighRiskFactorIds = highRiskFactorIds;
+    lastHighRiskFactors = highRiskFactors;
     final stored = ChildInfo.fromJson(child.toJson()..['id'] = id);
     archives[id] = (stored, ext, guardians);
     return archives[id]!;
@@ -408,25 +408,34 @@ void main() {
     // 新增态默认勾选绿色「无高危因素」（需求：新增默认选中该项）
     expect(vm.checkedHighRiskIds, {'G1'});
     expect(vm.greenNoneChecked, isTrue);
+    // Tab 标签计数排除「无高危因素」标记项（仅勾它时显示 0）
+    expect(vm.savedHighRiskCount, 0);
 
-    // 勾选绿色「无高危因素」→ 其余四色不可再勾（互斥标志位 + 界面禁用）
+    // 勾选绿色「无高危因素」→ 四色不灰化（仅自动清除四色勾选）
     vm.toggleHighRiskFactor(dict[0], true);
     expect(vm.checkedHighRiskIds, {'G1'});
     expect(vm.greenNoneChecked, isTrue);
     expect(vm.anyNonGreenChecked, isFalse);
-    expect(vm.canToggleHighRisk(dict[0], editable: true), isTrue, reason: '已选项可取消');
-    expect(vm.canToggleHighRisk(dict[2], editable: true), isFalse, reason: '「无高危因素」勾选后四色禁用');
-    expect(vm.canToggleHighRisk(dict[1], editable: true), isTrue, reason: '绿色其余项不受互斥影响');
+    expect(vm.canToggleHighRisk(dict[2], editable: true), isTrue, reason: '互斥项不再灰化禁用');
     expect(vm.canToggleHighRisk(dict[0], editable: false), isFalse, reason: '浏览态一律禁用');
 
-    // 反向：勾选红色项 → 绿色「无高危因素」被清除且该项转为禁用
+    // 反向：勾选红色项 → 绿色「无高危因素」被自动清除（仍可再勾）
     vm.toggleHighRiskFactor(dict[2], true);
     expect(vm.checkedHighRiskIds, {'R1'});
     expect(vm.greenNoneChecked, isFalse);
     expect(vm.anyNonGreenChecked, isTrue);
-    expect(vm.canToggleHighRisk(dict[0], editable: true), isFalse, reason: '四色已勾选时「无高危因素」禁用');
+    expect(vm.savedHighRiskCount, 1, reason: '真实高危因素计入 Tab 计数');
+    // 按色计数（快捷导航按钮展示选中项数）：红色 1、黄色 0
+    expect(vm.checkedHighRiskCountOfColor('红色'), 1);
+    expect(vm.checkedHighRiskCountOfColor('黄色'), 0);
+    expect(vm.canToggleHighRisk(dict[0], editable: true), isTrue, reason: '四色勾选时该项也不灰化');
 
-    // 绿色普通项与红色项可并存（仅「无高危因素」与四色互斥）
+    // 再勾绿色「无高危因素」→ 四色勾选被清空
+    vm.toggleHighRiskFactor(dict[0], true);
+    expect(vm.checkedHighRiskIds, {'G1'});
+
+    // 绿色普通项与四色可并存（仅「无高危因素」与四色互斥）
+    vm.toggleHighRiskFactor(dict[2], true);
     vm.toggleHighRiskFactor(dict[1], true);
     expect(vm.checkedHighRiskIds, {'R1', 'G2'});
 
@@ -435,9 +444,22 @@ void main() {
     expect(vm.checkedHighRiskIds, {'R1', 'G2', 'new-factor'});
     expect(vm.highRiskDict.any((f) => f.id == 'new-factor'), isTrue);
 
-    // 整单保存透传勾选集合
+    // 设置备注 → 随保存透传（factorId + remark）
+    vm.setHighRiskRemark('R1', '需随访');
+    // 取消勾选 → 备注同步清除（备注依附于选中项）
+    vm.toggleHighRiskFactor(dict[2], false);
+    expect(vm.highRiskRemarkOf('R1'), isEmpty);
+    vm.toggleHighRiskFactor(dict[2], true);
+    vm.setHighRiskRemark('R1', '需随访');
     await vm.save(child: _child(''));
-    expect(childService.lastHighRiskFactorIds, containsAll(['R1', 'G2', 'new-factor']));
+    final savedIds = childService.lastHighRiskFactors!.map((f) => f.factorId).toList();
+    expect(savedIds, containsAll(['R1', 'G2', 'new-factor']));
+    expect(childService.lastHighRiskFactors!.firstWhere((f) => f.factorId == 'R1').remark, '需随访');
+    expect(childService.lastHighRiskFactors!.every((f) => f.factorId != 'G1'), isTrue, reason: '绿色无高危因素标记项不落库');
+
+    // 勾选绿色「无高危因素」→ 互斥清空四色勾选，其备注一并清除
+    vm.toggleHighRiskFactor(dict[0], true);
+    expect(vm.highRiskRemarkOf('R1'), isEmpty, reason: '互斥清除四色勾选时备注同步清理');
 
     // 全部取消后保存 → 显式传空列表（清空库内记录，而非"不改动"）
     vm.startEdit();
@@ -449,6 +471,57 @@ void main() {
     }
     expect(vm.checkedHighRiskIds, isEmpty);
     await vm.save(child: _child('1'));
-    expect(childService.lastHighRiskFactorIds, isEmpty);
+    expect(childService.lastHighRiskFactors, isEmpty);
+  });
+
+  test('浏览态：库内无高危因素记录默认勾选绿色无高危因素，有记录按库回显（含备注）', () async {
+    BaseHighRiskFactor factor(String id, String color, String name) => BaseHighRiskFactor(
+      id: id,
+      riskFactorCode: 'CODE-$id',
+      riskFactorName: name,
+      riskColor: color,
+      creatorId: '1',
+      creatorName: '系统管理员',
+      hospId: '1',
+      hospName: '示例人民医院',
+    );
+    final riskService = FakeHighRiskFactorService()
+      ..dict = [
+        factor('G1', '绿色', ChildCreateViewModel.noneHighRiskFactorName),
+        factor('R1', '红色', '妊娠期高血压'),
+      ];
+    final childService = FakeChildService()..archives['1'] = (_child('1'), null, const []);
+
+    final vm = _buildViewModel(
+      operationCodes: {ChildCreateViewModel.opUpdate},
+      childService: childService,
+      highRiskFactorService: riskService,
+    );
+    await vm.loadPermissions();
+
+    // 库内无记录 → 默认勾选绿色「无高危因素」标记项
+    await vm.selectChild('1');
+    expect(vm.browsing, isTrue);
+    expect(vm.checkedHighRiskIds, {'G1'}, reason: '库内无记录时默认选中绿色无高危因素');
+
+    // 库内有记录（带备注）→ 按库回显，不再注入默认项
+    childService.savedHighRiskFactors = [
+      const ChildHighRiskFactor(
+        id: 'row-1',
+        childId: '1',
+        highRiskFactorId: 'R1',
+        riskFactorCode: 'CODE-R1',
+        riskFactorName: '妊娠期高血压',
+        riskColor: '红色',
+        remark: '需随访',
+        creatorId: '1',
+        creatorName: '系统管理员',
+        hospId: '1',
+        hospName: '示例人民医院',
+      ),
+    ];
+    await vm.loadHighRiskData();
+    expect(vm.checkedHighRiskIds, {'R1'});
+    expect(vm.highRiskRemarkOf('R1'), '需随访');
   });
 }
