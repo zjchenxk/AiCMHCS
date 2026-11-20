@@ -8,6 +8,7 @@ import 'package:common/model.dart';
 import 'package:client/views/home/home_page.dart';
 import 'package:client/views/system/hospital_management_page.dart';
 import 'package:client/views/system/high_risk_factor_management_page.dart';
+import 'package:client/views/system/high_risk_factor_exclusion_management_page.dart';
 import 'package:client/views/system/menu_management_page.dart';
 import 'package:client/views/system/role_management_page.dart';
 import 'package:client/views/system/user_management_page.dart';
@@ -30,6 +31,7 @@ Map<String, MenuPageBuilder> menuRoutes = {
   '/system/department': _buildPage(DepartmentManagementPage.new),
   '/system/dictionary': _buildPage(DictionaryManagementPage.new),
   '/system/highRiskFactor': _buildPage(HighRiskFactorManagementPage.new),
+  '/system/highRiskFactorExclusion': _buildPage(HighRiskFactorExclusionManagementPage.new),
   '/system/menu': _buildPage(MenuManagementPage.new),
   '/system/role': _buildPage(RoleManagementPage.new),
   '/system/user': _buildPage(UserManagementPage.new),

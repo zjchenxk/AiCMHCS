@@ -33,7 +33,7 @@ void main() {
 
   test('空库全量迁移：建表并记录版本', () async {
     final applied = await SchemaMigrator(db, fieldCipher: cipher).migrate();
-    expect(applied.map((m) => m.version), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
+    expect(applied.map((m) => m.version), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
 
     final tables = await tableNames();
     expect(
@@ -53,6 +53,7 @@ void main() {
         'BASE_DICT',
         'BASE_DICT_ITEM',
         'BASE_HIGH_RISK_FACTOR',
+        'BASE_HIGH_RISK_FACTOR_EXCLUSION',
       ]),
     );
 
@@ -80,6 +81,7 @@ void main() {
       ['18', contains('科室维度')],
       ['19', contains('高危因素')],
       ['20', contains('儿童高危因素表')],
+      ['21', contains('互斥规则')],
     ]);
   });
 

@@ -10,6 +10,7 @@ import 'package:client/services/campus_service.dart';
 import 'package:client/services/child_service.dart';
 import 'package:client/services/department_service.dart';
 import 'package:client/services/dict_service.dart';
+import 'package:client/services/high_risk_factor_exclusion_service.dart';
 import 'package:client/services/high_risk_factor_service.dart';
 import 'package:client/services/hospital_service.dart';
 import 'package:client/services/log_service.dart';
@@ -26,6 +27,7 @@ import 'package:client/view_models/system/admin_division_management_view_model.d
 import 'package:client/view_models/system/campus_management_view_model.dart';
 import 'package:client/view_models/system/department_management_view_model.dart';
 import 'package:client/view_models/system/dict_management_view_model.dart';
+import 'package:client/view_models/system/high_risk_factor_exclusion_management_view_model.dart';
 import 'package:client/view_models/system/high_risk_factor_management_view_model.dart';
 import 'package:client/view_models/system/hospital_management_view_model.dart';
 import 'package:client/view_models/system/menu_management_view_model.dart';
@@ -62,6 +64,7 @@ void setupServiceLocator() {
   getIt.registerLazySingleton<DepartmentService>(() => DepartmentService());
   getIt.registerLazySingleton<DictService>(() => DictService());
   getIt.registerLazySingleton<HighRiskFactorService>(() => HighRiskFactorService());
+  getIt.registerLazySingleton<HighRiskFactorExclusionService>(() => HighRiskFactorExclusionService());
   getIt.registerLazySingleton<ChildService>(() => ChildService());
   getIt.registerLazySingleton<MenuService>(() => MenuService());
   getIt.registerLazySingleton<RoleService>(() => RoleService());
@@ -113,6 +116,7 @@ void main() async {
         ChangeNotifierProvider(create: (context) => DepartmentManagementViewModel()),
         ChangeNotifierProvider(create: (context) => DictManagementViewModel()),
         ChangeNotifierProvider(create: (context) => HighRiskFactorManagementViewModel()),
+        ChangeNotifierProvider(create: (context) => HighRiskFactorExclusionManagementViewModel()),
         ChangeNotifierProvider(create: (context) => MenuManagementViewModel()),
         ChangeNotifierProvider(create: (context) => RoleManagementViewModel()),
         ChangeNotifierProvider(create: (context) => UserManagementViewModel()),

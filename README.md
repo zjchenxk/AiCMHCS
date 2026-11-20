@@ -114,7 +114,7 @@ AICMHCS 连接运行 `server/tool/seed_demo_data.dart`：应用代码内结构�
 > 因此脚本使用生产模式 `dart_frog build` + `dart run build/bin/server.dart`。
 > 在真实终端里做热重载开发可直接运行 `dart_frog dev`。
 
-### 3. 启动前端（http://localhost:5173）
+### 3. 启动前端（http://localhost:5273）
 
 ```bash
 ./tools/serve_frontend.sh          # 构建产物 + 静态托管

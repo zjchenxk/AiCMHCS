@@ -1,0 +1,38 @@
+下面我们再来改进一个儿童建档功能，在儿童基本信息界面上添加一个拍照功能，要求如下：
+
+1. 儿童基本信息分为两小节：一是基本信息，二是拍照。
+
+2. 儿童照片表，表名为CHILD_PHOTO，达梦数据库建表语句如下：
+
+CREATE TABLE CHILD_PHOTO(
+    ID BIGINT NOT NULL IDENTITY(1,1),
+    CHILD_ID BIGINT NOT NULL,
+    PHOTO BLOB NOT NULL,
+    AVATAR BLOB NOT NULL,
+    CREATOR_ID BIGINT NOT NULL,
+    CREATOR_NAME VARCHAR(30) NOT NULL,
+    HOSP_ID BIGINT NOT NULL,
+    HOSP_NAME VARCHAR(100) NOT NULL,
+    CREATE_TIME TIMESTAMP NOT NULL,
+    UPDATE_TIME TIMESTAMP,
+    PRIMARY KEY (ID)
+);
+COMMENT ON TABLE CHILD_PHOTO IS '儿童照片表';
+COMMENT ON COLUMN CHILD_PHOTO.ID IS '主键';
+COMMENT ON COLUMN CHILD_PHOTO.CHILD_ID IS '儿童ID';
+COMMENT ON COLUMN CHILD_PHOTO.PHOTO IS '照片（竖版720×900）';
+COMMENT ON COLUMN CHILD_PHOTO.AVATAR IS '头像（320X320）';
+COMMENT ON COLUMN CHILD_PHOTO.CREATOR_ID IS '创建人ID';
+COMMENT ON COLUMN CHILD_PHOTO.CREATOR_NAME IS '创建人姓名';
+COMMENT ON COLUMN CHILD_PHOTO.HOSP_ID IS '医院ID';
+COMMENT ON COLUMN CHILD_PHOTO.HOSP_NAME IS '医院名称';
+COMMENT ON COLUMN CHILD_PHOTO.CREATE_TIME IS '创建时间';
+COMMENT ON COLUMN CHILD_PHOTO.UPDATE_TIME IS '更新时间';
+
+3. 在新增儿童档案时，拍照部分显示一个空白头像图片，头像图片尺寸限制为320X320，点击空白头像图片，打开拍照对话框。
+
+4. 在浏览和修改儿童档案时，拍照部分显示表CHILD_PHOTO中最近一次拍照记录的头像AVATAR，同时在头像图片上面显示拍照时间距现在的时间（如不足1个月，则显示【{d}天前】；如果不足1年，则显示【{m}月前】；如果1年及以上，则显示【{y}年{m}月前】），在头像图片下方显示一个【移除】按钮，样式同user_info_form.dart。注意：将user_info_form.dart中的用户头像图片大小统一为320X320吧。点击头像图片，同样打开拍照对话框，重新拍照。
+
+5. 拍照对话框封装成一个独立的代码，后续儿童照片管理功能中，同样会用到这个对话框。在这个对话框中，可以列出当前电脑上安装的摄像头，如前置摄像头、后置摄像头，以及USB外置摄像头，允许选择某一个摄像头进行拍照，并且可以记住当前选择的摄像头，下次再打开拍照对话框时，可以默认选中。当然如果这个设备不存在了，则让用户重新选择。
+
+6. 当打开摄像头后，根据摄像头支持的图像尺寸，显示一个1200X1080的拍照区，点击拍照按钮后，截取并显示一个1200X1080的图像，同时在1200X1080图像上显示一个720X900的裁剪框，允许上下左右移动裁剪框。双击裁剪框，截取并显示裁剪框内的图像（720X900），同时缩小居中截取生成并显示一个头像（320X320）。点击确定按钮后，关闭拍照对话框，并显示在儿童基本信息界面上的拍照部分的头像图片框上，最终保存儿童档案时，一并存入数据库中。点击重拍按钮，可以重新拍摄、重新裁剪。点击取消按钮，可以取消拍照。为什么拍照后还要显示并移动裁剪框进行裁剪？是因为考虑到不可能一手举着摄像头对着儿童，一手操作电脑拍照。一般都是让儿童站在固定摄像头前进行拍照。当然小婴儿除外了。

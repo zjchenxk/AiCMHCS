@@ -16,6 +16,7 @@ export 'models/system/campus.dart';
 export 'models/system/department.dart';
 export 'models/system/dict.dart';
 export 'models/system/high_risk_factor.dart';
+export 'models/system/high_risk_factor_exclusion.dart';
 export 'models/system/hospital.dart';
 export 'models/system/login_user.dart';
 export 'models/system/menu.dart';
