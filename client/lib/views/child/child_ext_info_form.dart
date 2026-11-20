@@ -18,6 +18,10 @@ import 'package:material_ui/material_ui.dart';
 ///   「其他」字样激活）；无过敏史/不详同理；无死亡灰化死亡日期与原因；
 /// - 孕产史各次数/畸形情况随对应有无联动；糖化血红蛋白无异常灰化两级
 ///   阈值；无糖尿病灰化用药；无贫血灰化程度。
+/// - 出生孕周/出生体重/Apgar-5 分钟/颅内出血级别/出生缺陷/SGA 分型/
+///   孕产史/受孕方式/孕期情况/产次/生育年龄/吸毒史等触发字段变更后，
+///   经 ViewModel 按规则自动勾选/清除【高危因素】TAB 对应项
+///   （HighRiskAutoScreening，自动筛查命中的项随条件消失自动取消）。
 class ChildExtInfoForm extends StatefulWidget {
   const ChildExtInfoForm({super.key, required this.viewModel, required this.editable});
 
@@ -269,20 +273,50 @@ class ChildExtInfoFormState extends State<ChildExtInfoForm> {
 
   // ---------------- 字段值联动 ----------------
 
+  /// 参与高危因素自动筛查的下拉字段（值变更后才触发筛查重算；其余
+  /// 下拉与筛查无关，不触发——配合 VM 侧「命中未变即跳过通知」，避免
+  /// 逐键/逐次下拉触发整页重建造成 debug 卡顿）。
+  static const Set<String> _screeningDropdownKeys = {
+    'intracranialHemorrhageLevel',
+    'birthDefect06d',
+    'birthDefect728d',
+    'isSga',
+    'sgaType',
+    'hasSpontaneousAbortionHistory',
+    'hasInducedAbortionHistory',
+    'hasRecurrentAbortionHistory',
+    'hasPretermBirthHistory',
+    'hasFetalDeadHistory',
+    'hasStillbirthHistory',
+    'hasFetalMalformationHistory',
+    'conceptionMethod',
+    'hasDiabetes',
+    'hasGestationalHypertension',
+    'hasCmvInfection',
+    'hasHyperthyroidismInPregnancy',
+    'hasHypothyroidismInPregnancy',
+    'hasHivInfection',
+    'hasSyphilisInfection',
+    'hasParentalDrugAbuseHistory',
+  };
+
   /// 条件灰化判定：has 类字段是否为「有」（'1'）。
   bool _gate(String key) => _v[key] == '1';
 
   /// 下拉类字段设置值 + 联动清空被灰化字段（KeyedSubtree 重建键随值
-  /// 变化，程序化清空即时生效）。
+  /// 变化，程序化清空即时生效），筛查相关字段重算高危因素自动筛查。
   void _setValue(String key, String? value) {
     setState(() {
       _v[key] = value;
       _normalize();
     });
+    if (_screeningDropdownKeys.contains(key)) {
+      widget.viewModel.applyHighRiskAutoScreening(_collect());
+    }
   }
 
   /// Apgar 评分变更后自动判定有无出生窒息（任一 ≤6 → 有；全部 ≥7 →
-  /// 无；均未填不变），随后联动清空被灰化字段。
+  /// 无；均未填不变），随后联动清空被灰化字段并重算高危因素自动筛查。
   void _onApgarChanged() {
     setState(() {
       final scores = ['apgar1', 'apgar5', 'apgar10'].map((k) => int.tryParse(_ctrls[k]?.text.trim() ?? '')).toList();
@@ -293,6 +327,7 @@ class ChildExtInfoFormState extends State<ChildExtInfoForm> {
       }
       _normalize();
     });
+    widget.viewModel.applyHighRiskAutoScreening(_collect());
   }
 
   /// 联动清空被灰化字段（值镜像层；界面经重建键刷新）。
@@ -361,9 +396,11 @@ class ChildExtInfoFormState extends State<ChildExtInfoForm> {
     );
   }
 
-  /// 数字输入（decimal 允许一位小数；Apgar 三键触发窒息自动判定）。
+  /// 数字输入（decimal 允许一位小数；Apgar 三键触发窒息自动判定；孕周/
+  /// 体重/产次/母亲生育年龄触发高危因素自动筛查）。
   Widget _num(String key, String label, {bool decimal = false, String? unit, bool enabled = true, String? Function(String?)? validator}) {
     final isApgar = key == 'apgar1' || key == 'apgar5' || key == 'apgar10';
+    final triggersScreening = key == 'gestationalWeek' || key == 'birthWeight' || key == 'parity' || key == 'maternalAgeAtDelivery';
     return TextFormField(
       controller: _ctrls[key]!,
       enabled: widget.editable && enabled,
@@ -375,10 +412,23 @@ class ChildExtInfoFormState extends State<ChildExtInfoForm> {
       autovalidateMode: AutovalidateMode.disabled,
       decoration: childGlassDecoration(Theme.of(context), unit == null ? label : '$label（$unit）'),
       style: Theme.of(context).textTheme.bodyMedium,
-      onChanged: isApgar ? (_) => _onApgarChanged() : null,
+      onChanged: isApgar || triggersScreening ? (_) => _onScreeningFieldChanged(key) : null,
       validator: validator,
     );
   }
+
+  /// 筛查/Apgar 触发字段变更：Apgar 三键先联动窒息判定（内部已触发
+  /// 筛查），其余触发字段直接按当前表单值重算高危因素自动筛查。
+  void _onScreeningFieldChanged(String key) {
+    if (isApgarKey(key)) {
+      _onApgarChanged();
+      return;
+    }
+    widget.viewModel.applyHighRiskAutoScreening(_collect());
+  }
+
+  /// Apgar 评分键（1/5/10 分钟三键共用判定逻辑）。
+  static bool isApgarKey(String key) => key == 'apgar1' || key == 'apgar5' || key == 'apgar10';
 
   Widget _text(String key, String label, {int maxLength = 50, bool enabled = true}) {
     return TextFormField(
@@ -478,7 +528,7 @@ class ChildExtInfoFormState extends State<ChildExtInfoForm> {
               _dict('birthDefect728d', '7-28天内出生缺陷', _dictDefect, enabled: _gate('hasBirthDefect728d')),
               _text('otherBirthDefect728d', '7-28天内其他出生缺陷', enabled: _gate('hasBirthDefect728d') && DictOptions.isOther(_v['birthDefect728d'])),
               _flag('isSga', '是否小于胎龄儿', entries: const {'0': '否', '1': '是'}),
-              _flag('sgaType', 'SGA分型', entries: const {'轻度SGA': '轻度SGA', '重度SGA': '重度SGA'}, enabled: _gate('isSga')),
+              _flag('sgaType', 'SGA分型', entries: const {'匀称型': '匀称型', '非匀称型': '非匀称型'}, enabled: _gate('isSga')),
             ]),
             _section(theme, '母亲孕产史', [
               _flag('hasSpontaneousAbortionHistory', '有无自然流产'),

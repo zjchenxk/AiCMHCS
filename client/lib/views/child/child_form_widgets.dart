@@ -66,7 +66,10 @@ Widget childFlagDropdown({
   final canEdit = enabled && entries.isNotEmpty;
   return DropdownButtonFormField<String>(
     key: fieldKey,
-    initialValue: value,
+    // 存量值不在当前选项内（如老档案 SGA_TYPE 存「轻度SGA」而选项已改
+    // 匀称型/非匀称型）时回退空值显示 hint，避免下拉断言崩溃；重新选择
+    // 后按新值域保存
+    initialValue: entries.keys.contains(value) ? value : null,
     isExpanded: true,
     items: canEdit
         ? entries.entries

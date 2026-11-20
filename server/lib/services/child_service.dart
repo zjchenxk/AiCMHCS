@@ -819,7 +819,8 @@ class ChildService {
 
   /// 校验本次勾选集合未违反互斥规则（BASE_HIGH_RISK_FACTOR_EXCLUSION）：
   /// 同一规则（2 或 3 项的无序组合）内不得同时勾选，冲突时抛 40001 并
-  /// 列出冲突项名称。规则按医院隔离且量小（数十条量级），复用
+  /// 列出冲突项名称。互斥名单唯一来源为规则表（自动筛查不在服务端
+  /// 另设内置互斥）。规则按医院隔离且量小（数十条量级），复用
   /// [HighRiskFactorExclusionService.listByHospital] 读取后在应用侧比较，
   /// 无需在 SQL 中拼组合条件。
   Future<void> _ensureNoHighRiskFactorExclusion(
@@ -835,8 +836,8 @@ class ChildService {
     for (final rule in rules) {
       final hits = rule.riskFactorIds.where(selectedIds.contains).toList();
       if (hits.length >= 2) {
-        final names = hits.map((id) => nameOf[id] ?? id).join('、');
-        throw ChildException(400, 40001, '高危因素互斥，不能同时选择：$names');
+        final hitNames = hits.map((id) => nameOf[id] ?? id).join('、');
+        throw ChildException(400, 40001, '高危因素互斥，不能同时选择：$hitNames');
       }
     }
   }

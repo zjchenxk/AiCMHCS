@@ -7,6 +7,7 @@ import 'package:client/services/child_service.dart';
 import 'package:client/services/high_risk_factor_exclusion_service.dart';
 import 'package:client/services/high_risk_factor_service.dart';
 import 'package:client/services/menu_service.dart';
+import 'package:client/utils/high_risk_auto_screening.dart';
 import 'package:client/view_models/child/child_create_view_model.dart';
 import 'package:common/model.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -186,6 +187,66 @@ ChildInfo _child(String id) => ChildInfo(
   creatorName: '张医生',
   hospId: '1',
   hospName: '示例人民医院',
+);
+
+/// 构造扩展信息草稿（自动筛查用例只需触发字段，其余缺省为空）。
+ChildExtInfo _extInfo({
+  String? gestationalWeek,
+  String? birthWeight,
+  String? apgar5,
+  String? intracranialHemorrhageLevel,
+  String? birthDefect06d,
+  String? birthDefect728d,
+  String? sgaType,
+  String? hasSpontaneousAbortionHistory,
+  String? hasInducedAbortionHistory,
+  String? hasRecurrentAbortionHistory,
+  String? hasPretermBirthHistory,
+  String? hasFetalDeadHistory,
+  String? hasStillbirthHistory,
+  String? hasFetalMalformationHistory,
+  String? conceptionMethod,
+  String? hasDiabetes,
+  String? hasGestationalHypertension,
+  String? hasCmvInfection,
+  String? hasHyperthyroidismInPregnancy,
+  String? hasHypothyroidismInPregnancy,
+  String? hasHivInfection,
+  String? hasSyphilisInfection,
+  String? parity,
+  String? maternalAgeAtDelivery,
+  String? hasParentalDrugAbuseHistory,
+}) => ChildExtInfo(
+  childId: '',
+  creatorId: '',
+  creatorName: '',
+  hospId: '',
+  hospName: '',
+  gestationalWeek: gestationalWeek,
+  birthWeight: birthWeight,
+  apgar5: apgar5,
+  intracranialHemorrhageLevel: intracranialHemorrhageLevel,
+  birthDefect06d: birthDefect06d,
+  birthDefect728d: birthDefect728d,
+  sgaType: sgaType,
+  hasSpontaneousAbortionHistory: hasSpontaneousAbortionHistory,
+  hasInducedAbortionHistory: hasInducedAbortionHistory,
+  hasRecurrentAbortionHistory: hasRecurrentAbortionHistory,
+  hasPretermBirthHistory: hasPretermBirthHistory,
+  hasFetalDeadHistory: hasFetalDeadHistory,
+  hasStillbirthHistory: hasStillbirthHistory,
+  hasFetalMalformationHistory: hasFetalMalformationHistory,
+  conceptionMethod: conceptionMethod,
+  hasDiabetes: hasDiabetes,
+  hasGestationalHypertension: hasGestationalHypertension,
+  hasCmvInfection: hasCmvInfection,
+  hasHyperthyroidismInPregnancy: hasHyperthyroidismInPregnancy,
+  hasHypothyroidismInPregnancy: hasHypothyroidismInPregnancy,
+  hasHivInfection: hasHivInfection,
+  hasSyphilisInfection: hasSyphilisInfection,
+  parity: parity,
+  maternalAgeAtDelivery: maternalAgeAtDelivery,
+  hasParentalDrugAbuseHistory: hasParentalDrugAbuseHistory,
 );
 
 ChildCreateViewModel _buildViewModel({
@@ -609,5 +670,309 @@ void main() {
     await vm.loadHighRiskData();
     expect(vm.checkedHighRiskIds, {'R1'});
     expect(vm.highRiskRemarkOf('R1'), '需随访');
+  });
+
+  test('高危因素勾选切换必须通知监听者（面板即时刷新勾选状态）', () async {
+    BaseHighRiskFactor factor(String id, String color, String name) => BaseHighRiskFactor(
+      id: id,
+      riskFactorCode: 'CODE-$id',
+      riskFactorName: name,
+      riskColor: color,
+      creatorId: '1',
+      creatorName: '系统管理员',
+      hospId: '1',
+      hospName: '示例人民医院',
+    );
+    final dict = [
+      factor('G1', '绿色', ChildCreateViewModel.noneHighRiskFactorName),
+      factor('R1', '红色', '妊娠期高血压'),
+    ];
+    final vm = _buildViewModel(
+      operationCodes: {ChildCreateViewModel.opCreate},
+      highRiskFactorService: FakeHighRiskFactorService()..dict = dict,
+    );
+    await vm.startCreate();
+    await vm.loadHighRiskData();
+    var notified = 0;
+    vm.addListener(() => notified++);
+
+    // 手动勾选/取消各通知一次（通知缺失时面板勾选状态不刷新）
+    vm.toggleHighRiskFactor(dict[1], true);
+    expect(vm.checkedHighRiskIds, {'R1'});
+    expect(notified, 1);
+    vm.toggleHighRiskFactor(dict[1], false);
+    expect(vm.checkedHighRiskIds, isEmpty);
+    expect(notified, 2);
+
+    // 备注变更同样通知
+    vm.setHighRiskRemark('R1', '备注');
+    expect(notified, 3);
+  });
+
+  test('高危因素自动筛查：触发字段区间命中、规则表互斥三选一、条件消失自动清除', () async {
+    // 字典覆盖自动筛查全部映射目标（名称须与字典原文一致，含橙色窒息项的
+    // 「室息」用字）
+    BaseHighRiskFactor factor(String id, String color, String name) => BaseHighRiskFactor(
+      id: id,
+      riskFactorCode: 'CODE-$id',
+      riskFactorName: name,
+      riskColor: color,
+      creatorId: '1',
+      creatorName: '系统管理员',
+      hospId: '1',
+      hospName: '示例人民医院',
+    );
+    final dict = [
+      factor('G1', '绿色', ChildCreateViewModel.noneHighRiskFactorName),
+      factor('P1', '黄色', HighRiskAutoScreening.preterm3437),
+      factor('P2', '橙色', HighRiskAutoScreening.preterm3234),
+      factor('P3', '红色', HighRiskAutoScreening.pretermLt32),
+      factor('W1', '黄色', HighRiskAutoScreening.weightGt4000),
+      factor('W2', '橙色', HighRiskAutoScreening.weight20002500),
+      factor('W3', '红色', HighRiskAutoScreening.weightLt2000),
+      factor('A1', '橙色', HighRiskAutoScreening.asphyxia47),
+      factor('A2', '红色', HighRiskAutoScreening.asphyxiaLe3),
+      factor('H1', '橙色', HighRiskAutoScreening.hemorrhage12),
+      factor('H2', '红色', HighRiskAutoScreening.hemorrhage3),
+      factor('S1', '橙色', HighRiskAutoScreening.sgaAsymmetric),
+      factor('S2', '红色', HighRiskAutoScreening.sgaSymmetric),
+      factor('X1', '黄色', '妊娠期糖尿病'),
+      factor('X2', '黄色', '唇裂合并腭裂，尚不需要特殊护理和治疗'),
+      factor('M1', '黄色', '其他手动高危因素（不在筛查映射内）'),
+    ];
+    final riskService = FakeHighRiskFactorService()..dict = dict;
+    // 互斥名单唯一来源为互斥规则表：配置早产三选一（窒息/体重等其余组
+    // 未配置，不影响筛查按区间自动替换）
+    final exclusionService = FakeHighRiskFactorExclusionService()
+      ..rules = [
+        BaseHighRiskFactorExclusion(
+          id: 'EX-1',
+          firstRiskFactorId: 'P1',
+          secondRiskFactorId: 'P2',
+          thirdRiskFactorId: 'P3',
+          creatorId: '1',
+          creatorName: '系统管理员',
+          hospId: '1',
+          hospName: '示例人民医院',
+        ),
+      ];
+    final vm = _buildViewModel(
+      operationCodes: {ChildCreateViewModel.opCreate},
+      highRiskFactorService: riskService,
+      highRiskFactorExclusionService: exclusionService,
+    );
+    await vm.startCreate();
+    await vm.loadHighRiskData();
+
+    // 互斥映射来自规则表：早产三选一；未配置规则的组为空集
+    expect(vm.exclusiveHighRiskIdsOf('P1'), {'P2', 'P3'});
+    expect(vm.exclusiveHighRiskIdsOf('A1'), isEmpty);
+    expect(vm.exclusiveHighRiskIdsOf('X1'), isEmpty);
+
+    // 孕周区间：33 → 橙 32-34（默认勾选的绿色无高危因素被自动清除）
+    vm.applyHighRiskAutoScreening(_extInfo(gestationalWeek: '33'));
+    expect(vm.checkedHighRiskIds, {'P2'});
+    // 改为 36 → 黄 34-37 自动替换（同组互斥清除旧命中）
+    vm.applyHighRiskAutoScreening(_extInfo(gestationalWeek: '36'));
+    expect(vm.checkedHighRiskIds, {'P1'});
+    // 改为 38 → 条件消失，旧命中自动清除；边界：34 命中黄、32 命中橙、31 命中红
+    vm.applyHighRiskAutoScreening(_extInfo(gestationalWeek: '38'));
+    expect(vm.checkedHighRiskIds, isEmpty);
+    vm.applyHighRiskAutoScreening(_extInfo(gestationalWeek: '34'));
+    expect(vm.checkedHighRiskIds, {'P1'});
+    vm.applyHighRiskAutoScreening(_extInfo(gestationalWeek: '32'));
+    expect(vm.checkedHighRiskIds, {'P2'});
+    vm.applyHighRiskAutoScreening(_extInfo(gestationalWeek: '31'));
+    expect(vm.checkedHighRiskIds, {'P3'});
+
+    // 出生体重边界：4001 黄 / 4000 不命中 / 2500 橙 / 2501 不命中 / 1999 红 / 2000 橙
+    vm.applyHighRiskAutoScreening(_extInfo(birthWeight: '4001'));
+    expect(vm.checkedHighRiskIds, {'W1'});
+    vm.applyHighRiskAutoScreening(_extInfo(birthWeight: '4000'));
+    expect(vm.checkedHighRiskIds, isEmpty);
+    vm.applyHighRiskAutoScreening(_extInfo(birthWeight: '2500'));
+    expect(vm.checkedHighRiskIds, {'W2'});
+    vm.applyHighRiskAutoScreening(_extInfo(birthWeight: '2501'));
+    expect(vm.checkedHighRiskIds, isEmpty);
+    vm.applyHighRiskAutoScreening(_extInfo(birthWeight: '1999'));
+    expect(vm.checkedHighRiskIds, {'W3'});
+    vm.applyHighRiskAutoScreening(_extInfo(birthWeight: '2000'));
+    expect(vm.checkedHighRiskIds, {'W2'});
+
+    // Apgar5：5 橙（字典原文「室息」）/ 2 红 / 8 不命中
+    vm.applyHighRiskAutoScreening(_extInfo(apgar5: '5'));
+    expect(vm.checkedHighRiskIds, {'A1'});
+    vm.applyHighRiskAutoScreening(_extInfo(apgar5: '2'));
+    expect(vm.checkedHighRiskIds, {'A2'});
+    vm.applyHighRiskAutoScreening(_extInfo(apgar5: '8'));
+    expect(vm.checkedHighRiskIds, isEmpty);
+
+    // 颅内出血级别（字典项目值）：Ⅰ级/Ⅱ级 橙、Ⅲ级及以上 红、不详不命中
+    vm.applyHighRiskAutoScreening(_extInfo(intracranialHemorrhageLevel: 'Ⅰ级'));
+    expect(vm.checkedHighRiskIds, {'H1'});
+    vm.applyHighRiskAutoScreening(_extInfo(intracranialHemorrhageLevel: 'Ⅲ级及以上'));
+    expect(vm.checkedHighRiskIds, {'H2'});
+    vm.applyHighRiskAutoScreening(_extInfo(intracranialHemorrhageLevel: '不详'));
+    expect(vm.checkedHighRiskIds, isEmpty);
+
+    // SGA 分型：非匀称型 橙 / 匀称型 红 / 未选不命中
+    vm.applyHighRiskAutoScreening(_extInfo(sgaType: '非匀称型'));
+    expect(vm.checkedHighRiskIds, {'S1'});
+    vm.applyHighRiskAutoScreening(_extInfo(sgaType: '匀称型'));
+    expect(vm.checkedHighRiskIds, {'S2'});
+    vm.applyHighRiskAutoScreening(_extInfo());
+    expect(vm.checkedHighRiskIds, isEmpty);
+
+    // 出生缺陷两字段并集；清空后自动清除
+    vm.applyHighRiskAutoScreening(_extInfo(birthDefect06d: '左唇裂合并腭裂'));
+    expect(vm.checkedHighRiskIds, {'X2'});
+    vm.applyHighRiskAutoScreening(_extInfo());
+    expect(vm.checkedHighRiskIds, isEmpty);
+
+    // 筛查管理全集内未命中的项一律清除（不区分勾选来源，需求口径
+    // 「条件不成立应清除其选择」）；管理全集外的手动勾选不受影响
+    vm.toggleHighRiskFactor(dict.firstWhere((f) => f.id == 'X1'), true); // 妊娠期糖尿病（管理全集内，字段未选有）
+    vm.toggleHighRiskFactor(dict.firstWhere((f) => f.id == 'M1'), true); // 管理全集外手动项
+    vm.applyHighRiskAutoScreening(_extInfo(gestationalWeek: '33'));
+    expect(vm.checkedHighRiskIds, {'P2', 'M1'}, reason: '管理全集内的 X1 被清除，全集外手动项 M1 保留');
+    // 手动勾选同组互斥项 → 规则表互斥自动清除 P2
+    vm.toggleHighRiskFactor(dict.firstWhere((f) => f.id == 'P3'), true);
+    expect(vm.checkedHighRiskIds, {'P3', 'M1'});
+    // 条件消失 → 管理全集内的 P3 清除，M1 保留
+    vm.applyHighRiskAutoScreening(_extInfo(gestationalWeek: '38'));
+    expect(vm.checkedHighRiskIds, {'M1'});
+  });
+
+  test('高危因素自动筛查：孕产史/受孕方式/孕期情况/年龄产次/吸毒史命中', () async {
+    BaseHighRiskFactor factor(String id, String color, String name) => BaseHighRiskFactor(
+      id: id,
+      riskFactorCode: 'CODE-$id',
+      riskFactorName: name,
+      riskColor: color,
+      creatorId: '1',
+      creatorName: '系统管理员',
+      hospId: '1',
+      hospName: '示例人民医院',
+    );
+    final dict = [
+      factor('B1', '黄色', '有不良妊娠结局及分娩史'),
+      factor('B2', '黄色', '因不孕不育行辅助医学技术受孕等'),
+      factor('B3', '黄色', '妊娠期糖尿病'),
+      factor('B4', '黄色', '妊娠期高血压疾病'),
+      factor('B5', '黄色', 'TORCH感染'),
+      factor('B6', '黄色', '甲状腺疾病'),
+      factor('B7', '黄色', '感染人类免疫缺陷病毒、梅毒螺旋体及乙肝病毒'),
+      factor('B8', '黄色', '高龄(初产>35岁，经产>40岁)或年龄<18岁'),
+      factor('B9', '黄色', '未婚先孕或受虐、吸毒等'),
+    ];
+    final vm = _buildViewModel(
+      operationCodes: {ChildCreateViewModel.opCreate},
+      highRiskFactorService: FakeHighRiskFactorService()..dict = dict,
+    );
+    await vm.startCreate();
+    await vm.loadHighRiskData();
+
+    // 孕产史任一为有
+    vm.applyHighRiskAutoScreening(_extInfo(hasStillbirthHistory: '1'));
+    expect(vm.checkedHighRiskIds, {'B1'});
+    vm.applyHighRiskAutoScreening(_extInfo(hasStillbirthHistory: '0'));
+
+    // 受孕方式：体外受精胚胎移植命中、自然受孕清除
+    vm.applyHighRiskAutoScreening(_extInfo(conceptionMethod: '体外受精胚胎移植'));
+    expect(vm.checkedHighRiskIds, {'B2'});
+    vm.applyHighRiskAutoScreening(_extInfo(conceptionMethod: '自然受孕'));
+    expect(vm.checkedHighRiskIds, isEmpty);
+
+    // 孕期情况：糖尿病/高血压/巨细胞病毒/甲亢甲减任一/HIV 梅毒任一
+    vm.applyHighRiskAutoScreening(_extInfo(hasDiabetes: '1'));
+    expect(vm.checkedHighRiskIds, {'B3'});
+    vm.applyHighRiskAutoScreening(_extInfo(hasGestationalHypertension: '1'));
+    expect(vm.checkedHighRiskIds, {'B4'});
+    vm.applyHighRiskAutoScreening(_extInfo(hasCmvInfection: '1'));
+    expect(vm.checkedHighRiskIds, {'B5'});
+    vm.applyHighRiskAutoScreening(_extInfo(hasHypothyroidismInPregnancy: '1'));
+    expect(vm.checkedHighRiskIds, {'B6'});
+    vm.applyHighRiskAutoScreening(_extInfo(hasHivInfection: '1'));
+    expect(vm.checkedHighRiskIds, {'B7'});
+    vm.applyHighRiskAutoScreening(_extInfo(hasSyphilisInfection: '1'));
+    expect(vm.checkedHighRiskIds, {'B7'});
+    vm.applyHighRiskAutoScreening(_extInfo(hasHivInfection: '0', hasSyphilisInfection: '0'));
+    expect(vm.checkedHighRiskIds, isEmpty);
+
+    // 产次+年龄：初产>35 / 经产>40 / 年龄<18（不依赖产次）/ 其余不命中
+    vm.applyHighRiskAutoScreening(_extInfo(parity: '1', maternalAgeAtDelivery: '36'));
+    expect(vm.checkedHighRiskIds, {'B8'});
+    vm.applyHighRiskAutoScreening(_extInfo(parity: '2', maternalAgeAtDelivery: '41'));
+    expect(vm.checkedHighRiskIds, {'B8'});
+    vm.applyHighRiskAutoScreening(_extInfo(parity: '2', maternalAgeAtDelivery: '36'));
+    expect(vm.checkedHighRiskIds, isEmpty);
+    vm.applyHighRiskAutoScreening(_extInfo(maternalAgeAtDelivery: '17'));
+    expect(vm.checkedHighRiskIds, {'B8'});
+    vm.applyHighRiskAutoScreening(_extInfo(maternalAgeAtDelivery: '30'));
+    expect(vm.checkedHighRiskIds, isEmpty);
+
+    // 父母亲吸毒史
+    vm.applyHighRiskAutoScreening(_extInfo(hasParentalDrugAbuseHistory: '1'));
+    expect(vm.checkedHighRiskIds, {'B9'});
+    vm.applyHighRiskAutoScreening(_extInfo(hasParentalDrugAbuseHistory: '0'));
+    expect(vm.checkedHighRiskIds, isEmpty);
+  });
+
+  test('高危因素自动筛查：载入档案按已存扩展信息初始化命中集，编辑触发字段增量清选', () async {
+    BaseHighRiskFactor factor(String id, String color, String name) => BaseHighRiskFactor(
+      id: id,
+      riskFactorCode: 'CODE-$id',
+      riskFactorName: name,
+      riskColor: color,
+      creatorId: '1',
+      creatorName: '系统管理员',
+      hospId: '1',
+      hospName: '示例人民医院',
+    );
+    final dict = [
+      factor('G1', '绿色', ChildCreateViewModel.noneHighRiskFactorName),
+      factor('P1', '黄色', HighRiskAutoScreening.preterm3437),
+      factor('P2', '橙色', HighRiskAutoScreening.preterm3234),
+    ];
+    final riskService = FakeHighRiskFactorService()..dict = dict;
+    final childService = FakeChildService()
+      ..archives['1'] = (_child('1'), _extInfo(gestationalWeek: '35'), const [])
+      ..savedHighRiskFactors = [
+        const ChildHighRiskFactor(
+          id: 'row-1',
+          childId: '1',
+          highRiskFactorId: 'P1',
+          riskFactorCode: 'CODE-P1',
+          riskFactorName: HighRiskAutoScreening.preterm3437,
+          riskColor: '黄色',
+          remark: '早产随访',
+          creatorId: '1',
+          creatorName: '系统管理员',
+          hospId: '1',
+          hospName: '示例人民医院',
+        ),
+      ];
+
+    final vm = _buildViewModel(
+      operationCodes: {ChildCreateViewModel.opUpdate},
+      childService: childService,
+      highRiskFactorService: riskService,
+    );
+    await vm.loadPermissions();
+    await vm.selectChild('1');
+
+    // 库记录回显 + 按扩展信息初始化命中集（孕周 35 → 黄 34-37，与库记录一致）
+    expect(vm.checkedHighRiskIds, {'P1'});
+    expect(vm.highRiskRemarkOf('P1'), '早产随访');
+
+    // 编辑：孕周改为 38 → 自动命中的黄项被清除（含备注）
+    vm.startEdit();
+    vm.applyHighRiskAutoScreening(_extInfo(gestationalWeek: '38'));
+    expect(vm.checkedHighRiskIds, isEmpty);
+    expect(vm.highRiskRemarkOf('P1'), isEmpty);
+
+    // 改回 33 → 命中橙项（同组互斥，黄项不复活）
+    vm.applyHighRiskAutoScreening(_extInfo(gestationalWeek: '33'));
+    expect(vm.checkedHighRiskIds, {'P2'});
   });
 }

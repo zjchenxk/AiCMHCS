@@ -9,6 +9,7 @@ import 'package:client/widgets/dict_dropdown_form_field.dart';
 import 'package:common/model.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:provider/provider.dart';
 
 /// 儿童「基本信息」Tab 表单：分「基本信息」（建档/出生/证件/保健号/
 /// 居住地址五级级联，编码自动取最深一级行政区划代码）与「拍照」
@@ -228,12 +229,15 @@ class ChildBasicInfoFormState extends State<ChildBasicInfoForm> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final vm = widget.viewModel;
+    // 页面为消除 TAB 切换卡顿按表单身份缓存了子树，本表单不再依赖
+    // 页面级重建——自行 watch VM，照片头像/拍照时间/地址码等 VM 驱动
+    // 显示在 VM 通知后即时刷新
+    final vm = context.watch<ChildCreateViewModel>();
     final editable = widget.editable;
     final base = vm.child;
 
     // 居住地址编码随五级级联选择实时回填（取最深一级的行政区划编码）；
-    // 表单由页面在 VM 变化时重建，此处同步受控控制器即可刷新只读框
+    // VM 通知触发本表单重建，此处同步受控控制器即可刷新只读框
     final addressCode = vm.addressCode ?? base?.addressCode ?? '';
     if (_addressCodeCtrl.text != addressCode) {
       _addressCodeCtrl.text = addressCode;

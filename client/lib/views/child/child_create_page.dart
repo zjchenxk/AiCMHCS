@@ -54,6 +54,56 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
     }
   }
 
+  /// IndexedStack 四个 Tab 的缓存子树：仅随表单键身份（模式:儿童ID）
+  /// 重建。Tab 切换只改 index，按钮条/TabBar 计数刷新等页面级 setState
+  /// 复用同一批 widget 实例——Flutter 对 identical 的子 widget 短路整棵
+  /// 子树重建，四个常驻 Tab（含约 126 行的高危面板）不再随每次切换全量
+  /// 重建（此前一次切 Tab 要在 debug 下重建上千个控件，卡顿明显）。
+  /// VM 驱动的自刷新不受影响：监护人/高危面板内部自行 watch，基本信息
+  /// 表单亦内部 watch（照片头像/地址码等随 VM 变化即时刷新），扩展信息
+  /// 表单渲染全部由自身控制器/状态驱动、无需 VM 通知。
+  List<Widget> _cachedTabChildren = const [];
+
+  /// 缓存对应的表单身份。
+  String? _cachedTabIdentity;
+
+  /// 取（必要时重建）四个 Tab 的子树。
+  List<Widget> _tabChildren(ChildCreateViewModel vm, bool editing) {
+    if (_cachedTabIdentity == _formIdentity) {
+      return _cachedTabChildren;
+    }
+    _cachedTabIdentity = _formIdentity;
+    return _cachedTabChildren = [
+      Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: ChildBasicInfoForm(
+          key: _basicKey,
+          viewModel: vm,
+          editable: editing,
+          onSubmit: editing ? _submit : null,
+          onCapturePhoto: editing ? _startCapture : null,
+          onRemovePhoto: editing ? _removePhoto : null,
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: ChildExtInfoForm(
+          key: _extKey,
+          viewModel: vm,
+          editable: editing,
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: ChildGuardianPanel(viewModel: vm, editable: editing),
+      ),
+      Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: ChildHighRiskFactorPanel(viewModel: vm, editable: editing),
+      ),
+    ];
+  }
+
   @override
   void initState() {
     super.initState();
@@ -412,39 +462,13 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
                         // 用 IndexedStack 而非 TabBarView：三个 Tab 表单
                         // 全部常驻挂载（TabBarView 懒构建，未访问过的 Tab
                         // 表单 State 不存在，整单保存时校验键会为空）；
-                        // 各 Tab 顶部留 8px 内距，防首行浮动标签贴顶被裁
+                        // 各 Tab 顶部留 8px 内距，防首行浮动标签贴顶被裁；
+                        // 子树按表单身份缓存（见 _tabChildren），Tab 切换
+                        // 不再全量重建四个常驻 Tab
                         Expanded(
                           child: IndexedStack(
                             index: _tabController.index,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: ChildBasicInfoForm(
-                                  key: _basicKey,
-                                  viewModel: vm,
-                                  editable: editing,
-                                  onSubmit: editing ? _submit : null,
-                                  onCapturePhoto: editing ? _startCapture : null,
-                                  onRemovePhoto: editing ? _removePhoto : null,
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: ChildExtInfoForm(
-                                  key: _extKey,
-                                  viewModel: vm,
-                                  editable: editing,
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: ChildGuardianPanel(viewModel: vm, editable: editing),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: ChildHighRiskFactorPanel(viewModel: vm, editable: editing),
-                              ),
-                            ],
+                            children: _tabChildren(vm, editing),
                           ),
                         ),
                       ],

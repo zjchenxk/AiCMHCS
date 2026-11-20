@@ -6,6 +6,7 @@ import 'package:client/services/child_service.dart';
 import 'package:client/services/high_risk_factor_exclusion_service.dart';
 import 'package:client/services/high_risk_factor_service.dart';
 import 'package:client/services/menu_service.dart';
+import 'package:client/utils/high_risk_auto_screening.dart';
 import 'package:client/utils/log_helper.dart';
 import 'package:common/model.dart';
 import 'package:flutter/foundation.dart';
@@ -24,7 +25,9 @@ enum ChildFormMode { empty, browse, create, edit }
 /// 各自持控制器，【保存】时由页面收集表单数据经 [save] 整单提交；
 /// 监护人行的增删改仅操作本地列表（不做权限控制），随整单保存一并
 /// 入库；高危因素勾选集合亦随整单保存（绿色「无高危因素」与其余四色
-/// 互斥；同一互斥规则内的项目只能选其一，勾选时自动清除冲突项）。
+/// 互斥；同一互斥规则内的项目只能选其一，勾选时自动清除冲突项）。扩展
+/// 信息触发字段变更后经 [applyHighRiskAutoScreening] 自动筛查勾选/清除
+/// 对应高危因素（见 HighRiskAutoScreening）。
 class ChildCreateViewModel extends ChangeNotifier {
   /// 构造函数：可选注入服务（缺省经服务定位器取，便于测试覆写）。
   ChildCreateViewModel({
@@ -500,7 +503,8 @@ class ChildCreateViewModel extends ChangeNotifier {
   /// 加载本院高危因素互斥规则并展开为「ID → 互斥 ID 集合」映射。
   ///
   /// 失败时清空映射（互斥降级为仅「无高危因素」标记规则，不影响其余
-  /// 功能），记日志不抛出。
+  /// 功能），记日志不抛出。互斥名单唯一来源为互斥规则表
+  /// （BASE_HIGH_RISK_FACTOR_EXCLUSION），自动筛查不含自带互斥。
   Future<void> _loadHighRiskExclusions() async {
     _exclusionMap.clear();
     try {
@@ -590,8 +594,15 @@ class ChildCreateViewModel extends ChangeNotifier {
     }
     // 无已保存记录（新增态或库内为空）→ 默认勾选绿色「无高危因素」标记项
     _applyDefaultHighRiskSelection();
+    // 按已载入扩展信息重算自动筛查命中（新增态 ext 为 null 按空档案处理）；
+    // 命中基线随载入重置，保证对存量冲突数据的一次性纠偏不被跳过
+    _lastScreeningTargetNames = {};
+    applyHighRiskAutoScreening(_ext ?? _emptyExt());
     notifyListeners();
   }
+
+  /// 空扩展信息（新增态自动筛查的推导输入）。
+  ChildExtInfo _emptyExt() => const ChildExtInfo(childId: '', creatorId: '', creatorName: '', hospId: '', hospName: '');
 
   /// 构建提交给服务端的高危因素选择项：过滤绿色【无高危因素】标记项
   /// （仅界面标记，不落库），其余项附各自备注。
@@ -606,13 +617,18 @@ class ChildCreateViewModel extends ChangeNotifier {
   /// 切换某高危因素的勾选状态。
   ///
   /// 互斥规则两层：① 界面标记规则——勾选绿色「无高危因素」清空其余四色
-  /// 勾选，勾选其余四色任一项则取消该标记项；② 规则表规则——勾选某项时
-  /// 自动清除同一互斥组合（BASE_HIGH_RISK_FACTOR_EXCLUSION，可含 2 或 3
-  /// 项）内已勾选的其他项（如早产三个胎龄段三选一）。
+  /// 勾选，勾选其余四色任一项则取消该标记项；② 互斥规则表——勾选某项时
+  /// 自动清除与其互斥的已勾选项（BASE_HIGH_RISK_FACTOR_EXCLUSION）。
   ///
   /// 取消勾选时同步清除该项已录入的备注（备注依附于选中项）；互斥清除
   /// 时同样清除被清除项的备注，避免残留数据。
   void toggleHighRiskFactor(BaseHighRiskFactor factor, bool checked) {
+    _setCheckedHighRisk(factor, checked);
+    notifyListeners();
+  }
+
+  /// 勾选/取消勾选的内部实现（界面切换与自动筛查共用）。
+  void _setCheckedHighRisk(BaseHighRiskFactor factor, bool checked) {
     final none = _noneFactor;
     final isNone = none != null && factor.id == none.id;
     if (!checked) {
@@ -629,6 +645,49 @@ class ChildCreateViewModel extends ChangeNotifier {
       }
       _clearExclusiveSelections(factor.id);
       _checkedHighRiskIds.add(factor.id);
+    }
+  }
+
+  /// 上次自动筛查命中的名称集合：与本次相同则直接返回（不重算、不
+  /// 通知）——建档页整树监听本 VM，逐键通知会在 debug 模式下造成整页
+  /// 重建卡顿；只有命中集合真正变化才值得重建一次。
+  Set<String> _lastScreeningTargetNames = {};
+
+  /// 高危因素自动筛查：按当前扩展信息重算命中项。
+  ///
+  /// ① 清除——筛查管理全集（HighRiskAutoScreening.managedFactorNames，
+  /// 按字典名称解析）内本次未命中的项一律取消勾选并清除备注，不区分
+  /// 当初勾选来源（需求口径「条件不成立应清除其选择」）；管理全集外的
+  /// 手动勾选不受影响。② 勾选——新命中的自动勾选（沿用「无高危因素」
+  /// 标记互斥与同组互斥清除）。扩展信息表单在筛查触发字段变更后调用；
+  /// 载入档案/保存后由 [loadHighRiskData] 以已存扩展信息重算一次。
+  void applyHighRiskAutoScreening(ChildExtInfo ext) {
+    final names = HighRiskAutoScreening.targetFactorNames(ext);
+    if (_lastScreeningTargetNames.length == names.length && _lastScreeningTargetNames.containsAll(names)) {
+      return;
+    }
+    final idByName = <String, String>{};
+    for (final f in _highRiskDict) {
+      idByName.putIfAbsent(f.riskFactorName, () => f.id);
+    }
+    final targetNames = names.toSet();
+    _lastScreeningTargetNames = targetNames;
+    // ① 清除管理全集内未命中的项（字典缺失的名称自然跳过）
+    for (final name in HighRiskAutoScreening.managedFactorNames) {
+      if (targetNames.contains(name)) {
+        continue;
+      }
+      final id = idByName[name];
+      if (id != null && _checkedHighRiskIds.remove(id)) {
+        _highRiskRemarks.remove(id);
+      }
+    }
+    // ② 勾选新命中项
+    for (final name in names) {
+      final id = idByName[name];
+      if (id != null && !_checkedHighRiskIds.contains(id)) {
+        _setCheckedHighRisk(_highRiskDict.firstWhere((f) => f.id == id), true);
+      }
     }
     notifyListeners();
   }

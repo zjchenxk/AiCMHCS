@@ -192,7 +192,7 @@ class ChildExtInfo {
   /// 是否小于胎龄儿（0-否，1-是）。
   final String? isSga;
 
-  /// SGA分型（轻度SGA/重度SGA）。
+  /// SGA分型（匀称型/非匀称型；存量轻度SGA/重度SGA 原值保留待人工订正）。
   final String? sgaType;
 
   /// 是否死亡（0-否，1-是）。

@@ -175,6 +175,22 @@ class _ChildHighRiskFactorPanelState extends State<ChildHighRiskFactorPanel> {
     return factors;
   }
 
+  /// 预计算互斥同组项名称映射（factorId → 同组其他项名称列表）：每次
+  /// 面板构建算一遍，行内查表即可，避免每行扫描整个字典。
+  Map<String, List<String>> _exclusiveNamesById(ChildCreateViewModel vm) {
+    if (vm.highRiskDict.isEmpty) {
+      return const {};
+    }
+    final nameById = {for (final f in vm.highRiskDict) f.id: f.riskFactorName};
+    final result = <String, List<String>>{};
+    for (final f in vm.highRiskDict) {
+      result[f.id] = [
+        for (final id in vm.exclusiveHighRiskIdsOf(f.id)) nameById[id] ?? id,
+      ];
+    }
+    return result;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -182,6 +198,8 @@ class _ChildHighRiskFactorPanelState extends State<ChildHighRiskFactorPanel> {
     final editable = widget.editable;
     final query = _searchCtrl.text.trim();
     final noMatch = query.isNotEmpty && _matchIds.isEmpty;
+    // 互斥同组项名称映射一次预计算（行内直接查表，避免每行扫描全字典）
+    final exclusiveNamesById = _exclusiveNamesById(vm);
 
     // 工具栏固定在滚动区域外；仅卡片列表参与滚动
     return Column(
@@ -192,14 +210,14 @@ class _ChildHighRiskFactorPanelState extends State<ChildHighRiskFactorPanel> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 第一行：五色快速导航 + 搜索 + 计数/下一个 + 新增
+              // 第一行：五色快速导航（紧凑圆点）+ 搜索 + 计数/下一个 + 新增
               Row(
                 children: [
                   for (final colorName in RiskColorPalette.names) ...[
                     _buildNavChip(theme, vm, colorName),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 2),
                   ],
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: TextField(
                       controller: _searchCtrl,
@@ -243,7 +261,7 @@ class _ChildHighRiskFactorPanelState extends State<ChildHighRiskFactorPanel> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 12),
-                for (final colorName in RiskColorPalette.names) _buildColorCard(theme, vm, colorName, editable, query),
+                for (final colorName in RiskColorPalette.names) _buildColorCard(theme, vm, colorName, editable, query, exclusiveNamesById),
                 if (editable)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
@@ -261,27 +279,35 @@ class _ChildHighRiskFactorPanelState extends State<ChildHighRiskFactorPanel> {
     );
   }
 
-  /// 五色快速导航按钮：尺寸/字号与右侧【新增高危因素】按钮一致
-  /// （同为 Material 按钮、默认密度与按钮主题字号），色点作前导图标。
+  /// 五色快速导航：紧凑圆点按钮（色点即按钮图标）+ 角标计数（黄/橙/红/
+  /// 紫已选 >0 才显示角标；绿色为「无高危因素」等标记项不显示）。悬停
+  /// 提示说明用途与已选数。相比早期带文字的按钮大幅收窄，把工具栏宽度
+  /// 留给搜索框。
   Widget _buildNavChip(ThemeData theme, ChildCreateViewModel vm, String colorName) {
     final color = RiskColorPalette.colorOf(colorName, theme);
-    // 黄/橙/红/紫显示该色已勾选项目数（便于回看选中项）；绿色为「无高危
-    // 因素」等标记项，不显示计数；计数为 0 时同样不显示（仅展示有选中
-    // 项的颜色，突出需要回看的目标）
     final checked = vm.checkedHighRiskCountOfColor(colorName);
     final showCount = colorName != '绿色' && checked > 0;
-    return Tooltip(
-      message: showCount ? '滚动到$colorName卡片（已选 $checked 项）' : '滚动到$colorName卡片',
-      child: OutlinedButton.icon(
-        onPressed: () => _scrollToCard(colorName),
-        icon: Icon(Icons.circle, size: 10, color: color),
-        label: Text(showCount ? '$colorName（$checked）' : colorName),
+    return Badge.count(
+      count: checked,
+      isLabelVisible: showCount,
+      child: Tooltip(
+        message: showCount ? '滚动到$colorName卡片（已选 $checked 项）' : '滚动到$colorName卡片',
+        child: IconButton(
+          onPressed: () => _scrollToCard(colorName),
+          visualDensity: VisualDensity.compact,
+          icon: Icon(Icons.circle, size: 12, color: color),
+        ),
       ),
     );
   }
 
   /// 五色卡片：卡片头（色点 + 颜色名 + 勾选数）+ 树形高危因素列表。
-  Widget _buildColorCard(ThemeData theme, ChildCreateViewModel vm, String colorName, bool editable, String query) {
+  ///
+  /// 装饰容器与 ListTile 之间须隔一层透明 Material（与 GlassPanel 同款
+  /// 结构）：否则 ListTile 的水波纹画到更外层的 Material 上、被卡片
+  /// 背景色盖住，debug 下触发「ListTile background color or ink
+  /// splashes may be invisible」断言刷屏。
+  Widget _buildColorCard(ThemeData theme, ChildCreateViewModel vm, String colorName, bool editable, String query, Map<String, List<String>> exclusiveNamesById) {
     final factors = _factorsOfColor(colorName);
     final checkedCount = factors.where((f) => vm.checkedHighRiskIds.contains(f.id)).length;
     return Container(
@@ -292,46 +318,49 @@ class _ChildHighRiskFactorPanelState extends State<ChildHighRiskFactorPanel> {
         border: Border.all(color: RiskColorPalette.borderOf(colorName, theme)),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-            child: Row(
-              children: [
-                Container(
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(color: RiskColorPalette.colorOf(colorName, theme), shape: BoxShape.circle),
-                ),
-                const SizedBox(width: 8),
-                Text(colorName, style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
-                const SizedBox(width: 8),
-                Text(
-                  '$checkedCount 项',
+      child: Material(
+        type: MaterialType.transparency,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+              child: Row(
+                children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(color: RiskColorPalette.colorOf(colorName, theme), shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(colorName, style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 8),
+                  Text(
+                    '$checkedCount 项',
+                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+                  ),
+                ],
+              ),
+            ),
+            if (factors.isEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                child: Text(
+                  '暂无$colorName项目',
                   style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
                 ),
-              ],
-            ),
-          ),
-          if (factors.isEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-              child: Text(
-                '暂无$colorName项目',
-                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
-              ),
-            )
-          else
-            ..._buildTreeRows(theme, vm, colorName, factors, editable, query),
-          const SizedBox(height: 6),
-        ],
+              )
+            else
+              ..._buildTreeRows(theme, vm, colorName, factors, editable, query, exclusiveNamesById),
+            const SizedBox(height: 6),
+          ],
+        ),
       ),
     );
   }
 
   /// 色内树形行：大类 → 小类 → 高危因素叶子（可空层级自动上提）。
-  List<Widget> _buildTreeRows(ThemeData theme, ChildCreateViewModel vm, String colorName, List<BaseHighRiskFactor> factors, bool editable, String query) {
+  List<Widget> _buildTreeRows(ThemeData theme, ChildCreateViewModel vm, String colorName, List<BaseHighRiskFactor> factors, bool editable, String query, Map<String, List<String>> exclusiveNamesById) {
     // 大类 → 小类 → 叶子 分桶
     final categories = <String?, List<BaseHighRiskFactor>>{};
     for (final f in factors) {
@@ -376,7 +405,7 @@ class _ChildHighRiskFactorPanelState extends State<ChildHighRiskFactorPanel> {
           if (!expanded) continue;
         }
         for (final f in (hasCategory && !hasSub ? subBuckets[null] ?? const [] : subBuckets[subcategory] ?? const [])) {
-          rows.add(_factorRow(theme, vm, f, editable, hasCategory ? 1 : 0, hasSub && hasCategory ? 1 : 0, query));
+          rows.add(_factorRow(theme, vm, f, editable, hasCategory ? 1 : 0, hasSub && hasCategory ? 1 : 0, query, exclusiveNamesById));
         }
       }
     }
@@ -409,19 +438,15 @@ class _ChildHighRiskFactorPanelState extends State<ChildHighRiskFactorPanel> {
 
   /// 高危因素叶子行：复选框 + 名称（备注括号展示）+【...】备注菜单
   /// （仅黄/橙/红/紫；绿色为「无高危因素」等标记项，无备注）。
-  Widget _factorRow(ThemeData theme, ChildCreateViewModel vm, BaseHighRiskFactor factor, bool editable, int depth1, int depth2, String query) {
+  Widget _factorRow(ThemeData theme, ChildCreateViewModel vm, BaseHighRiskFactor factor, bool editable, int depth1, int depth2, String query, Map<String, List<String>> exclusiveNamesById) {
     final checked = vm.checkedHighRiskIds.contains(factor.id);
     final canToggle = vm.canToggleHighRisk(factor, editable: editable);
     final matched = query.isNotEmpty && factor.riskFactorName.toLowerCase().contains(query.toLowerCase());
     final remark = vm.highRiskRemarkOf(factor.id);
     final showRemarkMenu = factor.riskColor != null && factor.riskColor != '绿色';
     // 规则表互斥：该高危因素所属互斥组合的其他项名称（用于「互斥」标签
-    // 的悬停提示）
-    final exclusiveIds = vm.exclusiveHighRiskIdsOf(factor.id);
-    final exclusiveNames = [
-      for (final f in vm.highRiskDict)
-        if (exclusiveIds.contains(f.id)) f.riskFactorName,
-    ];
+    // 的悬停提示；整个面板构建期预计算一次，见 _exclusiveNamesById）
+    final exclusiveNames = exclusiveNamesById[factor.id] ?? const <String>[];
 
     final titleStyle = theme.textTheme.bodyMedium?.copyWith(
       fontWeight: matched ? FontWeight.bold : null,
@@ -439,26 +464,31 @@ class _ChildHighRiskFactorPanelState extends State<ChildHighRiskFactorPanel> {
       child: Row(
         children: [
           Expanded(
-            child: CheckboxListTile(
-              dense: true,
-              controlAffinity: ListTileControlAffinity.leading,
-              contentPadding: const EdgeInsets.only(right: 4),
-              value: checked,
-              onChanged: canToggle ? (v) => _onToggle(vm, factor, v ?? false) : null,
-              title: Text.rich(
-                TextSpan(
-                  text: factor.riskFactorName,
-                  style: titleStyle,
-                  children: [
-                    if (remark.isNotEmpty)
-                      TextSpan(
-                        text: '（$remark）',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          fontWeight: FontWeight.normal,
-                          color: theme.colorScheme.onSurfaceVariant,
+            // 搜索高亮/卡片背景与 ListTile 之间再隔一层透明 Material
+            // （行级装饰盒同理，见 _buildColorCard 注释）
+            child: Material(
+              type: MaterialType.transparency,
+              child: CheckboxListTile(
+                dense: true,
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: const EdgeInsets.only(right: 4),
+                value: checked,
+                onChanged: canToggle ? (v) => _onToggle(vm, factor, v ?? false) : null,
+                title: Text.rich(
+                  TextSpan(
+                    text: factor.riskFactorName,
+                    style: titleStyle,
+                    children: [
+                      if (remark.isNotEmpty)
+                        TextSpan(
+                          text: '（$remark）',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.normal,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
