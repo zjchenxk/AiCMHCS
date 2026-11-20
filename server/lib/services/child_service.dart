@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:common/model.dart';
 import 'package:server/database/engine/database_gateway.dart';
+import 'package:server/services/high_risk_factor_exclusion_service.dart';
 import 'package:server/utils/field_cipher.dart';
 import 'package:server/utils/uuid_util.dart';
 
@@ -749,12 +750,13 @@ class ChildService {
   /// 覆盖保存儿童勾选的高危因素集合（先删后插；随档案【保存】一并调用）。
   ///
   /// factorIds **先全量校验**高危因素字典行存在且属本院（跨院/缺失一律
-  /// 40001，校验失败时不执行删除，保留旧集合——不落半途状态），再行
-  /// 删除插入；RISK_FACTOR_CODE/NAME/COLOR/LEVEL/SCORE 取字典权威值
-  /// 落库为快照（字典项后续改名/改级不影响历史档案）；remark 为本次
-  /// 录入的备注（字典项自身无备注列），随选入行落 REMARK 列；绿色
-  /// 【无高危因素】特选项为纯界面标记，**不落库**（此处过滤兜底）；
-  /// 行主键为 `newUuid()`。
+  /// 40001，校验失败时不执行删除，保留旧集合——不落半途状态），再按
+  /// 互斥规则表（BASE_HIGH_RISK_FACTOR_EXCLUSION）校验同组不得多选
+  /// （冲突同样先于删除拒绝），最后删除插入；RISK_FACTOR_CODE/NAME/
+  /// COLOR/LEVEL/SCORE 取字典权威值落库为快照（字典项后续改名/改级不
+  /// 影响历史档案）；remark 为本次录入的备注（字典项自身无备注列），随
+  /// 选入行落 REMARK 列；绿色【无高危因素】特选项为纯界面标记，
+  /// **不落库**（此处过滤兜底）；行主键为 `newUuid()`。
   Future<void> _saveHighRiskFactors(String childId, List<({String factorId, String? remark})> selections, String creatorId, String creator, _ArchiveScope scope) async {
     // 先全量校验并解析字典快照（去重保序，过滤「无高危因素」标记项）
     final snapshots = <({String id, String code, String name, String? color, String? level, String? score, String? remark})>[];
@@ -778,6 +780,10 @@ class ChildService {
         remark: _optional(selection.remark, '备注', _remarkMaxLength),
       ));
     }
+
+    // 互斥规则兜底：同一条规则内的任意两项不得同时勾选（客户端勾选时
+    // 已自动清除冲突项，此处防多端并发/历史数据/直调接口绕过）
+    await _ensureNoHighRiskFactorExclusion(snapshots, scope.hospId);
 
     await _db.execute('DELETE FROM CHILD_HIGH_RISK_FACTOR WHERE CHILD_ID = ?', [childId]);
     for (final snapshot in snapshots) {
@@ -808,6 +814,30 @@ class ChildService {
           formatTimestamp(DateTime.now()),
         ],
       );
+    }
+  }
+
+  /// 校验本次勾选集合未违反互斥规则（BASE_HIGH_RISK_FACTOR_EXCLUSION）：
+  /// 同一规则（2 或 3 项的无序组合）内不得同时勾选，冲突时抛 40001 并
+  /// 列出冲突项名称。规则按医院隔离且量小（数十条量级），复用
+  /// [HighRiskFactorExclusionService.listByHospital] 读取后在应用侧比较，
+  /// 无需在 SQL 中拼组合条件。
+  Future<void> _ensureNoHighRiskFactorExclusion(
+    List<({String id, String code, String name, String? color, String? level, String? score, String? remark})> snapshots,
+    String hospId,
+  ) async {
+    if (snapshots.length < 2) {
+      return;
+    }
+    final selectedIds = {for (final s in snapshots) s.id};
+    final nameOf = {for (final s in snapshots) s.id: s.name};
+    final rules = await HighRiskFactorExclusionService(_db).listByHospital(hospId);
+    for (final rule in rules) {
+      final hits = rule.riskFactorIds.where(selectedIds.contains).toList();
+      if (hits.length >= 2) {
+        final names = hits.map((id) => nameOf[id] ?? id).join('、');
+        throw ChildException(400, 40001, '高危因素互斥，不能同时选择：$names');
+      }
     }
   }
 

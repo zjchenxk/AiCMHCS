@@ -289,11 +289,27 @@ CREATE TABLE BASE_HIGH_RISK_FACTOR (
   CREATE_TIME TEXT NOT NULL,
   UPDATE_TIME TEXT
 )''');
+    await db.executeDirect('''
+CREATE TABLE BASE_HIGH_RISK_FACTOR_EXCLUSION (
+  ID TEXT PRIMARY KEY NOT NULL,
+  FIRST_RISK_FACTOR_ID TEXT NOT NULL,
+  SECOND_RISK_FACTOR_ID TEXT NOT NULL,
+  THIRD_RISK_FACTOR_ID TEXT,
+  CREATOR_ID TEXT NOT NULL,
+  CREATOR_NAME TEXT NOT NULL,
+  HOSP_ID TEXT NOT NULL,
+  HOSP_NAME TEXT NOT NULL,
+  CREATE_TIME TEXT NOT NULL,
+  UPDATE_TIME TEXT
+)''');
     // 高危因素字典种子：本院两行（绿/红）+ 跨院一行
     for (final entry in [
       {'id': 'HRF-1', 'code': '01990001', 'name': '无母亲及胎儿、新生儿的高危因素', 'color': '绿色', 'level': null, 'score': null, 'hosp': '1'},
       {'id': 'HRF-2', 'code': '04990001', 'name': '妊娠期高血压', 'color': '红色', 'level': 'Ⅱ', 'score': '85', 'hosp': '1'},
       {'id': 'HRF-3', 'code': '02990001', 'name': '低出生体重', 'color': '黄色', 'level': 'Ⅰ', 'score': '60', 'hosp': '1'},
+      {'id': 'HRF-4', 'code': '02990002', 'name': '早产(出生胎龄34-37周)', 'color': '黄色', 'level': 'Ⅰ', 'score': '60', 'hosp': '1'},
+      {'id': 'HRF-5', 'code': '03990001', 'name': '早产(出生胎龄32-34周)', 'color': '橙色', 'level': 'Ⅱ', 'score': '80', 'hosp': '1'},
+      {'id': 'HRF-6', 'code': '04990002', 'name': '早产(出生胎龄<32周，尤其<28周早产儿)', 'color': '红色', 'level': 'Ⅲ', 'score': '95', 'hosp': '1'},
       {'id': 'HRF-9', 'code': '04990001', 'name': '妊娠期高血压（跨院）', 'color': '红色', 'level': 'Ⅱ', 'score': '85', 'hosp': '2'},
     ]) {
       await db.execute(
@@ -315,6 +331,13 @@ CREATE TABLE BASE_HIGH_RISK_FACTOR (
         ],
       );
     }
+    // 互斥规则种子：早产三个胎龄段（黄/橙/红）三选一
+    await db.execute(
+      'INSERT INTO BASE_HIGH_RISK_FACTOR_EXCLUSION (ID, FIRST_RISK_FACTOR_ID, '
+      'SECOND_RISK_FACTOR_ID, THIRD_RISK_FACTOR_ID, CREATOR_ID, CREATOR_NAME, '
+      'HOSP_ID, HOSP_NAME, CREATE_TIME) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ['EX-1', 'HRF-4', 'HRF-5', 'HRF-6', '9', '张医生', '1', '示例人民医院', '2026-11-20 10:00:00'],
+    );
     service = ChildService(db, cipher);
   });
 
@@ -970,5 +993,51 @@ CREATE TABLE BASE_HIGH_RISK_FACTOR (
     // 删除档案 → 高危因素记录级联删除
     expect(await service.delete(childId, '1'), 1);
     expect(await service.listHighRiskFactors(childId, '1'), isEmpty);
+  });
+
+  test('高危因素互斥：同组多选拒绝且保留旧集合，不同组可并存', () async {
+    final created = await service.create(
+      child: buildChild(),
+      highRiskFactors: const [(factorId: 'HRF-4', remark: null)],
+      creatorId: '9',
+      creatorName: '张医生',
+      hospId: '1',
+      hospName: '示例人民医院',
+    );
+    final childId = created.$1.id;
+    expect(await service.listHighRiskFactors(childId, '1'), hasLength(1));
+
+    // 同组（早产三选一）两项同时提交 → 40001，提示含互斥项名称
+    await expectLater(
+      service.update(
+        id: childId,
+        child: buildChild(),
+        highRiskFactors: const [(factorId: 'HRF-4', remark: null), (factorId: 'HRF-6', remark: null)],
+        hospId: '1',
+      ),
+      throwsA(isA<ChildException>().having((e) => e.message, 'message', allOf(contains('互斥'), contains('早产')))),
+    );
+    // 拒绝后保留旧集合（校验先于删除，不落半途状态）
+    final kept = await service.listHighRiskFactors(childId, '1');
+    expect(kept, hasLength(1));
+    expect(kept.first.highRiskFactorId, 'HRF-4');
+
+    // 同组只选其一 → 放行（可切换为组内另一项）
+    await service.update(
+      id: childId,
+      child: buildChild(),
+      highRiskFactors: const [(factorId: 'HRF-6', remark: null)],
+      hospId: '1',
+    );
+    expect((await service.listHighRiskFactors(childId, '1')).single.highRiskFactorId, 'HRF-6');
+
+    // 不同组互不影响：早产项 + 妊娠期高血压可并存
+    await service.update(
+      id: childId,
+      child: buildChild(),
+      highRiskFactors: const [(factorId: 'HRF-6', remark: null), (factorId: 'HRF-2', remark: null)],
+      hospId: '1',
+    );
+    expect(await service.listHighRiskFactors(childId, '1'), hasLength(2));
   });
 }

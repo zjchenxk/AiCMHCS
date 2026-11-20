@@ -3,6 +3,7 @@ import 'package:client/utils/captured_photo.dart';
 import 'package:client/utils/relative_time.dart';
 import 'package:client/services/admin_divisions_service.dart';
 import 'package:client/services/child_service.dart';
+import 'package:client/services/high_risk_factor_exclusion_service.dart';
 import 'package:client/services/high_risk_factor_service.dart';
 import 'package:client/services/menu_service.dart';
 import 'package:client/utils/log_helper.dart';
@@ -23,7 +24,7 @@ enum ChildFormMode { empty, browse, create, edit }
 /// 各自持控制器，【保存】时由页面收集表单数据经 [save] 整单提交；
 /// 监护人行的增删改仅操作本地列表（不做权限控制），随整单保存一并
 /// 入库；高危因素勾选集合亦随整单保存（绿色「无高危因素」与其余四色
-/// 互斥）。
+/// 互斥；同一互斥规则内的项目只能选其一，勾选时自动清除冲突项）。
 class ChildCreateViewModel extends ChangeNotifier {
   /// 构造函数：可选注入服务（缺省经服务定位器取，便于测试覆写）。
   ChildCreateViewModel({
@@ -31,10 +32,12 @@ class ChildCreateViewModel extends ChangeNotifier {
     MenuService? menuService,
     AdminDivisionsService? adminDivisionsService,
     HighRiskFactorService? highRiskFactorService,
+    HighRiskFactorExclusionService? highRiskFactorExclusionService,
   }) : _childService = childService ?? getIt<ChildService>(),
        _menuService = menuService ?? getIt<MenuService>(),
        _divisionsService = adminDivisionsService ?? getIt<AdminDivisionsService>(),
-       _highRiskFactorService = highRiskFactorService ?? getIt<HighRiskFactorService>();
+       _highRiskFactorService = highRiskFactorService ?? getIt<HighRiskFactorService>(),
+       _highRiskFactorExclusionService = highRiskFactorExclusionService ?? getIt<HighRiskFactorExclusionService>();
 
   final ChildService _childService;
 
@@ -43,6 +46,8 @@ class ChildCreateViewModel extends ChangeNotifier {
   final AdminDivisionsService _divisionsService;
 
   final HighRiskFactorService _highRiskFactorService;
+
+  final HighRiskFactorExclusionService _highRiskFactorExclusionService;
 
   // ---------------- 操作权限（SYS_MENU 操作项 ITEM_CODE） ----------------
 
@@ -485,6 +490,43 @@ class ChildCreateViewModel extends ChangeNotifier {
     return null;
   }
 
+  /// 互斥规则映射：高危因素 ID → 与其互斥（不能同时勾选）的其他 ID 集合
+  /// （由 BASE_HIGH_RISK_FACTOR_EXCLUSION 的无序组合展开）。
+  final Map<String, Set<String>> _exclusionMap = {};
+
+  /// 与指定高危因素互斥的其他高危因素 ID 集合（无规则时为空集）。
+  Set<String> exclusiveHighRiskIdsOf(String factorId) => Set.unmodifiable(_exclusionMap[factorId] ?? const <String>{});
+
+  /// 加载本院高危因素互斥规则并展开为「ID → 互斥 ID 集合」映射。
+  ///
+  /// 失败时清空映射（互斥降级为仅「无高危因素」标记规则，不影响其余
+  /// 功能），记日志不抛出。
+  Future<void> _loadHighRiskExclusions() async {
+    _exclusionMap.clear();
+    try {
+      final rules = await _highRiskFactorExclusionService.queryAll();
+      for (final rule in rules) {
+        final ids = rule.riskFactorIds;
+        for (final id in ids) {
+          _exclusionMap.putIfAbsent(id, () => {}).addAll(ids.where((other) => other != id));
+        }
+      }
+    } catch (e, st) {
+      LogHelper.error('client:ChildCreateViewModel.loadHighRiskExclusions', e, st);
+    }
+  }
+
+  /// 勾选 [factorId] 前清除同一互斥规则下其他已勾选项及其备注（自动
+  /// 清除而非灰化禁用；备注依附于选中项，随清除一并移除）。
+  void _clearExclusiveSelections(String factorId) {
+    final conflicts = _exclusionMap[factorId];
+    if (conflicts == null || conflicts.isEmpty) return;
+    for (final id in conflicts) {
+      _checkedHighRiskIds.remove(id);
+      _highRiskRemarks.remove(id);
+    }
+  }
+
   /// 无勾选时默认勾选绿色【无母亲及胎儿、新生儿的高危因素】（新增态
   /// 与浏览态「库内无高危因素记录」共用；已有勾选或字典未加载/未配置
   /// 该项时不做任何事——用户手动取消后可保持空选）。
@@ -518,9 +560,9 @@ class ChildCreateViewModel extends ChangeNotifier {
   /// [toggleHighRiskFactor]）。
   bool canToggleHighRisk(BaseHighRiskFactor factor, {required bool editable}) => editable;
 
-  /// 加载高危因素数据：字典全量清单 + 当前儿童已保存的勾选与备注（浏览/
-  /// 修改态回显）；无已保存记录（新增态或库内为空）时默认勾选绿色
-  /// 【无母亲及胎儿、新生儿的高危因素】。
+  /// 加载高危因素数据：字典全量清单 + 本院互斥规则 + 当前儿童已保存的
+  /// 勾选与备注（浏览/修改态回显）；无已保存记录（新增态或库内为空）时
+  /// 默认勾选绿色【无母亲及胎儿、新生儿的高危因素】。
   Future<void> loadHighRiskData() async {
     try {
       _highRiskDict = await _highRiskFactorService.queryAll();
@@ -528,6 +570,7 @@ class ChildCreateViewModel extends ChangeNotifier {
       LogHelper.error('client:ChildCreateViewModel.loadHighRiskData(dict)', e, st);
       _highRiskDict = const [];
     }
+    await _loadHighRiskExclusions();
     final id = currentChildId;
     _checkedHighRiskIds.clear();
     _highRiskRemarks.clear();
@@ -560,13 +603,15 @@ class ChildCreateViewModel extends ChangeNotifier {
     ];
   }
 
-  /// 切换某高危因素的勾选状态（互斥规则：勾选绿色「无高危因素」清空
-  /// 其余四色；勾选其余四色任一项则取消绿色「无高危因素」）。
-  /// 切换某高危因素的勾选状态（互斥规则：勾选绿色「无高危因素」清空
-  /// 其余四色勾选；勾选其余四色任一项则取消绿色「无高危因素」）。
+  /// 切换某高危因素的勾选状态。
+  ///
+  /// 互斥规则两层：① 界面标记规则——勾选绿色「无高危因素」清空其余四色
+  /// 勾选，勾选其余四色任一项则取消该标记项；② 规则表规则——勾选某项时
+  /// 自动清除同一互斥组合（BASE_HIGH_RISK_FACTOR_EXCLUSION，可含 2 或 3
+  /// 项）内已勾选的其他项（如早产三个胎龄段三选一）。
   ///
   /// 取消勾选时同步清除该项已录入的备注（备注依附于选中项）；互斥清除
-  /// 四色勾选时同样清除其备注，避免残留数据。
+  /// 时同样清除被清除项的备注，避免残留数据。
   void toggleHighRiskFactor(BaseHighRiskFactor factor, bool checked) {
     final none = _noneFactor;
     final isNone = none != null && factor.id == none.id;
@@ -578,30 +623,32 @@ class ChildCreateViewModel extends ChangeNotifier {
         ..clear()
         ..add(factor.id);
       _highRiskRemarks.clear();
-    } else if (factor.riskColor != '绿色') {
-      if (none != null) {
+    } else {
+      if (factor.riskColor != '绿色' && none != null) {
         _checkedHighRiskIds.remove(none.id);
       }
-      _checkedHighRiskIds.add(factor.id);
-    } else {
+      _clearExclusiveSelections(factor.id);
       _checkedHighRiskIds.add(factor.id);
     }
     notifyListeners();
   }
 
   /// 快速新增高危因素成功后：刷新字典清单并自动勾选新增项（保留其余
-  /// 已勾选项；新增项为黄/橙/红/紫时按互斥规则清除绿色「无高危因素」）。
+  /// 已勾选项；新增项为黄/橙/红/紫时按互斥规则清除绿色「无高危因素」，
+  /// 并清除规则表中与其互斥的已勾选项——新增项 ID 通常尚无规则，兜底
+  /// 防字典值复用时残留冲突）。
   void addCreatedFactor(BaseHighRiskFactor factor) {
     if (!_highRiskDict.any((f) => f.id == factor.id)) {
       _highRiskDict = [..._highRiskDict, factor];
     }
-    _checkedHighRiskIds.add(factor.id);
     if (factor.riskColor != null && factor.riskColor != '绿色') {
       final none = _noneFactor;
       if (none != null) {
         _checkedHighRiskIds.remove(none.id);
       }
     }
+    _clearExclusiveSelections(factor.id);
+    _checkedHighRiskIds.add(factor.id);
     notifyListeners();
   }
 

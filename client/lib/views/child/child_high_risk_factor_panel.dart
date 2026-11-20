@@ -13,7 +13,9 @@ import 'package:provider/provider.dart';
 /// （按编码+名称排序），每个高危因素带复选框勾选（随整单保存）。
 ///
 /// 互斥规则：勾选绿色【无母亲及胎儿、新生儿的高危因素】时自动清除其余
-/// 四色勾选（该标记项不落库）；勾选其余四色任一项时自动取消该标记项。
+/// 四色勾选（该标记项不落库）；勾选其余四色任一项时自动取消该标记项；
+/// 另按高危因素互斥规则表（BASE_HIGH_RISK_FACTOR_EXCLUSION）自动清除
+/// 同组已勾选项（如早产不同胎龄段三选一），清除结果以 SnackBar 告知。
 /// 顶部工具栏（搜索 / 计数 / 下一个 / 五色快速导航 / 新增）固定不随
 /// 列表滚动；搜索命中项高亮并可循环定位，清空搜索词恢复。
 /// 黄/橙/红/紫卡片每项末尾提供【...】菜单（备注编辑），备注显示在名称
@@ -246,7 +248,7 @@ class _ChildHighRiskFactorPanelState extends State<ChildHighRiskFactorPanel> {
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
-                      '勾选的高危因素随【保存】一并入库；绿色【无高危因素】与其余四色互斥且不入库',
+                      '勾选的高危因素随【保存】一并入库；绿色【无高危因素】与其余四色互斥且不入库；带【互斥】标签的项目同组只能选其一（勾选时自动取消同组已选项）',
                       style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
                     ),
                   ),
@@ -413,6 +415,13 @@ class _ChildHighRiskFactorPanelState extends State<ChildHighRiskFactorPanel> {
     final matched = query.isNotEmpty && factor.riskFactorName.toLowerCase().contains(query.toLowerCase());
     final remark = vm.highRiskRemarkOf(factor.id);
     final showRemarkMenu = factor.riskColor != null && factor.riskColor != '绿色';
+    // 规则表互斥：该高危因素所属互斥组合的其他项名称（用于「互斥」标签
+    // 的悬停提示）
+    final exclusiveIds = vm.exclusiveHighRiskIdsOf(factor.id);
+    final exclusiveNames = [
+      for (final f in vm.highRiskDict)
+        if (exclusiveIds.contains(f.id)) f.riskFactorName,
+    ];
 
     final titleStyle = theme.textTheme.bodyMedium?.copyWith(
       fontWeight: matched ? FontWeight.bold : null,
@@ -435,7 +444,7 @@ class _ChildHighRiskFactorPanelState extends State<ChildHighRiskFactorPanel> {
               controlAffinity: ListTileControlAffinity.leading,
               contentPadding: const EdgeInsets.only(right: 4),
               value: checked,
-              onChanged: canToggle ? (v) => vm.toggleHighRiskFactor(factor, v ?? false) : null,
+              onChanged: canToggle ? (v) => _onToggle(vm, factor, v ?? false) : null,
               title: Text.rich(
                 TextSpan(
                   text: factor.riskFactorName,
@@ -454,6 +463,17 @@ class _ChildHighRiskFactorPanelState extends State<ChildHighRiskFactorPanel> {
               ),
             ),
           ),
+          if (exclusiveNames.isNotEmpty)
+            Tooltip(
+              message: '互斥项：${exclusiveNames.join('、')}（勾选本项将自动取消对方）',
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  '互斥',
+                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+              ),
+            ),
           if (showRemarkMenu)
             IconButton(
               // 仅该高危因素被选中（且处于录入态）时可用；未选中灰化禁用。
@@ -471,6 +491,29 @@ class _ChildHighRiskFactorPanelState extends State<ChildHighRiskFactorPanel> {
         ],
       ),
     );
+  }
+
+  /// 勾选/取消勾选：勾选前先记录将被规则表互斥自动清除的已选项，勾选后
+  /// 以 SnackBar 告知（互斥为「自动清除」而非灰化禁用，用户需要知道哪
+  /// 一项被取消）。
+  void _onToggle(ChildCreateViewModel vm, BaseHighRiskFactor factor, bool checked) {
+    final cleared = <String>[];
+    if (checked) {
+      final conflicts = vm.exclusiveHighRiskIdsOf(factor.id);
+      if (conflicts.isNotEmpty) {
+        for (final f in vm.highRiskDict) {
+          if (conflicts.contains(f.id) && vm.checkedHighRiskIds.contains(f.id)) {
+            cleared.add(f.riskFactorName);
+          }
+        }
+      }
+    }
+    vm.toggleHighRiskFactor(factor, checked);
+    if (cleared.isNotEmpty && mounted) {
+      ScaffoldMessenger.of(context)
+        ..removeCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('已自动取消互斥项：${cleared.join('、')}')));
+    }
   }
 
   /// 备注编辑：弹出对话框（回填已有备注），确定后写入 VM 并刷新列表展示。

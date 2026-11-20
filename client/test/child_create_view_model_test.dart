@@ -4,6 +4,7 @@
 // 列表增删改（不做权限控制）。
 import 'package:client/services/admin_divisions_service.dart';
 import 'package:client/services/child_service.dart';
+import 'package:client/services/high_risk_factor_exclusion_service.dart';
 import 'package:client/services/high_risk_factor_service.dart';
 import 'package:client/services/menu_service.dart';
 import 'package:client/view_models/child/child_create_view_model.dart';
@@ -149,6 +150,14 @@ class FakeHighRiskFactorService extends HighRiskFactorService {
   }
 }
 
+/// 内存版高危因素互斥规则服务：规则清单可预置。
+class FakeHighRiskFactorExclusionService extends HighRiskFactorExclusionService {
+  List<BaseHighRiskFactorExclusion> rules = const [];
+
+  @override
+  Future<List<BaseHighRiskFactorExclusion>> queryAll() async => rules;
+}
+
 ChildInfo _child(String id) => ChildInfo(
   id: id,
   checkTime: '2026-11-14 09:30:00',
@@ -183,6 +192,7 @@ ChildCreateViewModel _buildViewModel({
   required Set<String> operationCodes,
   FakeChildService? childService,
   FakeHighRiskFactorService? highRiskFactorService,
+  FakeHighRiskFactorExclusionService? highRiskFactorExclusionService,
 }) {
   final menu = FakeMenuService(operationCodes);
   final child = childService ?? FakeChildService();
@@ -191,6 +201,7 @@ ChildCreateViewModel _buildViewModel({
     menuService: menu,
     adminDivisionsService: FakeAdminDivisionsService(),
     highRiskFactorService: highRiskFactorService ?? FakeHighRiskFactorService(),
+    highRiskFactorExclusionService: highRiskFactorExclusionService ?? FakeHighRiskFactorExclusionService(),
   );
 }
 
@@ -472,6 +483,81 @@ void main() {
     expect(vm.checkedHighRiskIds, isEmpty);
     await vm.save(child: _child('1'));
     expect(childService.lastHighRiskFactors, isEmpty);
+  });
+
+  test('高危因素规则表互斥：同组三选一自动清除冲突项与备注，组外项不受影响', () async {
+    BaseHighRiskFactor factor(String id, String color, String name) => BaseHighRiskFactor(
+      id: id,
+      riskFactorCode: 'CODE-$id',
+      riskFactorName: name,
+      riskColor: color,
+      creatorId: '1',
+      creatorName: '系统管理员',
+      hospId: '1',
+      hospName: '示例人民医院',
+    );
+    BaseHighRiskFactorExclusion rule(String id, String first, String second, [String? third]) => BaseHighRiskFactorExclusion(
+      id: id,
+      firstRiskFactorId: first,
+      secondRiskFactorId: second,
+      thirdRiskFactorId: third,
+      creatorId: '1',
+      creatorName: '系统管理员',
+      hospId: '1',
+      hospName: '示例人民医院',
+    );
+    final dict = [
+      factor('G1', '绿色', ChildCreateViewModel.noneHighRiskFactorName),
+      factor('Y1', '黄色', '早产(出生胎龄34-37周)'),
+      factor('O1', '橙色', '早产(出生胎龄32-34周)'),
+      factor('R1', '红色', '早产(出生胎龄<32周，尤其<28周早产儿)'),
+      factor('Y2', '黄色', '低出生体重'),
+    ];
+    final riskService = FakeHighRiskFactorService()..dict = dict;
+    final exclusionService = FakeHighRiskFactorExclusionService()..rules = [rule('EX-1', 'Y1', 'O1', 'R1')];
+    final childService = FakeChildService();
+
+    final vm = _buildViewModel(
+      operationCodes: {ChildCreateViewModel.opCreate},
+      childService: childService,
+      highRiskFactorService: riskService,
+      highRiskFactorExclusionService: exclusionService,
+    );
+    await vm.startCreate();
+    await vm.loadHighRiskData();
+
+    // 规则展开：组内三项互为互斥，组外项无互斥
+    expect(vm.exclusiveHighRiskIdsOf('Y1'), {'O1', 'R1'});
+    expect(vm.exclusiveHighRiskIdsOf('O1'), {'Y1', 'R1'});
+    expect(vm.exclusiveHighRiskIdsOf('R1'), {'Y1', 'O1'});
+    expect(vm.exclusiveHighRiskIdsOf('Y2'), isEmpty);
+
+    // 默认勾选绿色「无高危因素」→ 勾黄色早产项时清除它
+    expect(vm.checkedHighRiskIds, {'G1'});
+    vm.toggleHighRiskFactor(dict[1], true); // 黄 34-37 周
+    expect(vm.checkedHighRiskIds, {'Y1'});
+    vm.setHighRiskRemark('Y1', '需随访');
+
+    // 勾橙色 → 黄色被自动清除，其备注一并清除
+    vm.toggleHighRiskFactor(dict[2], true);
+    expect(vm.checkedHighRiskIds, {'O1'});
+    expect(vm.highRiskRemarkOf('Y1'), isEmpty, reason: '互斥清除时备注同步清理');
+
+    // 勾红色 → 橙色被自动清除
+    vm.toggleHighRiskFactor(dict[3], true);
+    expect(vm.checkedHighRiskIds, {'R1'});
+
+    // 组外项可并存；切回组内另一项只清除组内冲突项
+    vm.toggleHighRiskFactor(dict[4], true); // 低出生体重（组外）
+    vm.toggleHighRiskFactor(dict[1], true); // 黄 34-37 周 → 红色被清除
+    expect(vm.checkedHighRiskIds, {'Y1', 'Y2'});
+    expect(vm.savedHighRiskCount, 2);
+
+    // 保存透传最终集合（冲突项不出现）
+    await vm.save(child: _child(''));
+    final savedIds = childService.lastHighRiskFactors!.map((f) => f.factorId).toList();
+    expect(savedIds, containsAll(['Y1', 'Y2']));
+    expect(savedIds, isNot(contains('R1')));
   });
 
   test('浏览态：库内无高危因素记录默认勾选绿色无高危因素，有记录按库回显（含备注）', () async {
