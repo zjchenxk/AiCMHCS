@@ -1,6 +1,6 @@
-# AiCMHCS · 智慧儿童心理保健系统
+# AiCMHCS · 智慧儿童孤独症管理系统
 
-> Smart Children Mental Health Care System（英文简写 **AiCMHCS**）
+> Smart Children Autism Management System（项目代号沿用 **AiCMHCS**）
 > Flutter Web 前端 + Dart Frog 后端 + 达梦 DM8 数据库的开发框架骨架，
 > 已内置用户登录全链路（登录界面 → 登录 API → 数据库校验 → 会话令牌）。
 

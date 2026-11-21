@@ -85,36 +85,10 @@ class HighRiskAutoScreening {
     '先天性心脏病': '先天性心脏病，尚不需要特殊护理和治疗',
   };
 
-  /// 自动筛查管理全集：所有可能被本类命中/清除的高危因素名称（映射
-  /// 目标并集）。ViewModel 重算时对集合内未命中的项一律取消勾选——
-  /// 需求口径为「条件不成立应清除其选择」，不区分当初勾选来源。
-  static final Set<String> managedFactorNames = {
-    preterm3437,
-    preterm3234,
-    pretermLt32,
-    weightGt4000,
-    weight20002500,
-    weightLt2000,
-    asphyxia47,
-    asphyxiaLe3,
-    hemorrhage12,
-    hemorrhage3,
-    sgaAsymmetric,
-    sgaSymmetric,
-    '有不良妊娠结局及分娩史',
-    '因不孕不育行辅助医学技术受孕等',
-    '妊娠期糖尿病',
-    '妊娠期高血压疾病',
-    'TORCH感染',
-    '甲状腺疾病',
-    '感染人类免疫缺陷病毒、梅毒螺旋体及乙肝病毒',
-    '高龄(初产>35岁，经产>40岁)或年龄<18岁',
-    '未婚先孕或受虐、吸毒等',
-    ...birthDefectFactorByName.values,
-  };
-
   /// 计算当前扩展信息应自动勾选的高危因素名称集合（未列出的触发条件
-  /// 一律不命中，由调用方清除此前自动勾选的项）。
+  /// 一律不命中）。调用方（ViewModel）跟踪每次命中的 ID：条件不再满足
+  /// 时仅清除**由筛查自动勾选**的项——用户手动勾选的项不受筛查影响，
+  /// 可自由勾选并随档案保存（需求 2026-11-21 明确）。
   static Set<String> targetFactorNames(ChildExtInfo ext) {
     final names = <String>{};
 

@@ -16,12 +16,9 @@ import 'package:provider/provider.dart';
 /// 覆盖）。字段：姓名/关系必填，证件/国籍/民族/文化程度/职业走数据
 /// 字典（0101001/0101002/0101004/0101005/0101006/0101007）。
 class ChildGuardianPanel extends StatefulWidget {
-  const ChildGuardianPanel({super.key, required this.viewModel, required this.editable});
+  const ChildGuardianPanel({super.key, required this.viewModel});
 
   final ChildCreateViewModel viewModel;
-
-  /// 是否可编辑（新增/修改录入态）。
-  final bool editable;
 
   @override
   State<ChildGuardianPanel> createState() => ChildGuardianPanelState();
@@ -29,6 +26,10 @@ class ChildGuardianPanel extends StatefulWidget {
 
 class ChildGuardianPanelState extends State<ChildGuardianPanel> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+
+  /// 当前是否可编辑（build 时由 VM 计算；回调方法据此门控——页面缓存
+  /// 子树后不再传入 editable，切修改态仅本面板随 watch 重建）。
+  bool _editable = false;
 
   /// 正在编辑的工作列表行下标（null = 新增行）。
   int? _editingIndex;
@@ -110,7 +111,7 @@ class ChildGuardianPanelState extends State<ChildGuardianPanel> {
 
   /// 校验并把右侧表单加入/更新到监护人工作列表。
   void _submitRow() {
-    if (!widget.editable) return;
+    if (!_editable) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final vm = widget.viewModel;
     final existing = _editingIndex != null && _editingIndex! < vm.guardians.length ? vm.guardians[_editingIndex!] : null;
@@ -146,7 +147,9 @@ class ChildGuardianPanelState extends State<ChildGuardianPanel> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final vm = context.watch<ChildCreateViewModel>();
-    final editable = widget.editable;
+    // 可编辑性经 VM 自行计算（页面缓存子树后不再传入）
+    _editable = vm.creating || vm.editing;
+    final editable = _editable;
     final guardians = vm.guardians;
 
     // 纵向滚动容器：右侧表单字段较多，低窗口下可能超过 Tab 视口高度
@@ -455,7 +458,7 @@ class ChildGuardianPanelState extends State<ChildGuardianPanel> {
   }
 
   Future<void> _pickDate(TextEditingController controller, String label) async {
-    if (!widget.editable) return;
+    if (!_editable) return;
     final current = DateTime.tryParse(controller.text.trim()) ?? getIt<TimeService>().now();
     final picked = await showDatePicker(context: context, initialDate: current, firstDate: DateTime(1900), lastDate: DateTime(2100), helpText: '选择$label');
     if (picked == null) return;

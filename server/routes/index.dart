@@ -6,7 +6,7 @@ Response onRequest(RequestContext context) {
       'code': 0,
       'message': 'ok',
       'data': {
-        'name': '智慧儿童心理保健系统',
+        'name': '智慧儿童孤独症管理系统',
         'abbr': 'AiCMHCS',
         'version': '0.1.0',
         'backend': 'Dart Frog',

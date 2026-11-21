@@ -14,24 +14,22 @@ import 'package:provider/provider.dart';
 /// 儿童「基本信息」Tab 表单：分「基本信息」（建档/出生/证件/保健号/
 /// 居住地址五级级联，编码自动取最深一级行政区划代码）与「拍照」
 /// （320×320 头像框，点击打开拍照对话框，移除仅清除当天记录）两小节；
-/// 三态共用（浏览只读、新增/修改可编辑）；暴露
+/// 三态共用（浏览只读、新增/修改可编辑——可编辑性经 VM 自行计算，切
+/// 修改态不重建表单 State）；暴露
 /// [ChildBasicInfoFormState.validate] 与 [ChildBasicInfoFormState.collect]
 /// 供页面整单保存。
 class ChildBasicInfoForm extends StatefulWidget {
-  const ChildBasicInfoForm({super.key, required this.viewModel, required this.editable, this.onSubmit, this.onCapturePhoto, this.onRemovePhoto});
+  const ChildBasicInfoForm({super.key, required this.viewModel, this.onSubmit, this.onCapturePhoto, this.onRemovePhoto});
 
   final ChildCreateViewModel viewModel;
 
-  /// 是否可编辑（新增/修改录入态）。
-  final bool editable;
-
-  /// 末框回车提交（整单保存）。
+  /// 末框回车提交（整单保存；仅录入态会触发——末框浏览态禁用）。
   final VoidCallback? onSubmit;
 
-  /// 点击头像打开拍照对话框（浏览态传 null 禁用）。
+  /// 点击头像打开拍照对话框（表单内部按编辑态门控）。
   final VoidCallback? onCapturePhoto;
 
-  /// 点击移除（浏览态传 null 禁用）。
+  /// 点击移除（表单内部按编辑态门控）。
   final VoidCallback? onRemovePhoto;
 
   @override
@@ -40,6 +38,9 @@ class ChildBasicInfoForm extends StatefulWidget {
 
 class ChildBasicInfoFormState extends State<ChildBasicInfoForm> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+
+  /// 当前是否可编辑（build 时由 VM 计算；回调方法据此门控）。
+  bool _editable = false;
 
   // 字段登记（按表单顺序，校验失败滚动定位 + 输入框聚焦）
   final Map<GlobalKey<FormFieldState<String>>, FocusNode?> _fields = {};
@@ -211,7 +212,7 @@ class ChildBasicInfoFormState extends State<ChildBasicInfoForm> {
 
   /// 只读日期框点击弹出日期选择（建档时间与出生日期均为纯日期）。
   Future<void> _pickDate({required TextEditingController controller, required String label}) async {
-    if (!widget.editable) return;
+    if (!_editable) return;
     // 已填值（兼容存量带时刻格式）解析失败时回退当天，保证弹窗可用。
     final text = controller.text.trim();
     final initial = DateTime.tryParse(text.length >= 10 ? text.substring(0, 10) : text) ?? getIt<TimeService>().now();
@@ -229,11 +230,12 @@ class ChildBasicInfoFormState extends State<ChildBasicInfoForm> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    // 页面为消除 TAB 切换卡顿按表单身份缓存了子树，本表单不再依赖
-    // 页面级重建——自行 watch VM，照片头像/拍照时间/地址码等 VM 驱动
-    // 显示在 VM 通知后即时刷新
+    // 页面为消除 TAB 切换/修改态切换卡顿按表单身份缓存了子树，本表单
+    // 不再依赖页面级重建——自行 watch VM，可编辑性、照片头像/拍照时间/
+    // 地址码等 VM 驱动显示在 VM 通知后即时刷新
     final vm = context.watch<ChildCreateViewModel>();
-    final editable = widget.editable;
+    _editable = vm.creating || vm.editing;
+    final editable = _editable;
     final base = vm.child;
 
     // 居住地址编码随五级级联选择实时回填（取最深一级的行政区划编码）；
@@ -555,7 +557,7 @@ class ChildBasicInfoFormState extends State<ChildBasicInfoForm> {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         GestureDetector(
-          onTap: widget.onCapturePhoto,
+          onTap: _editable ? widget.onCapturePhoto : null,
           child: Container(
             width: 320,
             height: 320,
@@ -578,13 +580,13 @@ class ChildBasicInfoFormState extends State<ChildBasicInfoForm> {
                 : Icon(
                     Icons.photo_camera_outlined,
                     size: 64,
-                    color: theme.colorScheme.onSurfaceVariant.withValues(alpha: widget.onCapturePhoto != null ? 0.7 : 0.35),
+                    color: theme.colorScheme.onSurfaceVariant.withValues(alpha: _editable ? 0.7 : 0.35),
                   ),
           ),
         ),
         const SizedBox(height: 6),
         Text(
-          widget.onCapturePhoto != null ? '点击头像拍照（320×320）' : '拍照（320×320）',
+          _editable ? '点击头像拍照（320×320）' : '拍照（320×320）',
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
           ),
@@ -603,7 +605,7 @@ class ChildBasicInfoFormState extends State<ChildBasicInfoForm> {
           TextButton.icon(
             icon: const Icon(Icons.delete_outline, size: 16),
             label: Text('移除', style: theme.textTheme.bodyMedium),
-            onPressed: widget.onRemovePhoto,
+            onPressed: _editable ? widget.onRemovePhoto : null,
           ),
         ],
       ],
@@ -635,7 +637,7 @@ class ChildBasicInfoFormState extends State<ChildBasicInfoForm> {
     String? Function(T?)? validator,
     required ValueChanged<T?> onChanged,
   }) {
-    final canEdit = widget.editable && items.isNotEmpty;
+    final canEdit = _editable && items.isNotEmpty;
     // 初值必须落在 items 内（行政区划对象按实例判等），否则
     // DropdownButtonFormField 断言崩溃；失配时回退 hint（如列表重建后
     // 选中对象尚待级联回显的过渡帧）

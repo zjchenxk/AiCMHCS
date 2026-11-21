@@ -20,13 +20,13 @@ import 'package:provider/provider.dart';
 /// 列表滚动；搜索命中项高亮并可循环定位，清空搜索词恢复。
 /// 黄/橙/红/紫卡片每项末尾提供【...】菜单（备注编辑），备注显示在名称
 /// 后的括号内并随档案保存。
+///
+/// 性能：每行经 Selector 只在「勾选/备注/搜索命中/编辑态」变化时重建
+/// 行内容——勾选一次不再全量重建约 126 行（debug 下肉眼可见的迟滞）。
 class ChildHighRiskFactorPanel extends StatefulWidget {
-  const ChildHighRiskFactorPanel({super.key, required this.viewModel, required this.editable});
+  const ChildHighRiskFactorPanel({super.key, required this.viewModel});
 
   final ChildCreateViewModel viewModel;
-
-  /// 是否可编辑（新增/修改录入态）；浏览态复选框禁用、仅回显勾选。
-  final bool editable;
 
   @override
   State<ChildHighRiskFactorPanel> createState() => _ChildHighRiskFactorPanelState();
@@ -195,7 +195,8 @@ class _ChildHighRiskFactorPanelState extends State<ChildHighRiskFactorPanel> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final vm = context.watch<ChildCreateViewModel>();
-    final editable = widget.editable;
+    // 可编辑性经 VM 自行计算（页面缓存子树后不再传入）
+    final editable = vm.creating || vm.editing;
     final query = _searchCtrl.text.trim();
     final noMatch = query.isNotEmpty && _matchIds.isEmpty;
     // 互斥同组项名称映射一次预计算（行内直接查表，避免每行扫描全字典）
@@ -210,13 +211,12 @@ class _ChildHighRiskFactorPanelState extends State<ChildHighRiskFactorPanel> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 第一行：五色快速导航（紧凑圆点）+ 搜索 + 计数/下一个 + 新增
+              // 第一行：五色快速导航（SegmentedButton）+ 搜索 + 计数/下一个 + 新增
               Row(
                 children: [
-                  for (final colorName in RiskColorPalette.names) ...[
-                    _buildNavChip(theme, vm, colorName),
-                    const SizedBox(width: 2),
-                  ],
+                  // 导航完整展开（不做宽度裁切/滚动，五个分段全部可见；
+                  // 搜索框独占其后全部剩余宽度）
+                  _buildNavSegmented(theme, vm),
                   const SizedBox(width: 8),
                   Expanded(
                     child: TextField(
@@ -279,25 +279,75 @@ class _ChildHighRiskFactorPanelState extends State<ChildHighRiskFactorPanel> {
     );
   }
 
-  /// 五色快速导航：紧凑圆点按钮（色点即按钮图标）+ 角标计数（黄/橙/红/
-  /// 紫已选 >0 才显示角标；绿色为「无高危因素」等标记项不显示）。悬停
-  /// 提示说明用途与已选数。相比早期带文字的按钮大幅收窄，把工具栏宽度
-  /// 留给搜索框。
-  Widget _buildNavChip(ThemeData theme, ChildCreateViewModel vm, String colorName) {
-    final color = RiskColorPalette.colorOf(colorName, theme);
-    final checked = vm.checkedHighRiskCountOfColor(colorName);
-    final showCount = colorName != '绿色' && checked > 0;
-    return Badge.count(
-      count: checked,
-      isLabelVisible: showCount,
-      child: Tooltip(
-        message: showCount ? '滚动到$colorName卡片（已选 $checked 项）' : '滚动到$colorName卡片',
-        child: IconButton(
-          onPressed: () => _scrollToCard(colorName),
-          visualDensity: VisualDensity.compact,
-          icon: Icon(Icons.circle, size: 12, color: color),
-        ),
+  /// 五色快速导航：SegmentedButton 分段按钮（Material 3），**仅色点图标**
+  /// 不带文字；高度与右侧【新增高危因素】按钮一致（40px）。用作瞬时
+  /// 动作——selected 恒为空集（emptySelectionAllowed），点按分段仅触发
+  /// 滚动定位、不保持选中态；黄/橙/红/紫已选 >0 时在色点右上角以计数
+  /// 胶囊角标显示（手写 Stack 定位，不悬出盒子——Badge 组件会被分段
+  /// 按钮的 Material 裁掉越界的上半截；绿色为「无高危因素」等标记项
+  /// 不显示计数），完整信息看悬停提示。
+  Widget _buildNavSegmented(ThemeData theme, ChildCreateViewModel vm) {
+    return SegmentedButton<String>(
+      emptySelectionAllowed: true,
+      showSelectedIcon: false,
+      selected: const {},
+      style: ButtonStyle(
+        minimumSize: const WidgetStatePropertyAll(Size(0, 40)),
+        padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 11)),
+        side: WidgetStatePropertyAll(BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5))),
       ),
+      onSelectionChanged: (selection) {
+        if (selection.isNotEmpty) {
+          _scrollToCard(selection.first);
+        }
+      },
+      segments: [
+        for (final colorName in RiskColorPalette.names)
+          () {
+            final checked = vm.checkedHighRiskCountOfColor(colorName);
+            final showCount = colorName != '绿色' && checked > 0;
+            return ButtonSegment(
+              value: colorName,
+              tooltip: showCount ? '滚动到$colorName卡片（已选 $checked 项）' : '滚动到$colorName卡片',
+              icon: SizedBox(
+                // 色点居中、计数胶囊钉在右上角（手写 Stack，位置完全受控
+                // ——Badge 组件的角标必然向上悬出盒子、被分段按钮的
+                // Material 裁掉上半截，故弃用）
+                width: 40,
+                height: 32,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.center,
+                  children: [
+                    Icon(Icons.circle, size: 12, color: RiskColorPalette.colorOf(colorName, theme)),
+                    if (showCount)
+                      Positioned(
+                        top: 0,
+                        right: 0,
+                        child: Container(
+                          height: 16,
+                          padding: const EdgeInsets.symmetric(horizontal: 5),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.error,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '$checked',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onError,
+                              fontWeight: FontWeight.w700,
+                              height: 1,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          }(),
+      ],
     );
   }
 
@@ -438,88 +488,103 @@ class _ChildHighRiskFactorPanelState extends State<ChildHighRiskFactorPanel> {
 
   /// 高危因素叶子行：复选框 + 名称（备注括号展示）+【...】备注菜单
   /// （仅黄/橙/红/紫；绿色为「无高危因素」等标记项，无备注）。
+  ///
+  /// 行内容包在 Selector 里：仅在「勾选/备注/搜索命中/编辑态」变化时
+  /// 重建本行——面板其余行（约百余行）复用既有子树，勾选即时反映。
   Widget _factorRow(ThemeData theme, ChildCreateViewModel vm, BaseHighRiskFactor factor, bool editable, int depth1, int depth2, String query, Map<String, List<String>> exclusiveNamesById) {
-    final checked = vm.checkedHighRiskIds.contains(factor.id);
-    final canToggle = vm.canToggleHighRisk(factor, editable: editable);
-    final matched = query.isNotEmpty && factor.riskFactorName.toLowerCase().contains(query.toLowerCase());
-    final remark = vm.highRiskRemarkOf(factor.id);
-    final showRemarkMenu = factor.riskColor != null && factor.riskColor != '绿色';
     // 规则表互斥：该高危因素所属互斥组合的其他项名称（用于「互斥」标签
     // 的悬停提示；整个面板构建期预计算一次，见 _exclusiveNamesById）
     final exclusiveNames = exclusiveNamesById[factor.id] ?? const <String>[];
-
-    final titleStyle = theme.textTheme.bodyMedium?.copyWith(
-      fontWeight: matched ? FontWeight.bold : null,
-      color: matched ? theme.colorScheme.primary : null,
-    );
-
-    return Container(
+    final matched = query.isNotEmpty && factor.riskFactorName.toLowerCase().contains(query.toLowerCase());
+    return Selector<ChildCreateViewModel, (bool, String, bool, bool)>(
       key: _rowKeys.putIfAbsent(factor.id, () => GlobalKey()),
-      padding: EdgeInsets.only(left: 12.0 + depth1 * 18.0 + depth2 * 18.0),
-      decoration: BoxDecoration(
-        // 搜索命中项高亮（跟随主题色，透明底，不硬编码颜色）
-        color: matched ? theme.colorScheme.primary.withValues(alpha: 0.12) : null,
-        borderRadius: BorderRadius.circular(8),
+      selector: (_, vm) => (
+        vm.checkedHighRiskIds.contains(factor.id),
+        vm.highRiskRemarkOf(factor.id),
+        matched,
+        editable,
       ),
-      child: Row(
-        children: [
-          Expanded(
-            // 搜索高亮/卡片背景与 ListTile 之间再隔一层透明 Material
-            // （行级装饰盒同理，见 _buildColorCard 注释）
-            child: Material(
-              type: MaterialType.transparency,
-              child: CheckboxListTile(
-                dense: true,
-                controlAffinity: ListTileControlAffinity.leading,
-                contentPadding: const EdgeInsets.only(right: 4),
-                value: checked,
-                onChanged: canToggle ? (v) => _onToggle(vm, factor, v ?? false) : null,
-                title: Text.rich(
-                  TextSpan(
-                    text: factor.riskFactorName,
-                    style: titleStyle,
-                    children: [
-                      if (remark.isNotEmpty)
-                        TextSpan(
-                          text: '（$remark）',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            fontWeight: FontWeight.normal,
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                    ],
+      builder: (context, state, _) {
+        final checked = state.$1;
+        final remark = state.$2;
+        final matchedNow = state.$3;
+        final editableNow = state.$4;
+        final canToggle = vm.canToggleHighRisk(factor, editable: editableNow);
+        final showRemarkMenu = factor.riskColor != null && factor.riskColor != '绿色';
+
+        final titleStyle = theme.textTheme.bodyMedium?.copyWith(
+          fontWeight: matchedNow ? FontWeight.bold : null,
+          color: matchedNow ? theme.colorScheme.primary : null,
+        );
+
+        return Container(
+          padding: EdgeInsets.only(left: 12.0 + depth1 * 18.0 + depth2 * 18.0),
+          decoration: BoxDecoration(
+            // 搜索命中项高亮（跟随主题色，透明底，不硬编码颜色）
+            color: matchedNow ? theme.colorScheme.primary.withValues(alpha: 0.12) : null,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                // 搜索高亮/卡片背景与 ListTile 之间再隔一层透明 Material
+                // （行级装饰盒同理，见 _buildColorCard 注释）
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: CheckboxListTile(
+                    dense: true,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: const EdgeInsets.only(right: 4),
+                    value: checked,
+                    onChanged: canToggle ? (v) => _onToggle(vm, factor, v ?? false) : null,
+                    title: Text.rich(
+                      TextSpan(
+                        text: factor.riskFactorName,
+                        style: titleStyle,
+                        children: [
+                          if (remark.isNotEmpty)
+                            TextSpan(
+                              text: '（$remark）',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                fontWeight: FontWeight.normal,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
-          if (exclusiveNames.isNotEmpty)
-            Tooltip(
-              message: '互斥项：${exclusiveNames.join('、')}（勾选本项将自动取消对方）',
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Text(
-                  '互斥',
-                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              if (exclusiveNames.isNotEmpty)
+                Tooltip(
+                  message: '互斥项：${exclusiveNames.join('、')}（勾选本项将自动取消对方）',
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Text(
+                      '互斥',
+                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          if (showRemarkMenu)
-            IconButton(
-              // 仅该高危因素被选中（且处于录入态）时可用；未选中灰化禁用。
-              // 点击直接弹出备注编辑对话框（无中间菜单）。
-              onPressed: (checked && editable) ? () => _editRemark(factor) : null,
-              tooltip: (checked && editable) ? '备注' : '勾选后可编辑备注',
-              visualDensity: VisualDensity.compact,
-              icon: Icon(
-                Icons.more_horiz,
-                size: 18,
-                color: (checked && editable) ? theme.colorScheme.onSurfaceVariant : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.38),
-              ),
-            ),
-          const SizedBox(width: 4),
-        ],
-      ),
+              if (showRemarkMenu)
+                IconButton(
+                  // 仅该高危因素被选中（且处于录入态）时可用；未选中灰化禁用。
+                  // 点击直接弹出备注编辑对话框（无中间菜单）。
+                  onPressed: (checked && editableNow) ? () => _editRemark(factor) : null,
+                  tooltip: (checked && editableNow) ? '备注' : '勾选后可编辑备注',
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(
+                    Icons.more_horiz,
+                    size: 18,
+                    color: (checked && editableNow) ? theme.colorScheme.onSurfaceVariant : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.38),
+                  ),
+                ),
+              const SizedBox(width: 4),
+            ],
+          ),
+        );
+      },
     );
   }
 

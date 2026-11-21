@@ -154,7 +154,7 @@ class _MainPageState extends State<MainPage> {
                   ),
                 ),
                 Text(
-                  '智慧儿童心理保健系统',
+                  '智慧儿童孤独症管理系统',
                   style: theme.textTheme.titleSmall?.copyWith(
                     color: theme.colorScheme.onPrimaryContainer,
                     fontSize: 14,
@@ -1296,7 +1296,7 @@ class _MainPageState extends State<MainPage> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '智慧儿童心理保健系统',
+                      '智慧儿童孤独症管理系统',
                       style: theme.textTheme.bodyLarge?.copyWith(
                         color: theme.colorScheme.onSurface,
                         fontWeight: FontWeight.w600,

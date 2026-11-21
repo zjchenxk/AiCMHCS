@@ -92,21 +92,46 @@ class ChildInfoSidebar extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         Expanded(
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final char in '当前儿童'.characters)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: Text(
-                      char,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                      ),
+          child: LayoutBuilder(
+            builder: (context, constraints) => SingleChildScrollView(
+              // 竖排「当前儿童」后追加儿童姓名（主题色加粗便于辨识）；
+              // 姓名较长超出栏高时允许上下滚动，短时保持垂直居中
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: IntrinsicHeight(
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (final char in '当前儿童'.characters)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            child: Text(
+                              char,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                              ),
+                            ),
+                          ),
+                        if (data.name.trim().isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          for (final char in data.name.trim().characters)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 2),
+                              child: Text(
+                                char,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.primary,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ],
                     ),
                   ),
-              ],
+                ),
+              ),
             ),
           ),
         ),

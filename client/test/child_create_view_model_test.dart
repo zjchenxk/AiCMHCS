@@ -829,18 +829,90 @@ void main() {
     vm.applyHighRiskAutoScreening(_extInfo());
     expect(vm.checkedHighRiskIds, isEmpty);
 
-    // 筛查管理全集内未命中的项一律清除（不区分勾选来源，需求口径
-    // 「条件不成立应清除其选择」）；管理全集外的手动勾选不受影响
-    vm.toggleHighRiskFactor(dict.firstWhere((f) => f.id == 'X1'), true); // 妊娠期糖尿病（管理全集内，字段未选有）
-    vm.toggleHighRiskFactor(dict.firstWhere((f) => f.id == 'M1'), true); // 管理全集外手动项
+    // 手动勾选不受筛查影响、永久保留（需求 2026-11-21：允许自由勾选，
+    // 不必非在扩展信息输入；筛查只清除自己自动勾选的项）
+    vm.toggleHighRiskFactor(dict.firstWhere((f) => f.id == 'X1'), true); // 妊娠期糖尿病（筛查映射目标，手动勾）
+    vm.toggleHighRiskFactor(dict.firstWhere((f) => f.id == 'M1'), true); // 筛查映射外的手动项
     vm.applyHighRiskAutoScreening(_extInfo(gestationalWeek: '33'));
-    expect(vm.checkedHighRiskIds, {'P2', 'M1'}, reason: '管理全集内的 X1 被清除，全集外手动项 M1 保留');
+    expect(vm.checkedHighRiskIds, {'P2', 'X1', 'M1'}, reason: '自动命中 P2 勾选；手动项 X1/M1 均保留');
     // 手动勾选同组互斥项 → 规则表互斥自动清除 P2
     vm.toggleHighRiskFactor(dict.firstWhere((f) => f.id == 'P3'), true);
-    expect(vm.checkedHighRiskIds, {'P3', 'M1'});
-    // 条件消失 → 管理全集内的 P3 清除，M1 保留
+    expect(vm.checkedHighRiskIds, {'P3', 'X1', 'M1'});
+    // 条件消失 → 仅清除筛查自动勾选的 P2（已被互斥清除）；P3 为手动勾选，
+    // 不受筛查清除
     vm.applyHighRiskAutoScreening(_extInfo(gestationalWeek: '38'));
-    expect(vm.checkedHighRiskIds, {'M1'});
+    expect(vm.checkedHighRiskIds, {'P3', 'X1', 'M1'});
+  });
+
+  test('手动勾选可自由保存：不受筛查清除、保存透传、保存后仍显示', () async {
+    BaseHighRiskFactor factor(String id, String color, String name) => BaseHighRiskFactor(
+      id: id,
+      riskFactorCode: 'CODE-$id',
+      riskFactorName: name,
+      riskColor: color,
+      creatorId: '1',
+      creatorName: '系统管理员',
+      hospId: '1',
+      hospName: '示例人民医院',
+    );
+    final dict = [
+      factor('G1', '绿色', ChildCreateViewModel.noneHighRiskFactorName),
+      factor('X1', '黄色', '妊娠期糖尿病'),
+      factor('M1', '黄色', '其他手动高危因素（不在筛查映射内）'),
+    ];
+    final riskService = FakeHighRiskFactorService()..dict = dict;
+    final childService = FakeChildService();
+    final vm = _buildViewModel(
+      operationCodes: {ChildCreateViewModel.opCreate},
+      childService: childService,
+      highRiskFactorService: riskService,
+    );
+    await vm.startCreate();
+    await vm.loadHighRiskData();
+
+    // 手动勾选两项（扩展信息未输入任何触发条件）
+    vm.toggleHighRiskFactor(dict.firstWhere((f) => f.id == 'X1'), true);
+    vm.toggleHighRiskFactor(dict.firstWhere((f) => f.id == 'M1'), true);
+    vm.applyHighRiskAutoScreening(_extInfo());
+    expect(vm.checkedHighRiskIds, {'X1', 'M1'}, reason: '筛查未命中不动手动勾选');
+
+    // 保存 → 手动勾选随整单透传入库（Fake 库回显设为两项，模拟已存档）
+    childService.savedHighRiskFactors = [
+      const ChildHighRiskFactor(
+        id: 'row-1',
+        childId: '1',
+        highRiskFactorId: 'X1',
+        riskFactorCode: 'CODE-X1',
+        riskFactorName: '妊娠期糖尿病',
+        riskColor: '黄色',
+        creatorId: '1',
+        creatorName: '系统管理员',
+        hospId: '1',
+        hospName: '示例人民医院',
+      ),
+      const ChildHighRiskFactor(
+        id: 'row-2',
+        childId: '1',
+        highRiskFactorId: 'M1',
+        riskFactorCode: 'CODE-M1',
+        riskFactorName: '其他手动高危因素（不在筛查映射内）',
+        riskColor: '黄色',
+        creatorId: '1',
+        creatorName: '系统管理员',
+        hospId: '1',
+        hospName: '示例人民医院',
+      ),
+    ];
+    await vm.save(child: _child(''));
+    final savedIds = childService.lastHighRiskFactors!.map((f) => f.factorId).toList();
+    expect(savedIds, containsAll(['X1', 'M1']));
+
+    // 保存成功后按已存扩展信息重算筛查（未命中）→ 库记录回显手动勾选
+    expect(vm.checkedHighRiskIds, containsAll({'X1', 'M1'}));
+
+    // 扩展信息条件成立 → 对应项自动勾选（已在勾选集内的不重复处理）
+    vm.applyHighRiskAutoScreening(_extInfo(hasDiabetes: '1'));
+    expect(vm.checkedHighRiskIds, contains('X1'));
   });
 
   test('高危因素自动筛查：孕产史/受孕方式/孕期情况/年龄产次/吸毒史命中', () async {

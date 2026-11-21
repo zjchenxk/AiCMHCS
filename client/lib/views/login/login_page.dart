@@ -104,7 +104,7 @@ class _LoginPageState extends State<LoginPage> {
                                 ),
                                 SizedBox(height: 20),
                                 Text(
-                                  '智慧儿童心理保健系统',
+                                  '智慧儿童孤独症管理系统',
                                   style: theme.textTheme.displaySmall?.copyWith(
                                     fontWeight: FontWeight.bold,
                                     color: theme.primaryColorDark,

@@ -7,6 +7,7 @@ import 'package:client/widgets/dict_dropdown_form_field.dart';
 import 'package:common/model.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:provider/provider.dart';
 
 /// 儿童「扩展信息」Tab 表单：出生情况/母亲孕产史/母亲妊娠情况/母亲
 /// 孕期情况/母亲分娩信息/家族史/过敏史/儿童死亡信息八组字段。0/1 布尔
@@ -23,12 +24,9 @@ import 'package:material_ui/material_ui.dart';
 ///   经 ViewModel 按规则自动勾选/清除【高危因素】TAB 对应项
 ///   （HighRiskAutoScreening，自动筛查命中的项随条件消失自动取消）。
 class ChildExtInfoForm extends StatefulWidget {
-  const ChildExtInfoForm({super.key, required this.viewModel, required this.editable});
+  const ChildExtInfoForm({super.key, required this.viewModel});
 
   final ChildCreateViewModel viewModel;
-
-  /// 是否可编辑（新增/修改录入态）。
-  final bool editable;
 
   @override
   State<ChildExtInfoForm> createState() => ChildExtInfoFormState();
@@ -36,6 +34,10 @@ class ChildExtInfoForm extends StatefulWidget {
 
 class ChildExtInfoFormState extends State<ChildExtInfoForm> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+
+  /// 当前是否可编辑（build 时经 Selector 由 VM 计算；字段构建辅助据此
+  /// 门控——页面缓存子树后不再传入 editable，切修改态仅本表单重建）。
+  bool _editable = false;
 
   /// 下拉类字段值镜像（程序化清空后界面经 KeyedSubtree 重建键刷新）。
   final Map<String, String?> _v = {};
@@ -403,7 +405,7 @@ class ChildExtInfoFormState extends State<ChildExtInfoForm> {
     final triggersScreening = key == 'gestationalWeek' || key == 'birthWeight' || key == 'parity' || key == 'maternalAgeAtDelivery';
     return TextFormField(
       controller: _ctrls[key]!,
-      enabled: widget.editable && enabled,
+      enabled: _editable && enabled,
       maxLength: 8,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       inputFormatters: [
@@ -433,7 +435,7 @@ class ChildExtInfoFormState extends State<ChildExtInfoForm> {
   Widget _text(String key, String label, {int maxLength = 50, bool enabled = true}) {
     return TextFormField(
       controller: _ctrls[key]!,
-      enabled: widget.editable && enabled,
+      enabled: _editable && enabled,
       maxLength: maxLength,
       autovalidateMode: AutovalidateMode.disabled,
       decoration: childGlassDecoration(Theme.of(context), label),
@@ -449,7 +451,7 @@ class ChildExtInfoFormState extends State<ChildExtInfoForm> {
         theme: Theme.of(context),
         label: label,
         value: _v[key],
-        enabled: widget.editable && enabled,
+        enabled: _editable && enabled,
         entries: entries,
         onChanged: (v) => _setValue(key, v),
       ),
@@ -462,7 +464,7 @@ class ChildExtInfoFormState extends State<ChildExtInfoForm> {
       dictCode: dictCode,
       label: label,
       initialValue: _v[key],
-      enabled: widget.editable && enabled,
+      enabled: _editable && enabled,
       autoSelectDefault: autoSelectDefault,
       onChanged: (v) => _setValue(key, v),
     );
@@ -473,7 +475,7 @@ class ChildExtInfoFormState extends State<ChildExtInfoForm> {
     return TextFormField(
       controller: controller,
       readOnly: true,
-      enabled: widget.editable && enabled,
+      enabled: _editable && enabled,
       onTap: () async {
         final current = DateTime.tryParse(controller.text.trim()) ?? getIt<TimeService>().now();
         final picked = await showDatePicker(context: context, initialDate: current, firstDate: DateTime(1900), lastDate: DateTime(2100), helpText: '选择$label');
@@ -489,8 +491,20 @@ class ChildExtInfoFormState extends State<ChildExtInfoForm> {
 
   @override
   Widget build(BuildContext context) {
+    // 页面为消除 TAB 切换/修改态切换卡顿按表单身份缓存了子树，本表单
+    // 自行经 Selector 订阅 VM 的可编辑性——仅编辑态切换时重建（其余 VM
+    // 通知如勾选高危因素不触发本表单重建，避免整页卡顿）
+    return Selector<ChildCreateViewModel, bool>(
+      selector: (_, vm) => vm.creating || vm.editing,
+      builder: (context, editable, _) {
+        _editable = editable;
+        return _buildBody(context);
+      },
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
     final theme = Theme.of(context);
-    final editable = widget.editable;
 
     return Form(
       key: _formKey,
@@ -595,7 +609,7 @@ class ChildExtInfoFormState extends State<ChildExtInfoForm> {
               _date('deathDate', '儿童死亡日期', enabled: _gate('isDead')),
               _dict('deathCause', '儿童死亡原因', _dictDeathCause, enabled: _gate('isDead')),
             ]),
-            if (!editable)
+            if (!_editable)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(

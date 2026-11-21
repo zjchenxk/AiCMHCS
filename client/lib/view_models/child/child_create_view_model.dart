@@ -117,6 +117,14 @@ class ChildCreateViewModel extends ChangeNotifier {
   /// 首屏/载档中。
   bool get loading => _loading;
 
+  int _dataRevision = 0;
+
+  /// 档案数据版本：整档（重）载入或保存成功后递增。页面以「版本:儿童
+  /// ID」作表单键身份——进入/退出修改态不递增（表单 State 与已回显
+  /// 输入保留，仅切换可编辑性），载入/取消/保存后递增（表单以最新数据
+  /// 重建），切修改态因此无需销毁重建全部表单。
+  int get dataRevision => _dataRevision;
+
   bool _busy = false;
 
   /// 保存/删除等写操作进行中（防重复提交）。
@@ -257,6 +265,9 @@ class ChildCreateViewModel extends ChangeNotifier {
       await initAddressFromChild(child);
       await loadLatestPhoto();
       await loadHighRiskData();
+      // 档案数据版本递增：页面表单键身份随之变化，表单以最新数据重建
+      // （同一儿童重载如取消修改也会换键，避免残留未保存输入）
+      _dataRevision++;
       return true;
     } catch (e, st) {
       LogHelper.error('client:ChildCreateViewModel.selectChild', e, st);
@@ -276,6 +287,8 @@ class ChildCreateViewModel extends ChangeNotifier {
     _latestPhoto = null;
     _pendingPhoto = null;
     _checkedHighRiskIds.clear();
+    _autoScreenedIds.clear();
+    _lastScreeningTargetNames.clear();
     _mode = ChildFormMode.create;
     // 新增态默认勾选绿色卡片【无母亲及胎儿、新生儿的高危因素】
     // （字典未加载时为空操作，后续 loadHighRiskData 会再兜底一次）
@@ -285,7 +298,9 @@ class ChildCreateViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 进入修改录入态（保留已载入档案数据，表单可编辑）。
+  /// 进入修改录入态（保留已载入档案数据，表单可编辑；不递增数据版本
+  /// ——页面表单键身份不变，表单 State 与已回显输入保留，仅各表单经
+  /// watch 切换可编辑性）。
   void startEdit() {
     if (_child == null) return;
     _mode = ChildFormMode.edit;
@@ -353,6 +368,7 @@ class ChildCreateViewModel extends ChangeNotifier {
       _checkedHighRiskIds.clear();
       await loadLatestPhoto();
       await loadHighRiskData();
+      _dataRevision++;
       return true;
     } catch (e, st) {
       LogHelper.error('client:ChildCreateViewModel.save', e, st);
@@ -567,38 +583,56 @@ class ChildCreateViewModel extends ChangeNotifier {
   /// 加载高危因素数据：字典全量清单 + 本院互斥规则 + 当前儿童已保存的
   /// 勾选与备注（浏览/修改态回显）；无已保存记录（新增态或库内为空）时
   /// 默认勾选绿色【无母亲及胎儿、新生儿的高危因素】。
+  ///
+  /// 三路请求**并行**（互不依赖；此前字典→互斥→记录串行三次往返，浏览
+  /// 态开档多等两个往返）：各路自捕获异常记日志降级，不中断其余。
   Future<void> loadHighRiskData() async {
-    try {
-      _highRiskDict = await _highRiskFactorService.queryAll();
-    } catch (e, st) {
-      LogHelper.error('client:ChildCreateViewModel.loadHighRiskData(dict)', e, st);
-      _highRiskDict = const [];
-    }
-    await _loadHighRiskExclusions();
     final id = currentChildId;
     _checkedHighRiskIds.clear();
     _highRiskRemarks.clear();
-    if (id.isNotEmpty) {
-      try {
-        final rows = await _childService.highRiskFactors(id);
-        _checkedHighRiskIds.addAll(rows.map((f) => f.highRiskFactorId));
-        for (final row in rows) {
-          final remark = row.remark?.trim() ?? '';
-          if (remark.isNotEmpty) {
-            _highRiskRemarks[row.highRiskFactorId] = remark;
-          }
-        }
-      } catch (e, st) {
-        LogHelper.error('client:ChildCreateViewModel.loadHighRiskData(checked)', e, st);
+    final results = await Future.wait<dynamic>([
+      _loadDict(),
+      _loadHighRiskExclusions(),
+      id.isEmpty ? Future.value(const <ChildHighRiskFactor>[]) : _loadSavedFactors(id),
+    ]);
+    _highRiskDict = results[0] as List<BaseHighRiskFactor>;
+    final rows = results[2] as List<ChildHighRiskFactor>;
+    _checkedHighRiskIds.addAll(rows.map((f) => f.highRiskFactorId));
+    for (final row in rows) {
+      final remark = row.remark?.trim() ?? '';
+      if (remark.isNotEmpty) {
+        _highRiskRemarks[row.highRiskFactorId] = remark;
       }
     }
     // 无已保存记录（新增态或库内为空）→ 默认勾选绿色「无高危因素」标记项
     _applyDefaultHighRiskSelection();
     // 按已载入扩展信息重算自动筛查命中（新增态 ext 为 null 按空档案处理）；
-    // 命中基线随载入重置，保证对存量冲突数据的一次性纠偏不被跳过
-    _lastScreeningTargetNames = {};
+    // 命中基线与自动管理集合随载入重置（本次命中的库记录纳入自动集合，
+    // 后续编辑触发字段时按其增量清选）
+    _autoScreenedIds.clear();
+    _lastScreeningTargetNames.clear();
     applyHighRiskAutoScreening(_ext ?? _emptyExt());
     notifyListeners();
+  }
+
+  /// 拉取高危因素字典清单（失败记日志、降级为空清单）。
+  Future<List<BaseHighRiskFactor>> _loadDict() async {
+    try {
+      return await _highRiskFactorService.queryAll();
+    } catch (e, st) {
+      LogHelper.error('client:ChildCreateViewModel.loadHighRiskData(dict)', e, st);
+      return const [];
+    }
+  }
+
+  /// 拉取儿童已保存的高危因素记录（失败记日志、降级为空列表）。
+  Future<List<ChildHighRiskFactor>> _loadSavedFactors(String id) async {
+    try {
+      return await _childService.highRiskFactors(id);
+    } catch (e, st) {
+      LogHelper.error('client:ChildCreateViewModel.loadHighRiskData(checked)', e, st);
+      return const [];
+    }
   }
 
   /// 空扩展信息（新增态自动筛查的推导输入）。
@@ -653,14 +687,20 @@ class ChildCreateViewModel extends ChangeNotifier {
   /// 重建卡顿；只有命中集合真正变化才值得重建一次。
   Set<String> _lastScreeningTargetNames = {};
 
+  /// 由自动筛查勾选的高危因素 ID 集合：条件不再满足时仅清除这些项
+  /// ——用户手动勾选的项不受筛查影响（可自由勾选并保存，需求 2026-11-21
+  /// 明确）；载入档案后命中的库记录同样纳入本集合，编辑扩展信息时按
+  /// 其增量清选。
+  final Set<String> _autoScreenedIds = {};
+
   /// 高危因素自动筛查：按当前扩展信息重算命中项。
   ///
-  /// ① 清除——筛查管理全集（HighRiskAutoScreening.managedFactorNames，
-  /// 按字典名称解析）内本次未命中的项一律取消勾选并清除备注，不区分
-  /// 当初勾选来源（需求口径「条件不成立应清除其选择」）；管理全集外的
-  /// 手动勾选不受影响。② 勾选——新命中的自动勾选（沿用「无高危因素」
-  /// 标记互斥与同组互斥清除）。扩展信息表单在筛查触发字段变更后调用；
-  /// 载入档案/保存后由 [loadHighRiskData] 以已存扩展信息重算一次。
+  /// ① 清除——此前由筛查勾选（[ _autoScreenedIds]，含载入时命中的库
+  /// 记录）而本次未命中的项取消勾选并清除备注；用户手动勾选的项不在
+  /// 该集合内，一律保留。② 勾选——本次命中且未勾选的项自动勾选（沿用
+  /// 「无高危因素」标记互斥与同组互斥清除）并纳入自动管理集合。扩展
+  /// 信息表单在筛查触发字段变更后调用；载入档案/保存后由
+  /// [loadHighRiskData] 以已存扩展信息重算一次（命中集为基线）。
   void applyHighRiskAutoScreening(ChildExtInfo ext) {
     final names = HighRiskAutoScreening.targetFactorNames(ext);
     if (_lastScreeningTargetNames.length == names.length && _lastScreeningTargetNames.containsAll(names)) {
@@ -670,25 +710,26 @@ class ChildCreateViewModel extends ChangeNotifier {
     for (final f in _highRiskDict) {
       idByName.putIfAbsent(f.riskFactorName, () => f.id);
     }
-    final targetNames = names.toSet();
-    _lastScreeningTargetNames = targetNames;
-    // ① 清除管理全集内未命中的项（字典缺失的名称自然跳过）
-    for (final name in HighRiskAutoScreening.managedFactorNames) {
-      if (targetNames.contains(name)) {
-        continue;
-      }
-      final id = idByName[name];
-      if (id != null && _checkedHighRiskIds.remove(id)) {
+    final targetIds = {
+      for (final name in names)
+        if (idByName[name] != null) idByName[name]!,
+    };
+    // ① 清除此前由筛查勾选、本次未命中的项（手动勾选不在集合内，保留）
+    for (final id in _autoScreenedIds.difference(targetIds)) {
+      if (_checkedHighRiskIds.remove(id)) {
         _highRiskRemarks.remove(id);
       }
     }
-    // ② 勾选新命中项
-    for (final name in names) {
-      final id = idByName[name];
-      if (id != null && !_checkedHighRiskIds.contains(id)) {
+    _autoScreenedIds
+      ..clear()
+      ..addAll(targetIds);
+    // ② 自动勾选本次命中且未勾选的项
+    for (final id in targetIds) {
+      if (!_checkedHighRiskIds.contains(id)) {
         _setCheckedHighRisk(_highRiskDict.firstWhere((f) => f.id == id), true);
       }
     }
+    _lastScreeningTargetNames = names;
     notifyListeners();
   }
 

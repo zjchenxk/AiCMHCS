@@ -207,7 +207,7 @@ class MyApp extends StatelessWidget {
             ],
           ),
           debugShowCheckedModeBanner: false, //隐藏右上角DEBUG标识
-          title: 'AiCMHCS智慧儿童心理保健系统',
+          title: 'AiCMHCS智慧儿童孤独症管理系统',
           theme: baseTheme.copyWith(
             textTheme: textTheme,
             filledButtonTheme: FilledButtonThemeData(

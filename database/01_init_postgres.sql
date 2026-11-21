@@ -1,5 +1,5 @@
 -- =====================================================================
--- AiCMHCS 智慧儿童心理保健系统 —— PostgreSQL 初始化库与应用角色
+-- AiCMHCS 智慧儿童孤独症管理系统 —— PostgreSQL 初始化库与应用角色
 -- 以超级用户（postgres）经 psql 执行（可重复执行，整库重建）：
 --   psql -U postgres -f database/01_init_postgres.sql
 -- 结构迁移由后端启动时自动完成；演示账号：

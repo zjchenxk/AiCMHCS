@@ -45,8 +45,13 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
   GlobalKey<ChildExtInfoFormState> _extKey = GlobalKey(debugLabel: 'childExtForm');
 
   /// 模式/档案标识变化时换新表单键。
+  ///
+  /// 身份＝「数据版本:儿童ID」：进入/退出修改态**不变**（表单 State 与
+  /// 已回显输入保留，可编辑性由各表单自行 watch VM 切换——切【修改】
+  /// 不再销毁重建全部表单）；载入/取消修改/保存成功后递增（表单以最新
+  /// 数据重建，避免残留未保存输入）。
   void _ensureFormKeys(ChildCreateViewModel vm) {
-    final identity = '${vm.mode.name}:${vm.currentChildId}';
+    final identity = '${vm.dataRevision}:${vm.currentChildId}';
     if (_formIdentity != identity) {
       _formIdentity = identity;
       _basicKey = GlobalKey(debugLabel: 'basic:$identity');
@@ -54,21 +59,20 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
     }
   }
 
-  /// IndexedStack 四个 Tab 的缓存子树：仅随表单键身份（模式:儿童ID）
+  /// IndexedStack 四个 Tab 的缓存子树：仅随表单键身份（数据版本:儿童ID）
   /// 重建。Tab 切换只改 index，按钮条/TabBar 计数刷新等页面级 setState
   /// 复用同一批 widget 实例——Flutter 对 identical 的子 widget 短路整棵
   /// 子树重建，四个常驻 Tab（含约 126 行的高危面板）不再随每次切换全量
   /// 重建（此前一次切 Tab 要在 debug 下重建上千个控件，卡顿明显）。
-  /// VM 驱动的自刷新不受影响：监护人/高危面板内部自行 watch，基本信息
-  /// 表单亦内部 watch（照片头像/地址码等随 VM 变化即时刷新），扩展信息
-  /// 表单渲染全部由自身控制器/状态驱动、无需 VM 通知。
+  /// 可编辑性不再编入子树（各表单/面板内部经 VM 计算并自行刷新），
+  /// 切【修改】只换按钮条与各表单可编辑性、不重建子树。
   List<Widget> _cachedTabChildren = const [];
 
   /// 缓存对应的表单身份。
   String? _cachedTabIdentity;
 
   /// 取（必要时重建）四个 Tab 的子树。
-  List<Widget> _tabChildren(ChildCreateViewModel vm, bool editing) {
+  List<Widget> _tabChildren(ChildCreateViewModel vm) {
     if (_cachedTabIdentity == _formIdentity) {
       return _cachedTabChildren;
     }
@@ -79,10 +83,9 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
         child: ChildBasicInfoForm(
           key: _basicKey,
           viewModel: vm,
-          editable: editing,
-          onSubmit: editing ? _submit : null,
-          onCapturePhoto: editing ? _startCapture : null,
-          onRemovePhoto: editing ? _removePhoto : null,
+          onSubmit: _submit,
+          onCapturePhoto: _startCapture,
+          onRemovePhoto: _removePhoto,
         ),
       ),
       Padding(
@@ -90,16 +93,15 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
         child: ChildExtInfoForm(
           key: _extKey,
           viewModel: vm,
-          editable: editing,
         ),
       ),
       Padding(
         padding: const EdgeInsets.only(top: 8),
-        child: ChildGuardianPanel(viewModel: vm, editable: editing),
+        child: ChildGuardianPanel(viewModel: vm),
       ),
       Padding(
         padding: const EdgeInsets.only(top: 8),
-        child: ChildHighRiskFactorPanel(viewModel: vm, editable: editing),
+        child: ChildHighRiskFactorPanel(viewModel: vm),
       ),
     ];
   }
@@ -193,7 +195,6 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
   Future<void> _init() async {
     // await 前先取齐依赖（避免跨异步使用 BuildContext）
     final mainViewModel = _mainViewModel;
-    await _viewModel.loadPermissions();
     // 主界面已选定当前儿童（顶部搜索写入的上下文）→ 自动载入整档进
     // 浏览态，默认展示基本信息/扩展信息/监护人（selectChild 内部的
     // initAddressFromChild 会按需加载省列表并完成五级区划回显；此处
@@ -201,14 +202,23 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
     // 使已选中的省与 items 身份失配触发下拉断言）
     final currentChildId = mainViewModel.child.id;
     if (currentChildId.isNotEmpty) {
+      await _viewModel.loadPermissions();
       await _viewModel.selectChild(currentChildId);
-    } else {
-      // 未选定儿童时也要载入高危因素字典（五色卡片数据源；selectChild
-      // 内部已含该加载）
-      await _viewModel.loadHighRiskData();
+      return;
     }
+    // 未选定儿童 → 新增路径：权限 / 高危字典+互斥规则 / 省份列表**三路
+    // 并行**拉取（此前与 startCreate 内部的省份拉取共四路串行，四次
+    // 依次往返，debug 下打开页面到进入新增态明显迟滞；并发后耗时≈最慢
+    // 一路）。三者各自捕获异常不抛出，Future.wait 不会因单路失败中断。
+    // getProvinces 有幂等守卫（已加载直接返回），startCreate 内部的
+    // 重复调用会空转。
+    await Future.wait<dynamic>([
+      _viewModel.loadPermissions(),
+      _viewModel.loadHighRiskData(),
+      _viewModel.getProvinces(),
+    ]);
     // 无修改/删除权限（无查询入口）、也未选定儿童 → 直接进入新增录入态
-    //（仅有新增权限场景）
+    //（仅有新增权限场景）；此时省份已就绪，startCreate 内部不再拉取
     if (!_viewModel.browsing && _viewModel.canCreate) {
       await _viewModel.startCreate();
     }
@@ -453,8 +463,27 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
                           tabs: [
                             const Tab(text: '基本信息'),
                             const Tab(text: '扩展信息'),
-                            Tab(text: '监护人（${vm.guardians.length}）'),
-                            Tab(text: '高危因素（${vm.savedHighRiskCount}）'),
+                            // 计数以角标呈现（0 不显示），标签文字保持简洁
+                            Tab(
+                              child: Badge.count(
+                                count: vm.guardians.length,
+                                isLabelVisible: vm.guardians.isNotEmpty,
+                                child: const Padding(
+                                  padding: EdgeInsets.only(right: 10),
+                                  child: Text('监护人'),
+                                ),
+                              ),
+                            ),
+                            Tab(
+                              child: Badge.count(
+                                count: vm.savedHighRiskCount,
+                                isLabelVisible: vm.savedHighRiskCount > 0,
+                                child: const Padding(
+                                  padding: EdgeInsets.only(right: 10),
+                                  child: Text('高危因素'),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                         const Divider(height: 1),
@@ -468,7 +497,7 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
                         Expanded(
                           child: IndexedStack(
                             index: _tabController.index,
-                            children: _tabChildren(vm, editing),
+                            children: _tabChildren(vm),
                           ),
                         ),
                       ],

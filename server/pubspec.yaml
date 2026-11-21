@@ -1,5 +1,5 @@
 name: server
-description: AiCMHCS（智慧儿童心理保健系统）后端 API 服务，基于 Dart Frog + 达梦 DM8（DPI/FFI）
+description: AiCMHCS（智慧儿童孤独症管理系统）后端 API 服务，基于 Dart Frog + 达梦 DM8（DPI/FFI）
 version: 0.1.0
 publish_to: none
 
