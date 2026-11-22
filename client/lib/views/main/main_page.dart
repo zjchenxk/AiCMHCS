@@ -874,13 +874,40 @@ class _MainPageState extends State<MainPage> {
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Text(
-                    menu.title,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: selected ? theme.colorScheme.onPrimary : theme.colorScheme.onPrimaryContainer,
-                      fontWeight: selected ? FontWeight.bold : FontWeight.w400,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                  // 名称最多两行、超出才省略；被截断时补 Tooltip 悬停看全名。
+                  // 单行名称保持原有行高，仅折行时收紧行距
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final baseStyle = theme.textTheme.bodyMedium?.copyWith(
+                        color: selected ? theme.colorScheme.onPrimary : theme.colorScheme.onPrimaryContainer,
+                        fontWeight: selected ? FontWeight.bold : FontWeight.w400,
+                      );
+                      final textScaler = MediaQuery.textScalerOf(context);
+                      final textDirection = Directionality.of(context);
+
+                      // 先按不限制行数测量：判断是否折行、是否超过两行
+                      final painter = TextPainter(
+                        text: TextSpan(text: menu.title, style: baseStyle),
+                        textDirection: textDirection,
+                        textScaler: textScaler,
+                      )..layout(maxWidth: constraints.maxWidth);
+                      final lineCount = painter.computeLineMetrics().length;
+                      painter.dispose();
+
+                      final style = lineCount > 1 ? baseStyle?.copyWith(height: 1.2) : baseStyle;
+                      final title = Text(
+                        menu.title,
+                        style: style,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      );
+                      if (lineCount <= 2) return title;
+                      return Tooltip(
+                        message: menu.title,
+                        waitDuration: const Duration(milliseconds: 400),
+                        child: title,
+                      );
+                    },
                   ),
                 ),
                 if (hasChildren)
