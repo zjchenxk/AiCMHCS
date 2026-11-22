@@ -75,13 +75,13 @@ class MainViewModel extends ChangeNotifier {
     return service.search(name: kw, visitCardNo: kw, certificateNo: kw, phone: kw);
   }
 
-  // 右侧儿童信息侧边栏：先以基础档案 + 演示数据即时出栏，随后异步载入
-  // 儿童扩展档案与最近一次拍照头像后重建（风险分级按扩展数据评估，
-  // 见 child_sidebar.dart）。
+  // 右侧儿童信息侧边栏：先以基础档案即时出栏，随后并行载入儿童扩展
+  // 档案、最近一次拍照头像与 CHILD_HIGH_RISK_FACTOR 已保存高危因素后
+  // 重建（五色分级/因素列表来自数据库，见 child_sidebar.dart）。
   ChildSidebarData? _childSidebarData;
   ChildSidebarData? get childSidebarData => _childSidebarData;
 
-  /// 侧边栏扩展信息/头像是否加载中（仅影响顶部细进度条）。
+  /// 侧边栏扩展信息/头像/高危因素是否加载中（顶部细进度条）。
   bool _childSidebarLoading = false;
   bool get childSidebarLoading => _childSidebarLoading;
 
@@ -96,6 +96,13 @@ class MainViewModel extends ChangeNotifier {
   void toggleChildSidebar() {
     _childSidebarCollapsed = !_childSidebarCollapsed;
     notifyListeners();
+  }
+
+  /// 重新加载当前儿童侧边栏数据（高危因素加载失败时的重试入口）。
+  Future<void> refreshChildSidebar() async {
+    final id = child.id;
+    if (id.isEmpty || _childSidebarLoading) return;
+    await _loadChildSidebar(id);
   }
 
   /// 将选中的儿童档案写入当前儿童上下文（显示字段由档案字段映射，
@@ -117,11 +124,14 @@ class MainViewModel extends ChangeNotifier {
       actualAge: _formatAge(birth),
       phone: info.phone ?? '',
     );
-    // 基础信息立即可见；扩展档案到达前使用演示高危数据（界面会标注）
+    // 基础信息立即可见；扩展档案与高危因素随后异步补全
     _childSidebarData = ChildSidebarData.build(
       child: child,
       ext: null,
       avatarBase64: null,
+      highRiskFactors: const [],
+      factorsLoaded: false,
+      factorsLoadFailed: false,
       now: _now(),
     );
     _childSidebarLoading = info.id.isNotEmpty;
@@ -129,8 +139,11 @@ class MainViewModel extends ChangeNotifier {
     unawaited(_loadChildSidebar(info.id));
   }
 
-  /// 加载侧边栏展示所需的扩展档案与最近一次拍照头像；失败时保留基础
-  /// 信息与演示数据，不阻断侧边栏展示。
+  /// 并行加载侧边栏所需的扩展档案、最近一次拍照头像与已保存高危因素。
+  ///
+  /// 三路请求各自捕获异常：单路失败不阻断其余数据展示；高危因素失败时
+  /// 以 [ChildSidebarData.factorsLoadFailed] 告知界面（提供重试），未完成
+  /// 前 [ChildSidebarData.factorsLoaded] 为 false。
   ///param childId: 当前儿童档案 ID（空串直接结束）
   Future<void> _loadChildSidebar(String childId) async {
     if (childId.isEmpty) {
@@ -139,33 +152,70 @@ class MainViewModel extends ChangeNotifier {
       return;
     }
     final requestId = ++_childSidebarRequestId;
+    if (!_childSidebarLoading) {
+      _childSidebarLoading = true;
+      notifyListeners();
+    }
     try {
       final service = _childService ?? app.getIt<ChildService>();
-      final archive = await service.load(childId);
+      final results = await Future.wait<Object?>([
+        _tryLoadArchive(service, childId),
+        _tryLatestPhoto(service, childId),
+        _tryHighRiskFactors(service, childId),
+      ]);
       if (!_isCurrentSidebarRequest(requestId, childId)) return;
 
-      ChildPhoto? photo;
-      try {
-        photo = await service.latestPhoto(childId);
-      } catch (e) {
-        // 头像失败不影响扩展信息展示
-        unawaited(LogHelper.warn('client:MainViewModel._loadChildSidebar', content: '儿童头像加载失败：$e'));
-      }
-      if (!_isCurrentSidebarRequest(requestId, childId)) return;
-
+      final archive = results[0] as ChildArchive?;
+      final photo = results[1] as ChildPhoto?;
+      final factors = results[2] as List<ChildHighRiskFactor>?;
       _childSidebarData = ChildSidebarData.build(
         child: child,
-        ext: archive.$2,
+        ext: archive?.$2,
         avatarBase64: photo?.avatarBase64,
+        highRiskFactors: factors ?? const [],
+        factorsLoaded: factors != null,
+        factorsLoadFailed: factors == null,
         now: _now(),
       );
     } catch (e) {
-      unawaited(LogHelper.warn('client:MainViewModel._loadChildSidebar', content: '儿童扩展信息加载失败：$e'));
+      // 服务未注册等未预期异常：记日志并保留基础信息，不向调用方抛出
+      // （三路请求各自的失败已在 _try* 内降级处理）
+      unawaited(LogHelper.warn('client:MainViewModel._loadChildSidebar', content: '儿童侧边栏信息加载失败：$e'));
     } finally {
       if (requestId == _childSidebarRequestId) {
         _childSidebarLoading = false;
         notifyListeners();
       }
+    }
+  }
+
+  /// 载入儿童整档（扩展信息等）；失败记日志并返回 null。
+  Future<ChildArchive?> _tryLoadArchive(ChildService service, String childId) async {
+    try {
+      return await service.load(childId);
+    } catch (e) {
+      unawaited(LogHelper.warn('client:MainViewModel._loadChildSidebar(archive)', content: '儿童扩展信息加载失败：$e'));
+      return null;
+    }
+  }
+
+  /// 载入最近一次拍照头像；失败记日志并返回 null。
+  Future<ChildPhoto?> _tryLatestPhoto(ChildService service, String childId) async {
+    try {
+      return await service.latestPhoto(childId);
+    } catch (e) {
+      unawaited(LogHelper.warn('client:MainViewModel._loadChildSidebar(photo)', content: '儿童头像加载失败：$e'));
+      return null;
+    }
+  }
+
+  /// 载入已保存高危因素；失败记日志并返回 null（界面显示失败态）。
+  Future<List<ChildHighRiskFactor>?> _tryHighRiskFactors(ChildService service, String childId) async {
+    try {
+      return await service.highRiskFactors(childId);
+    } catch (e) {
+      unawaited(LogHelper.warn('client:MainViewModel._loadChildSidebar(highRisk)', content: '儿童高危因素加载失败：$e'));
+      return null;
     }
   }
 

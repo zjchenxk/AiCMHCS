@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:client/models/child_sidebar.dart';
+import 'package:client/utils/risk_color.dart';
 import 'package:client/view_models/main/main_view_model.dart';
 import 'package:client/widgets/glass_panel.dart';
 import 'package:material_ui/material_ui.dart';
@@ -179,13 +180,16 @@ class _ChildInfoSidebarState extends State<ChildInfoSidebar> {
                 children: [
                   _buildProfile(theme, data),
                   const SizedBox(height: 18),
-                  _buildRiskScale(theme, data),
+                  // 数据未就绪时展示加载/失败状态，避免把「未加载」误显示为「无高危因素」
+                  if (data.factorsLoaded) _buildRiskScale(theme, data) else _buildRiskStatusSection(theme, mainViewModel, data),
                   const SizedBox(height: 18),
                   _buildBasicMetrics(theme, data),
-                  const SizedBox(height: 18),
-                  _buildSectionTitle(theme, '高危因素', demo: data.riskIsMock),
-                  const SizedBox(height: 8),
-                  ..._buildFactorTiles(theme, data),
+                  if (data.factorsLoaded) ...[
+                    const SizedBox(height: 18),
+                    _buildSectionTitle(theme, '高危因素'),
+                    const SizedBox(height: 8),
+                    ..._buildFactorTiles(theme, data),
+                  ],
                   const SizedBox(height: 18),
                   _buildSectionTitle(theme, '历次检查', demo: data.examIsMock),
                   const SizedBox(height: 10),
@@ -336,14 +340,57 @@ class _ChildInfoSidebarState extends State<ChildInfoSidebar> {
     );
   }
 
-  /// 五色分级色标 + 综合分级摘要。
-  Widget _buildRiskScale(ThemeData theme, ChildSidebarData data) {
-    final activeLevels = data.activeLevels;
-    final activeColor = _levelColor(data.riskLevel);
+  /// 高危因素未加载完成时的状态块（加载中 / 加载失败 + 重试）。
+  Widget _buildRiskStatusSection(ThemeData theme, MainViewModel mainViewModel, ChildSidebarData data) {
+    final failed = data.factorsLoadFailed;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionTitle(theme, '高危五色分级', demo: data.riskIsMock),
+        _buildSectionTitle(theme, '高危五色分级'),
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.30),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                failed ? '高危因素加载失败' : '正在加载高危因素…',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: failed ? 0.75 : 0.55),
+                ),
+              ),
+              if (failed) ...[
+                const SizedBox(height: 2),
+                TextButton(
+                  onPressed: mainViewModel.refreshChildSidebar,
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 28),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('重试'),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 五色分级色标 + 综合分级摘要。
+  Widget _buildRiskScale(ThemeData theme, ChildSidebarData data) {
+    final activeLevels = data.activeLevels;
+    final activeColor = RiskColorPalette.colorOf(data.riskLevel.label, theme);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle(theme, '高危五色分级'),
         const SizedBox(height: 10),
         Row(
           children: [
@@ -389,7 +436,7 @@ class _ChildInfoSidebarState extends State<ChildInfoSidebar> {
 
   /// 五色色标中的单个分级（选中项实心勾选，未选中项弱化）。
   Widget _buildRiskBadge(ThemeData theme, HighRiskLevel level, bool active) {
-    final color = _levelColor(level);
+    final color = RiskColorPalette.colorOf(level.label, theme);
     // 浅色（黄色）底上用深色勾，其余深色底用主题前景色，保证可辨识
     final checkColor = color.computeLuminance() > 0.45 ? theme.colorScheme.onSurface : theme.colorScheme.onPrimary;
     return Tooltip(
@@ -521,9 +568,10 @@ class _ChildInfoSidebarState extends State<ChildInfoSidebar> {
     return [for (final factor in data.factors) _buildFactorTile(theme, factor)];
   }
 
-  /// 单条高危因素卡片。
+  /// 单条高危因素卡片（名称 + 五色标签；有 REMARK 时在名称下方展示）。
   Widget _buildFactorTile(ThemeData theme, HighRiskFactor factor) {
-    final color = _levelColor(factor.level);
+    final color = RiskColorPalette.colorOf(factor.riskColor, theme);
+    final colorLabel = factor.riskColor?.trim().isNotEmpty ?? false ? factor.riskColor!.trim() : '未设置';
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(10),
@@ -564,7 +612,7 @@ class _ChildInfoSidebarState extends State<ChildInfoSidebar> {
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
-                          factor.level.label,
+                          colorLabel,
                           style: theme.textTheme.labelSmall?.copyWith(
                             color: color,
                             fontWeight: FontWeight.w600,
@@ -573,14 +621,17 @@ class _ChildInfoSidebarState extends State<ChildInfoSidebar> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    factor.detail,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
-                      height: 1.4,
+                  // 数据库备注（REMARK）非空时显示在因素名称下方
+                  if (factor.remark.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      factor.remark,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                        height: 1.4,
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
@@ -671,15 +722,6 @@ class _ChildInfoSidebarState extends State<ChildInfoSidebar> {
       ),
     );
   }
-
-  /// 五色分级语义色板：医学色标固定颜色，不随主题切换。
-  Color _levelColor(HighRiskLevel level) => switch (level) {
-    HighRiskLevel.green => Colors.green.shade700,
-    HighRiskLevel.yellow => Colors.yellow.shade800,
-    HighRiskLevel.orange => Colors.orange.shade800,
-    HighRiskLevel.red => Colors.red.shade700,
-    HighRiskLevel.purple => Colors.purple.shade700,
-  };
 
   /// 解析头像 base64（CHILD_PHOTO.AVATAR_IMAGE 为裸 base64）；无效时
   /// 返回 null，回退显示默认儿童图标。

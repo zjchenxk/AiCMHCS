@@ -30,7 +30,7 @@ extension HighRiskLevelX on HighRiskLevel {
   /// 是否参与综合分级（紫色为叠加标识，不单独作为综合分级）。
   bool get isPrimary => this != HighRiskLevel.purple;
 
-  /// 因素列表排序权重（越严重的越靠前，绿色兜底最后）。
+  /// 因素列表排序权重（越严重的越靠前，未设置颜色最后）。
   int get severityOrder => switch (this) {
     HighRiskLevel.red => 0,
     HighRiskLevel.orange => 1,
@@ -40,23 +40,24 @@ extension HighRiskLevelX on HighRiskLevel {
   };
 }
 
-/// 单条高危因素（按五色归属）。
+/// 单条高危因素（来源 CHILD_HIGH_RISK_FACTOR，名称与颜色为保存当时的
+/// 字典值快照）。
 class HighRiskFactor {
-  /// 构造函数：注入级别、因素名称与说明。
+  /// 构造函数：注入五色归属、因素名称与备注。
   const HighRiskFactor({
-    required this.level,
+    required this.riskColor,
     required this.title,
-    required this.detail,
+    this.remark = '',
   });
 
-  /// 所属五色级别。
-  final HighRiskLevel level;
+  /// 高危颜色（中文五色；null/空串表示字典未设置颜色）。
+  final String? riskColor;
 
-  /// 因素名称（如「早产（32~33⁺⁶周）」）。
+  /// 高危因素名称（RISK_FACTOR_NAME）。
   final String title;
 
-  /// 因素说明（测量值/管理建议）。
-  final String detail;
+  /// 备注（REMARK；空串表示无备注，界面不显示）。
+  final String remark;
 }
 
 /// 单条检查记录（历次检查时间轴项）。
@@ -81,11 +82,12 @@ class ChildExamRecord {
 /// 右侧儿童信息侧边栏的展示数据。
 ///
 /// 由 [MainViewModel.setCurrentChild] 以当前儿童基础档案构建（先出基础
-/// 信息 + 演示数据），随后异步载入扩展档案与最近一次拍照头像后重建：
-/// 扩展档案存在时按五色分级共识评估真实因素；扩展档案缺失时回退到
-/// 内置演示数据（界面标注「演示数据」）。检查记录暂无后端表，固定为
-/// 演示时间轴。实足年龄按日历计算；出生孕周 <37 周的早产儿在矫正窗口
-/// 内同时给出矫正年龄（40 周基准，见 AgeUtil）。
+/// 信息），随后并行载入扩展档案、最近一次拍照头像与
+/// CHILD_HIGH_RISK_FACTOR 高危因素记录后重建：五色分级取高危因素颜色
+/// 的最高级别（紫色叠加），高危因素列表展示名称与备注（REMARK）。
+/// 检查记录暂无后端表，固定为演示时间轴。实足年龄按日历计算；出生
+/// 孕周 <37 周的早产儿在矫正窗口内同时给出矫正年龄（40 周基准，见
+/// AgeUtil）。
 class ChildSidebarData {
   /// 构造函数：注入侧边栏各展示字段。
   const ChildSidebarData({
@@ -101,8 +103,9 @@ class ChildSidebarData {
     required this.riskLevel,
     required this.purpleOverlay,
     required this.factors,
+    required this.factorsLoaded,
+    required this.factorsLoadFailed,
     required this.exams,
-    required this.riskIsMock,
     required this.examIsMock,
   });
 
@@ -134,20 +137,24 @@ class ChildSidebarData {
   /// 联系电话。
   final String? phone;
 
-  /// 综合分级（红色/橙色/黄色/绿色，按因素最高级别）。
+  /// 综合分级（红色/橙色/黄色/绿色，取高危因素中的最高级别）。
   final HighRiskLevel riskLevel;
 
   /// 是否为传染病（紫色）叠加标识。
   final bool purpleOverlay;
 
-  /// 高危因素列表（按严重程度排序）。
+  /// 高危因素列表（按五色严重程度 + 名称排序）。
   final List<HighRiskFactor> factors;
+
+  /// 高危因素是否已从 CHILD_HIGH_RISK_FACTOR 加载完成（false 时界面
+  /// 显示加载状态，避免把「未加载」误显示为「无高危因素」）。
+  final bool factorsLoaded;
+
+  /// 高危因素加载是否失败（失败时界面提供重试）。
+  final bool factorsLoadFailed;
 
   /// 历次检查记录（新→旧）。
   final List<ChildExamRecord> exams;
-
-  /// 高危分级/因素是否为演示数据。
-  final bool riskIsMock;
 
   /// 检查记录是否为演示数据。
   final bool examIsMock;
@@ -158,18 +165,25 @@ class ChildSidebarData {
     if (purpleOverlay) HighRiskLevel.purple,
   };
 
-  /// 由当前儿童基础档案 + 扩展档案（可空）+ 头像构建侧边栏数据。
+  /// 由当前儿童基础档案 + 扩展档案（可空）+ 头像 + 已保存高危因素构建
+  /// 侧边栏数据。
   ///param child: 当前儿童上下文（姓名/性别/年龄/电话）
-  ///param ext: 儿童扩展档案（为空时高危分级使用演示数据）
+  ///param ext: 儿童扩展档案（可空；用于 G/P、出生孕周/体重与矫正年龄）
   ///param avatarBase64: 最近一次拍照头像（无记录传 null）
+  ///param highRiskFactors: CHILD_HIGH_RISK_FACTOR 已保存记录（可为空）
+  ///param factorsLoaded: 高危因素是否加载完成（成功后置 true）
+  ///param factorsLoadFailed: 高危因素加载是否失败（失败时界面提供重试）
   ///param now: 业务当前时间（全局时间服务口径，检查时间轴据此生成）
   factory ChildSidebarData.build({
     required CurrentChild child,
     required ChildExtInfo? ext,
     required String? avatarBase64,
+    required List<ChildHighRiskFactor> highRiskFactors,
+    required bool factorsLoaded,
+    required bool factorsLoadFailed,
     required DateTime now,
   }) {
-    final risk = _evaluateRisk(ext);
+    final risk = _classifyRisk(highRiskFactors);
     final ageText = AgeUtil.formatAgeYmd(child.birthDate, now);
     return ChildSidebarData(
       name: child.name,
@@ -190,173 +204,68 @@ class ChildSidebarData {
       riskLevel: risk.level,
       purpleOverlay: risk.purple,
       factors: risk.factors,
+      factorsLoaded: factorsLoaded,
+      factorsLoadFailed: factorsLoadFailed,
       exams: _mockExams(now),
-      riskIsMock: risk.isMock,
       examIsMock: true,
     );
   }
 
-  /// 按扩展档案评估五色高危分级与因素（扩展档案为空时返回演示数据）。
-  static _RiskEvaluation _evaluateRisk(ChildExtInfo? ext) {
-    if (ext == null) return _mockRisk();
-
-    final factors = <HighRiskFactor>[];
+  /// 按已保存高危因素计算综合分级与展示列表。
+  ///
+  /// 综合分级 = 非紫色因素中的最高级别（红 > 橙 > 黄 > 绿）；紫色作为
+  /// 叠加标识单独记录。未设置颜色的因素只展示、不参与分级。库内无
+  /// 记录时归绿色并给出「无高危因素」占位。
+  static ({HighRiskLevel level, bool purple, List<HighRiskFactor> factors}) _classifyRisk(List<ChildHighRiskFactor> rows) {
+    var level = HighRiskLevel.green;
     var purple = false;
-
-    void add(HighRiskLevel level, String title, String detail) {
-      factors.add(HighRiskFactor(level: level, title: title, detail: detail));
-    }
-
-    void addPurple(String title, String detail) {
-      purple = true;
-      add(HighRiskLevel.purple, title, detail);
-    }
-
-    // 出生孕周：<32 周红色；32~33⁺⁶周橙色；34~36⁺⁶周黄色
-    final week = _toInt(ext.gestationalWeek);
-    final weekText = _formatGestationalAge(ext);
-    if (week != null && weekText != null) {
-      if (week < 32) {
-        add(HighRiskLevel.red, '超早产（< 32 周）', '出生孕周 $weekText，需 NICU 救治与长期随访');
-      } else if (week < 34) {
-        add(HighRiskLevel.orange, '早产（32~33⁺⁶周）', '出生孕周 $weekText，属中危组');
-      } else if (week < 37) {
-        add(HighRiskLevel.yellow, '早产（34~36⁺⁶周）', '出生孕周 $weekText，属低危组');
+    final factors = <HighRiskFactor>[];
+    for (final row in rows) {
+      final color = _blankToNull(row.riskColor);
+      final factorLevel = _levelOfColor(color);
+      if (factorLevel == HighRiskLevel.purple) purple = true;
+      if (factorLevel != null && factorLevel.isPrimary && factorLevel.severityOrder < level.severityOrder) {
+        level = factorLevel;
       }
-    }
-
-    // 出生体重：<2000 g 红色；2000~2500 g 橙色；>4000 g 黄色（巨大儿）
-    final weight = _toDouble(ext.birthWeight);
-    if (weight != null) {
-      final weightText = '${weight.round()} g';
-      if (weight < 2000) {
-        add(HighRiskLevel.red, '低出生体重（< 2000 g）', '出生体重 $weightText，需重点救治与随访');
-      } else if (weight < 2500) {
-        add(HighRiskLevel.orange, '低出生体重（2000~2500 g）', '出生体重 $weightText，属中危组');
-      } else if (weight > 4000) {
-        add(HighRiskLevel.yellow, '巨大儿（> 4000 g）', '出生体重 $weightText，属低危组');
-      }
-    }
-
-    if (ext.hasBirthAsphyxia == '1') {
-      final apgar5 = _toInt(ext.apgar5);
-      final severe = apgar5 != null && apgar5 <= 3;
-      add(
-        severe ? HighRiskLevel.red : HighRiskLevel.orange,
-        severe ? '重度出生窒息' : '出生窒息（5 min Apgar 4~7 分）',
-        apgar5 == null ? '存在出生窒息史，需评估 HIE 风险' : 'Apgar 5 分钟 $apgar5 分，需神经发育随访',
-      );
-    }
-
-    if (ext.hasIntracranialHemorrhage == '1') {
-      add(HighRiskLevel.orange, '颅内出血（Ⅰ~Ⅱ级）', '存在颅内出血史，需神经发育随访');
-    }
-
-    if (ext.hasBirthDefect06d == '1' || ext.hasBirthDefect728d == '1') {
-      add(HighRiskLevel.orange, '先天性疾病', '存在出生缺陷，需住院观察和/或长期护理治疗');
-    }
-
-    if (ext.isSga == '1') {
-      add(HighRiskLevel.orange, '小于胎龄儿（SGA）', '按中危组管理，关注体重与追赶生长');
-    }
-
-    if (ext.hasDiabetes == '1') {
-      add(HighRiskLevel.yellow, '母亲妊娠期糖尿病', '母亲孕期合并妊娠期糖尿病，属低危因素');
-    }
-    if (ext.hasGestationalHypertension == '1' || ext.hasPreeclampsia == '1' || ext.hasEclampsia == '1') {
-      add(HighRiskLevel.yellow, '母亲妊娠期高血压疾病', '含妊娠期高血压/子痫前期，属低危因素');
-    }
-    if (ext.hasHyperthyroidismInPregnancy == '1' || ext.hasHypothyroidismInPregnancy == '1') {
-      add(HighRiskLevel.yellow, '母亲甲状腺疾病', '母亲孕期合并甲状腺疾病，属低危因素');
-    }
-    if (ext.hasAnemia == '1') {
-      final severity = switch (ext.anemiaSeverity) {
-        '1' => '（60~110 g/L）',
-        '2' => '（40~60 g/L）',
-        '3' => '（≤ 40 g/L）',
-        _ => '',
-      };
-      add(HighRiskLevel.yellow, '母亲孕期贫血', '血红蛋白降低$severity，属低危因素');
-    }
-    if (ext.hasMacrosomia == '1') {
-      add(HighRiskLevel.yellow, '母亲孕期巨大儿', '胎儿巨大儿，注意产伤与低血糖监测');
-    }
-
-    // 紫色：传染病专项管理，可与其它颜色叠加
-    if (ext.hasHivInfection == '1') {
-      addPurple('母亲 HIV 感染', '按传染病防治要求专项管理，可与其它颜色叠加');
-    }
-    if (ext.hasSyphilisInfection == '1') {
-      addPurple('母亲梅毒感染', '按传染病防治要求专项管理，可与其它颜色叠加');
-    }
-    if (ext.hasCmvInfection == '1') {
-      addPurple('母亲巨细胞病毒感染', 'TORCH 感染，按传染病专项管理，可与其它颜色叠加');
-    }
-    if (ext.hasRubellaInfection == '1') {
-      addPurple('母亲风疹病毒感染', 'TORCH 感染，按传染病专项管理，可与其它颜色叠加');
-    }
-
-    // 没有任何主分级因素时归绿色（仅紫色叠加也属绿色基础分级）
-    if (!factors.any((f) => f.level.isPrimary)) {
+      final name = row.riskFactorName.trim();
       factors.add(
-        const HighRiskFactor(
-          level: HighRiskLevel.green,
-          title: '正常新生儿',
-          detail: '无母亲及胎儿、新生儿的高危因素',
+        HighRiskFactor(
+          riskColor: color,
+          title: name.isEmpty ? '未命名高危因素' : name,
+          remark: _blankToNull(row.remark) ?? '',
         ),
       );
     }
-    factors.sort((a, b) => a.level.severityOrder.compareTo(b.level.severityOrder));
-
-    return _RiskEvaluation(
-      level: _highestPrimary(factors),
-      purple: purple,
-      factors: factors,
-      isMock: false,
-    );
-  }
-
-  /// 内置演示数据（扩展档案缺失时使用，界面标注「演示数据」）。
-  static _RiskEvaluation _mockRisk() {
-    const factors = [
-      HighRiskFactor(
-        level: HighRiskLevel.orange,
-        title: '早产（32~33⁺⁶周）',
-        detail: '示例：出生孕周 33 周 + 4 天，属中危组',
-      ),
-      HighRiskFactor(
-        level: HighRiskLevel.orange,
-        title: '低出生体重（2000~2500 g）',
-        detail: '示例：出生体重 2280 g，关注体重增长与追赶生长',
-      ),
-      HighRiskFactor(
-        level: HighRiskLevel.yellow,
-        title: '母亲妊娠期高血压疾病',
-        detail: '示例：母亲孕期合并妊娠期高血压，属低危因素',
-      ),
-      HighRiskFactor(
-        level: HighRiskLevel.purple,
-        title: '母亲梅毒感染',
-        detail: '示例：按传染病防治要求专项管理，可与其它颜色叠加',
-      ),
-    ];
-    return _RiskEvaluation(
-      level: HighRiskLevel.orange,
-      purple: true,
-      factors: factors,
-      isMock: true,
-    );
-  }
-
-  /// 取主分级中的最高级别（绿色兜底）。
-  static HighRiskLevel _highestPrimary(List<HighRiskFactor> factors) {
-    var level = HighRiskLevel.green;
-    for (final factor in factors) {
-      if (!factor.level.isPrimary) continue;
-      if (factor.level.severityOrder < level.severityOrder) level = factor.level;
+    if (factors.isEmpty) {
+      factors.add(
+        const HighRiskFactor(
+          riskColor: '绿色',
+          title: '无高危因素',
+          remark: '无母亲及胎儿、新生儿的高危因素',
+        ),
+      );
     }
-    return level;
+    factors.sort((a, b) {
+      final severityA = _severityOfColor(a.riskColor);
+      final severityB = _severityOfColor(b.riskColor);
+      if (severityA != severityB) return severityA.compareTo(severityB);
+      return a.title.compareTo(b.title);
+    });
+    return (level: level, purple: purple, factors: factors);
   }
+
+  /// 中文高危颜色转五色级别（未设置/非法值为 null）。
+  static HighRiskLevel? _levelOfColor(String? color) => switch (color) {
+    '绿色' => HighRiskLevel.green,
+    '黄色' => HighRiskLevel.yellow,
+    '橙色' => HighRiskLevel.orange,
+    '红色' => HighRiskLevel.red,
+    '紫色' => HighRiskLevel.purple,
+    _ => null,
+  };
+
+  /// 因素列表排序权重（未设置颜色排在已知五色之后）。
+  static int _severityOfColor(String? color) => _levelOfColor(color)?.severityOrder ?? 5;
 
   /// 演示检查记录（新→旧，日期基于业务当前时间倒推）。
   static List<ChildExamRecord> _mockExams(DateTime now) {
@@ -425,29 +334,4 @@ class ChildSidebarData {
 
   /// 字符串转整数（空串/非法值返回 null）。
   static int? _toInt(String? value) => int.tryParse(value?.trim() ?? '');
-
-  /// 字符串转小数（空串/非法值返回 null）。
-  static double? _toDouble(String? value) => double.tryParse(value?.trim() ?? '');
-}
-
-/// 高危评估结果（内部使用）。
-class _RiskEvaluation {
-  const _RiskEvaluation({
-    required this.level,
-    required this.purple,
-    required this.factors,
-    required this.isMock,
-  });
-
-  /// 综合分级（红/橙/黄/绿）。
-  final HighRiskLevel level;
-
-  /// 是否叠加紫色（传染病）标识。
-  final bool purple;
-
-  /// 高危因素列表。
-  final List<HighRiskFactor> factors;
-
-  /// 是否为演示数据。
-  final bool isMock;
 }
