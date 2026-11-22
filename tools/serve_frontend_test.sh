@@ -27,5 +27,12 @@ if [ -n "${PID:-}" ]; then
 fi
 
 echo "== 托管测试前端 http://localhost:$PORT（部署目录 $TEST_ROOT/frontend）=="
-cd "$TEST_ROOT/frontend"
-exec python -m http.server "$PORT"
+# python 可用则沿用（访问日志格式与历史一致）；不可用（如 Windows Store
+# 占位符）回退 Dart 零依赖静态托管 tools/serve_static.dart
+if python -c 'print("ok")' 2>/dev/null | grep -q ok; then
+  cd "$TEST_ROOT/frontend"
+  exec python -m http.server "$PORT"
+fi
+echo "python 不可用，改用 Dart 静态托管（tools/serve_static.dart）"
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+exec dart tools/serve_static.dart "$(cygpath -w "$TEST_ROOT/frontend")" "$PORT"

@@ -75,7 +75,8 @@ AiCMHCS/
 │   ├── serve_frontend.sh     # 构建并静态托管前端（5173 端口）
 │   ├── deploy_test.sh        # 一键发布测试版（构建 + 部署前端副本）
 │   ├── start_backend_test.sh # 启动测试后端（8090 端口，从 server/build 运行）
-│   └── serve_frontend_test.sh  # 托管测试前端（5273 端口）
+│   ├── serve_frontend_test.sh  # 托管测试前端（5273 端口；无 python 时自动回退 Dart）
+│   └── serve_static.dart     # 零依赖静态文件服务器（python http.server 的 Dart 替代）
 └── README.md
 ```
 
@@ -152,6 +153,10 @@ cd client && flutter run -d chrome # 或 -d web-server --web-port 5173
 ./tools/start_backend_test.sh   # 启动测试后端（:8090）
 ./tools/serve_frontend_test.sh  # 托管测试前端（:5273）
 ```
+
+前端托管优先用 `python -m http.server`；机器未装 Python（如 Windows Store
+占位符）时自动回退 `tools/serve_static.dart`（零依赖 Dart 静态服务器，
+行为对齐 http.server：index.html 回退、访问日志、If-Modified-Since 304）。
 
 ### 开机自启（Windows 计划任务）
 
