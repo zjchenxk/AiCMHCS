@@ -33,7 +33,7 @@ void main() {
 
   test('空库全量迁移：建表并记录版本', () async {
     final applied = await SchemaMigrator(db, fieldCipher: cipher).migrate();
-    expect(applied.map((m) => m.version), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]);
+    expect(applied.map((m) => m.version), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]);
 
     final tables = await tableNames();
     expect(
@@ -83,6 +83,8 @@ void main() {
       ['20', contains('儿童高危因素表')],
       ['21', contains('互斥规则')],
       ['22', contains('REMARK')],
+      ['23', contains('PHOTO_THUMB')],
+      ['24', contains('HIGH_RISK_FACTOR_ID')],
     ]);
 
     // 新建库 v20 建表已含 REMARK，v22 条件补列应幂等跳过（列仍在且仅一列）
@@ -90,6 +92,18 @@ void main() {
       "SELECT COUNT(*) AS CNT FROM pragma_table_info('CHILD_HIGH_RISK_FACTOR') WHERE name = 'REMARK'",
     );
     expect(remarkCols.rowsAsMaps.first['CNT'], '1');
+
+    // 新建库 v23 补列后 CHILD_PHOTO 应含缩略图列
+    final photoCols = await db.query(
+      "SELECT COUNT(*) AS CNT FROM pragma_table_info('CHILD_PHOTO') WHERE name = 'PHOTO_THUMB'",
+    );
+    expect(photoCols.rowsAsMaps.first['CNT'], '1');
+
+    // 新建库 v24 改名后 CHILD_HIGH_RISK_FACTOR 应含 HIGH_RISK_FACTOR_ID 列
+    final factorCols = await db.query(
+      "SELECT COUNT(*) AS CNT FROM pragma_table_info('CHILD_HIGH_RISK_FACTOR') WHERE name = 'HIGH_RISK_FACTOR_ID'",
+    );
+    expect(factorCols.rowsAsMaps.first['CNT'], '1');
   });
 
   test('重复执行为空操作', () async {

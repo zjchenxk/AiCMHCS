@@ -239,6 +239,7 @@ CREATE TABLE CHILD_PHOTO (
   CHILD_ID TEXT NOT NULL,
   PHOTO TEXT NOT NULL,
   AVATAR TEXT NOT NULL,
+  PHOTO_THUMB TEXT, -- 照片缩略图（v23 补列，存量行为 NULL）
   CREATOR_ID TEXT NOT NULL,
   CREATOR_NAME TEXT NOT NULL,
   DEPT_ID TEXT,
@@ -254,7 +255,7 @@ CREATE TABLE CHILD_PHOTO (
 CREATE TABLE CHILD_HIGH_RISK_FACTOR (
   ID TEXT PRIMARY KEY NOT NULL,
   CHILD_ID TEXT NOT NULL,
-  HIGH_RISK_FACTOR TEXT NOT NULL,
+  HIGH_RISK_FACTOR_ID TEXT NOT NULL, -- 高危因素ID（v24 改名）
   RISK_FACTOR_CODE TEXT NOT NULL,
   RISK_FACTOR_NAME TEXT NOT NULL,
   RISK_COLOR TEXT,
@@ -637,11 +638,12 @@ CREATE TABLE BASE_HIGH_RISK_FACTOR_EXCLUSION (
     // 无记录 → null
     expect(await service.latestPhoto(childId, '1'), isNull);
 
-    // 保存两次（历史保留），最近一条生效
+    // 保存两次（历史保留），最近一条生效；缩略图随记录落库
     await service.savePhoto(
       childId: childId,
       photoBase64: 'PHOTO-1',
       avatarBase64: 'AVATAR-1',
+      thumbBase64: 'THUMB-1',
       creatorId: '9',
       creatorName: '张医生',
       hospId: '1',
@@ -651,6 +653,7 @@ CREATE TABLE BASE_HIGH_RISK_FACTOR_EXCLUSION (
       childId: childId,
       photoBase64: 'PHOTO-2',
       avatarBase64: 'AVATAR-2',
+      thumbBase64: 'THUMB-2',
       creatorId: '9',
       creatorName: '张医生',
       hospId: '1',
@@ -659,6 +662,7 @@ CREATE TABLE BASE_HIGH_RISK_FACTOR_EXCLUSION (
     final latest = await service.latestPhoto(childId, '1');
     expect(latest?.avatarBase64, 'AVATAR-2', reason: '按创建时间/ID 倒序取最近一条');
     expect(latest?.photoBase64, isNull, reason: '最近记录查询不含 PHOTO 大图');
+    expect(latest?.thumbBase64, isNull, reason: '最近记录查询不含缩略图列');
     expect(latest?.creatorName, '张医生');
     expect(latest?.hospName, '示例人民医院');
 
@@ -677,7 +681,7 @@ CREATE TABLE BASE_HIGH_RISK_FACTOR_EXCLUSION (
       throwsA(isA<ChildException>().having((e) => e.message, 'message', contains('不存在'))),
     );
 
-    // 限长校验：空值与超 1MB 拒绝
+    // 限长校验：空值与超 1MB 拒绝（缩略图同口径）
     await expectLater(
       service.savePhoto(childId: childId, photoBase64: '  ', avatarBase64: 'A', creatorId: '9', creatorName: '张医生', hospId: '1', hospName: '示例人民医院'),
       throwsA(isA<ChildException>().having((e) => e.message, 'message', contains('照片不能为空'))),
@@ -685,6 +689,10 @@ CREATE TABLE BASE_HIGH_RISK_FACTOR_EXCLUSION (
     await expectLater(
       service.savePhoto(childId: childId, photoBase64: 'P', avatarBase64: 'A' * (1024 * 1024 + 1), creatorId: '9', creatorName: '张医生', hospId: '1', hospName: '示例人民医院'),
       throwsA(isA<ChildException>().having((e) => e.message, 'message', contains('头像超出长度限制'))),
+    );
+    await expectLater(
+      service.savePhoto(childId: childId, photoBase64: 'P', avatarBase64: 'A', thumbBase64: 'T' * (1024 * 1024 + 1), creatorId: '9', creatorName: '张医生', hospId: '1', hospName: '示例人民医院'),
+      throwsA(isA<ChildException>().having((e) => e.message, 'message', contains('照片缩略图超出长度限制'))),
     );
 
     // 移除当天：两条均为今天创建 → 全部删除
@@ -704,6 +712,7 @@ CREATE TABLE BASE_HIGH_RISK_FACTOR_EXCLUSION (
       child: buildChild(),
       photoBase64: 'PHOTO-NEW',
       avatarBase64: 'AVATAR-NEW',
+      thumbBase64: 'THUMB-NEW',
       creatorId: '9',
       creatorName: '张医生',
       hospId: '1',
@@ -718,6 +727,7 @@ CREATE TABLE BASE_HIGH_RISK_FACTOR_EXCLUSION (
       child: buildChild(),
       photoBase64: 'PHOTO-EDIT',
       avatarBase64: 'AVATAR-EDIT',
+      thumbBase64: 'THUMB-EDIT',
       hospId: '1',
     );
     final afterEdit = await service.latestPhoto(created.$1.id, '1');
@@ -726,6 +736,57 @@ CREATE TABLE BASE_HIGH_RISK_FACTOR_EXCLUSION (
     // 删除档案 → 拍照记录连带删除
     expect(await service.delete(created.$1.id, '1'), 1);
     expect(await service.latestPhoto(created.$1.id, '1'), isNull);
+  });
+
+  test('照片管理：列表倒序与医院隔离、详情回大图、按 ID 删除', () async {
+    final created = await service.create(
+      child: buildChild(),
+      creatorId: '9',
+      creatorName: '张医生',
+      hospId: '1',
+      hospName: '示例人民医院',
+    );
+    final childId = created.$1.id;
+
+    // 保存三条（第二条不带缩略图——存量行口径），列表倒序最新在前
+    await service.savePhoto(childId: childId, photoBase64: 'PHOTO-1', avatarBase64: 'AVATAR-1', thumbBase64: 'THUMB-1', creatorId: '9', creatorName: '张医生', hospId: '1', hospName: '示例人民医院');
+    await service.savePhoto(childId: childId, photoBase64: 'PHOTO-2', avatarBase64: 'AVATAR-2', creatorId: '9', creatorName: '张医生', hospId: '1', hospName: '示例人民医院');
+    await service.savePhoto(childId: childId, photoBase64: 'PHOTO-3', avatarBase64: 'AVATAR-3', thumbBase64: 'THUMB-3', creatorId: '9', creatorName: '张医生', hospId: '1', hospName: '示例人民医院');
+
+    final photos = await service.listPhotos(childId, '1');
+    expect(photos, hasLength(3));
+    expect(photos.map((p) => p.avatarBase64), ['AVATAR-3', 'AVATAR-2', 'AVATAR-1'], reason: '按创建时间/ID 倒序，最新在前');
+    expect(photos[0].thumbBase64, 'THUMB-3');
+    expect(photos[1].thumbBase64, isNull, reason: '未带缩略图的记录为 NULL（客户端回退头像）');
+    expect(photos[1].avatarBase64, 'AVATAR-2');
+    expect(photos[0].photoBase64, isNull, reason: '列表不含 PHOTO 大图');
+    expect(photos[0].creatorName, '张医生');
+    expect(photos[0].hospName, '示例人民医院');
+
+    // 跨医院列表不可见（儿童不属于该院 → 拒绝）
+    await expectLater(
+      service.listPhotos(childId, '2'),
+      throwsA(isA<ChildException>().having((e) => e.message, 'message', contains('不存在'))),
+    );
+
+    // 详情回大图与缩略图
+    final detail = await service.photoDetail(photos[0].id!, '1');
+    expect(detail.photoBase64, 'PHOTO-3');
+    expect(detail.avatarBase64, 'AVATAR-3');
+    expect(detail.thumbBase64, 'THUMB-3');
+
+    // 空 ID 校验；跨院照片 ID 详情按不存在处理
+    await expectLater(service.photoDetail('', '1'), throwsA(isA<ChildException>()));
+    await expectLater(
+      service.photoDetail(photos[0].id!, '2'),
+      throwsA(isA<ChildException>().having((e) => e.code, 'code', 40001)),
+    );
+
+    // 按 ID 删除：本院可删、跨院 ID 删不到返回 0，其余记录不受影响
+    expect(await service.deletePhoto(photos[1].id!, '1'), 1);
+    expect(await service.deletePhoto(photos[1].id!, '2'), 0);
+    expect((await service.listPhotos(childId, '1')).map((p) => p.avatarBase64), ['AVATAR-3', 'AVATAR-1']);
+    expect((await service.photoDetail(photos[0].id!, '1')).avatarBase64, 'AVATAR-3');
   });
 
   test('findDuplicates：姓名+性别+出生日期三键 AND 查重、excludeId 排除自身、跨院隔离', () async {
@@ -774,16 +835,18 @@ CREATE TABLE BASE_HIGH_RISK_FACTOR_EXCLUSION (
   });
 
   // 高级组合查询测试数据：医院 1 依次建档 王小明（38 周/3200g，监护人
-  // 王大壮）→ 李小红（40 周/2800g，女，无证件/电话）→ 张小刚（无扩展
-  // 信息无监护人、无证件/电话，保证盲索引条件各自唯一命中），医院 2
-  // 一条同名档案用于隔离断言。列表查询按「CREATE_TIME DESC, ID DESC」
-  // 排序（UUID v7 单调递增），即建档顺序的倒序：张小刚 → 李小红 → 王小明。
+  // 王大壮）→ 李小红（40 周/2800g，女，无证件/电话，高危因素「低出生
+  // 体重」）→ 张小刚（无扩展信息无监护人、无证件/电话，高危因素「妊娠
+  // 期高血压」，保证盲索引条件各自唯一命中），医院 2 一条同名档案用于
+  // 隔离断言。列表查询按「CREATE_TIME DESC, ID DESC」排序（UUID v7 单调
+  // 递增），即建档顺序的倒序：张小刚 → 李小红 → 王小明。
   Future<void> seedAdvanced() async {
-    Future<ChildInfo> save(ChildInfo child, {ChildExtInfo? ext, List<ChildGuardianInfo> guardians = const [], String hospId = '1'}) async {
+    Future<ChildInfo> save(ChildInfo child, {ChildExtInfo? ext, List<ChildGuardianInfo> guardians = const [], List<({String factorId, String? remark})>? highRiskFactors, String hospId = '1'}) async {
       final created = await service.create(
         child: child,
         ext: ext,
         guardians: guardians,
+        highRiskFactors: highRiskFactors,
         creatorId: '9',
         creatorName: '张医生',
         hospId: hospId,
@@ -805,9 +868,11 @@ CREATE TABLE BASE_HIGH_RISK_FACTOR_EXCLUSION (
         birthDate: '2025-06-15',
       ),
       ext: buildExt(gestationalWeek: '40', birthWeight: '2800'),
+      highRiskFactors: [(factorId: 'HRF-3', remark: null)],
     );
     await save(
       buildChild(name: '张小刚', visitCardNo: 'JZK202601003', certificateNo: null, phone: null, checkTime: '2026-11-01', birthDate: '2026-03-20'),
+      highRiskFactors: [(factorId: 'HRF-2', remark: null)],
     );
     await save(buildChild(visitCardNo: 'JZK-OUT'), hospId: '2');
   }
@@ -892,6 +957,34 @@ CREATE TABLE BASE_HIGH_RISK_FACTOR_EXCLUSION (
     // 体重上限 2900 → 仅李小红（2800g）
     final weightTo = await service.advancedQuery(hospId: '1', birthWeightTo: 2900);
     expect(weightTo.$1.map((c) => c.name), ['李小红']);
+  });
+
+  test('advancedQuery：高危因素多选任一命中（EXISTS CHILD_HIGH_RISK_FACTOR）', () async {
+    await seedAdvanced();
+    // 单因素 → 仅张小刚（保存过「妊娠期高血压」HRF-2）
+    final single = await service.advancedQuery(hospId: '1', highRiskFactorIds: ['HRF-2']);
+    expect(single.$1.map((c) => c.name), ['张小刚']);
+    expect(single.$2, 1);
+    // 多因素「任一命中」→ 张小刚 + 李小红（分别保存过 HRF-2 / HRF-3）
+    final either = await service.advancedQuery(hospId: '1', highRiskFactorIds: ['HRF-2', 'HRF-3']);
+    expect(either.$1.map((c) => c.name), ['张小刚', '李小红'], reason: '按创建时间倒序');
+    // 与其它条件 AND 组合
+    final combined = await service.advancedQuery(hospId: '1', sex: '2', highRiskFactorIds: ['HRF-2', 'HRF-3']);
+    expect(combined.$1.map((c) => c.name), ['李小红']);
+    // 绿色「无高危因素」标记项从不落库 → 不命中
+    final green = await service.advancedQuery(hospId: '1', highRiskFactorIds: ['HRF-1']);
+    expect(green.$1, isEmpty);
+    // 空列表/空白项归一为不过滤（分页浏览全院）
+    final noFilter = await service.advancedQuery(hospId: '1', highRiskFactorIds: []);
+    expect(noFilter.$2, 3);
+    final blankOnly = await service.advancedQuery(hospId: '1', highRiskFactorIds: ['  ', '']);
+    expect(blankOnly.$2, 3);
+    // 跨院隔离：医院 2 的儿童未保存过本院字典因素 → 不命中
+    final other = await service.advancedQuery(hospId: '2', highRiskFactorIds: ['HRF-2']);
+    expect(other.$1, isEmpty);
+    // 未知因素 ID → 不命中（不过校验、不报错）
+    final unknown = await service.advancedQuery(hospId: '1', highRiskFactorIds: ['HRF-NOT-EXIST']);
+    expect(unknown.$1, isEmpty);
   });
 
   test('advancedQuery：跨医院隔离与非法参数校验', () async {

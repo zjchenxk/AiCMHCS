@@ -1,5 +1,6 @@
 import 'package:client/models/current_child.dart';
 import 'package:client/views/child/child_create_page.dart';
+import 'package:client/views/child/photo_management_page.dart';
 import 'package:client/views/system/admin_division_management_page.dart';
 import 'package:client/views/system/campus_management_page.dart';
 import 'package:client/views/system/department_management_page.dart';
@@ -26,6 +27,7 @@ typedef MenuPageBuilder =
 Map<String, MenuPageBuilder> menuRoutes = {
   '/home': _buildPage(HomePage.new),
   '/child/create': _buildPage(ChildCreatePage.new),
+  '/child/photo': _buildPage(PhotoManagementPage.new),
   '/system/hospital': _buildPage(HospitalManagementPage.new),
   '/system/campus': _buildPage(CampusManagementPage.new),
   '/system/department': _buildPage(DepartmentManagementPage.new),

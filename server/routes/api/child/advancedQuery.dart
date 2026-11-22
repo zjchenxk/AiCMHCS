@@ -6,9 +6,11 @@ import 'package:server/services/child_service.dart';
 /// POST /api/child/advancedQuery
 /// 高级组合查询本院儿童档案：{checkTimeFrom?, checkTimeTo?, birthDateFrom?,
 /// birthDateTo?, name?, sex?, visitCardNo?, certificateNo?, phone?,
-/// guardianName?, gestationalWeekFrom?, gestationalWeekTo?, birthWeightFrom?,
-/// birthWeightTo?, page?, pageSize?}，条件之间为「与」关系（姓名/证件号码/
-/// 电话号码/监护人姓名走盲索引精确匹配，不支持模糊），服务端分页返回
+/// guardianName?, highRiskFactorIds?, gestationalWeekFrom?,
+/// gestationalWeekTo?, birthWeightFrom?, birthWeightTo?, page?, pageSize?}，
+/// 条件之间为「与」关系（姓名/证件号码/电话号码/监护人姓名走盲索引精确
+/// 匹配，不支持模糊；highRiskFactorIds 多选为「任一命中」——儿童保存过
+/// 列表中任意一个因素即命中），服务端分页返回
 /// data: {children, total, page, pageSize}。医院从令牌会话推导（不信任
 /// 客户端上报）。
 Future<Response> onRequest(RequestContext context) async {
@@ -42,6 +44,7 @@ Future<Response> onRequest(RequestContext context) async {
       certificateNo: body['certificateNo']?.toString(),
       phone: body['phone']?.toString(),
       guardianName: body['guardianName']?.toString(),
+      highRiskFactorIds: _stringListParam(body['highRiskFactorIds']),
       gestationalWeekFrom: _intParam(body['gestationalWeekFrom']),
       gestationalWeekTo: _intParam(body['gestationalWeekTo']),
       birthWeightFrom: _intParam(body['birthWeightFrom']),
@@ -76,6 +79,14 @@ int? _intParam(dynamic value) {
   final v = value.toString().trim();
   if (v.isEmpty) return null;
   return int.tryParse(v);
+}
+
+/// 字符串列表入参解析（高危因素多选 ID）：JSON 数组逐项取字符串、去
+/// 空格去空项；缺失/非数组/全空返回 null（表示不按高危因素过滤）。
+List<String>? _stringListParam(dynamic value) {
+  if (value is! List) return null;
+  final ids = value.whereType<String>().map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+  return ids.isEmpty ? null : ids;
 }
 
 Response _error(int status, int code, String message) => Response.json(

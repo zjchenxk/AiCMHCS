@@ -55,7 +55,9 @@ class ChildService {
   /// 高级组合查询本院儿童档案（条件之间为「与」关系，服务端分页）：
   /// 日期区间 yyyy-MM-dd、性别码值、文本条件精确匹配（姓名/证件号码/
   /// 联系电话/监护人姓名走盲索引，不支持模糊）、孕周按周数与体重按克
-  /// 数值区间。page/pageSize 由服务端夹取（默认 1 / 20）。
+  /// 数值区间、高危因素多选（highRiskFactorIds 非空时「任一命中」——
+  /// 儿童保存过列表中任意一个因素即命中；null/空列表不过滤）。
+  /// page/pageSize 由服务端夹取（默认 1 / 20）。
   ///returns: (当前页儿童列表, 总条数)
   Future<ChildAdvancedQueryPage> advancedQuery({
     String? checkTimeFrom,
@@ -68,6 +70,7 @@ class ChildService {
     String? certificateNo,
     String? phone,
     String? guardianName,
+    List<String>? highRiskFactorIds,
     int? gestationalWeekFrom,
     int? gestationalWeekTo,
     int? birthWeightFrom,
@@ -86,6 +89,7 @@ class ChildService {
       'certificateNo': certificateNo,
       'phone': phone,
       'guardianName': guardianName,
+      'highRiskFactorIds': (highRiskFactorIds == null || highRiskFactorIds.isEmpty) ? null : highRiskFactorIds,
       'gestationalWeekFrom': gestationalWeekFrom,
       'gestationalWeekTo': gestationalWeekTo,
       'birthWeightFrom': birthWeightFrom,
@@ -111,12 +115,20 @@ class ChildService {
   /// highRiskFactors 为 null 表示不改动高危因素，显式传列表（含空列表
   /// ——表示清空）则整表替换；元素为 {factorId, remark}（备注随选入行
   /// 落库）。
-  Future<ChildArchive> create({required ChildInfo child, ChildExtInfo? ext, List<ChildGuardianInfo> guardians = const [], String? photoBase64, String? avatarBase64, List<({String factorId, String? remark})>? highRiskFactors}) async {
+  Future<ChildArchive> create({
+    required ChildInfo child,
+    ChildExtInfo? ext,
+    List<ChildGuardianInfo> guardians = const [],
+    String? photoBase64,
+    String? avatarBase64,
+    String? thumbBase64,
+    List<({String factorId, String? remark})>? highRiskFactors,
+  }) async {
     final data = await _base.post('/api/child/add', {
       'child': child.toJson(),
       'ext': ext?.toJson(),
       'guardians': guardians.map((g) => g.toJson()).toList(),
-      'photo': buildPhotoPayload(photoBase64, avatarBase64),
+      'photo': buildPhotoPayload(photoBase64, avatarBase64, thumbBase64),
       'highRiskFactors': highRiskFactors?.map((f) => {'factorId': f.factorId, 'remark': f.remark}).toList(),
     });
     return _parseArchive(data);
@@ -132,6 +144,7 @@ class ChildService {
     List<ChildGuardianInfo> guardians = const [],
     String? photoBase64,
     String? avatarBase64,
+    String? thumbBase64,
     List<({String factorId, String? remark})>? highRiskFactors,
   }) async {
     final data = await _base.post('/api/child/update', {
@@ -139,18 +152,19 @@ class ChildService {
       'child': child.toJson(),
       'ext': ext?.toJson(),
       'guardians': guardians.map((g) => g.toJson()).toList(),
-      'photo': buildPhotoPayload(photoBase64, avatarBase64),
+      'photo': buildPhotoPayload(photoBase64, avatarBase64, thumbBase64),
       'highRiskFactors': highRiskFactors?.map((f) => {'factorId': f.factorId, 'remark': f.remark}).toList(),
     });
     return _parseArchive(data);
   }
 
-  /// 组装照片负载（两字段齐备才携带，避免服务端只收到半截数据）。
-  Map<String, dynamic>? buildPhotoPayload(String? photoBase64, String? avatarBase64) {
+  /// 组装照片负载（照片/头像齐备才携带，缩略图可选，避免服务端只收到
+  /// 半截数据）。
+  Map<String, dynamic>? buildPhotoPayload(String? photoBase64, String? avatarBase64, [String? thumbBase64]) {
     if (photoBase64 == null || photoBase64.isEmpty || avatarBase64 == null || avatarBase64.isEmpty) {
       return null;
     }
-    return {'photoBase64': photoBase64, 'avatarBase64': avatarBase64};
+    return {'photoBase64': photoBase64, 'avatarBase64': avatarBase64, 'thumbBase64': thumbBase64};
   }
 
   /// 删除儿童档案（连带删除扩展信息、监护人与全部拍照记录）。
@@ -185,5 +199,38 @@ class ChildService {
       data['removed'] as int? ?? 0,
       photo is Map<String, dynamic> ? ChildPhoto.fromJson(photo) : null,
     );
+  }
+
+  /// 查询儿童全部拍照记录（照片管理列表；倒序最新在前；带头像与缩略
+  /// 图，不含大图）。
+  Future<List<ChildPhoto>> photos(String childId) async {
+    final data = await _base.post('/api/child/photoList', {'childId': childId});
+    final list = data['photos'] as List<dynamic>? ?? const [];
+    return list.whereType<Map<String, dynamic>>().map(ChildPhoto.fromJson).toList();
+  }
+
+  /// 查询单条拍照记录详情（含 PHOTO 大图，照片管理预览/下载按需取用）。
+  Future<ChildPhoto> photoDetail(String photoId) async {
+    final data = await _base.post('/api/child/photoDetail', {'photoId': photoId});
+    return ChildPhoto.fromJson(data['photo'] as Map<String, dynamic>);
+  }
+
+  /// 保存单条拍照记录（照片管理页拍照/上传裁剪后独立保存；缩略图可
+  /// 选），返回入库后的记录。
+  Future<ChildPhoto> savePhoto({required String childId, required String photoBase64, required String avatarBase64, String? thumbBase64}) async {
+    final data = await _base.post('/api/child/photoSave', {
+      'childId': childId,
+      'photoBase64': photoBase64,
+      'avatarBase64': avatarBase64,
+      'thumbBase64': thumbBase64,
+    });
+    return ChildPhoto.fromJson(data['photo'] as Map<String, dynamic>);
+  }
+
+  /// 删除单条拍照记录（照片管理页按 ID 删除）。
+  ///returns: 删除的行数
+  Future<int> deletePhoto(String photoId) async {
+    final data = await _base.post('/api/child/photoDelete', {'photoId': photoId});
+    return data['deleted'] as int? ?? 0;
   }
 }

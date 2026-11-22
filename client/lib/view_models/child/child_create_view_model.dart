@@ -348,6 +348,7 @@ class ChildCreateViewModel extends ChangeNotifier {
           guardians: guardianList,
           photoBase64: pending?.photoBase64,
           avatarBase64: pending?.avatarBase64,
+          thumbBase64: pending?.thumbBase64,
           highRiskFactors: highRiskFactors,
         );
       } else {
@@ -357,6 +358,7 @@ class ChildCreateViewModel extends ChangeNotifier {
           guardians: guardianList,
           photoBase64: pending?.photoBase64,
           avatarBase64: pending?.avatarBase64,
+          thumbBase64: pending?.thumbBase64,
           highRiskFactors: highRiskFactors,
         );
       }

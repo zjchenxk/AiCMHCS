@@ -13,7 +13,7 @@ import 'package:provider/provider.dart';
 /// 收起后为 48 宽的竖条，内容区独立上下滚动。扩展信息/头像由
 /// MainViewModel 随当前儿童变化异步加载，加载失败时保留基础信息与
 /// 演示数据（见 models/child_sidebar.dart）。
-class ChildInfoSidebar extends StatelessWidget {
+class ChildInfoSidebar extends StatefulWidget {
   /// 构造函数。
   const ChildInfoSidebar({super.key});
 
@@ -22,6 +22,23 @@ class ChildInfoSidebar extends StatelessWidget {
 
   /// 收起宽度（仅保留展开按钮与头像）。
   static const double collapsedWidth = 48;
+
+  @override
+  State<ChildInfoSidebar> createState() => _ChildInfoSidebarState();
+}
+
+class _ChildInfoSidebarState extends State<ChildInfoSidebar> {
+  /// 展开态内容区滚动控制器：显式同挂 Scrollbar 与 SingleChildScrollView——
+  /// Web 桌面平台下 SingleChildScrollView 缺省不关联 PrimaryScrollController，
+  /// 无控制器的 Scrollbar 在滚动条淡出动画时会断言失败（整屏红闪 + 报错
+  /// 日志「The Scrollbar's ScrollController has no ScrollPosition attached」）。
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +55,7 @@ class ChildInfoSidebar extends StatelessWidget {
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeInOut,
           margin: const EdgeInsets.fromLTRB(0, 8, 8, 8),
-          width: mainViewModel.childSidebarCollapsed ? collapsedWidth : expandedWidth,
+          width: mainViewModel.childSidebarCollapsed ? ChildInfoSidebar.collapsedWidth : ChildInfoSidebar.expandedWidth,
           child: GlassPanel(
             borderRadius: 16,
             child: mainViewModel.childSidebarCollapsed
@@ -47,10 +64,10 @@ class ChildInfoSidebar extends StatelessWidget {
                 // 触发文字换行/溢出报错（与左侧功能菜单同一处理）
                 : OverflowBox(
                     alignment: AlignmentDirectional.topStart,
-                    minWidth: expandedWidth - 1,
-                    maxWidth: expandedWidth - 1,
+                    minWidth: ChildInfoSidebar.expandedWidth - 1,
+                    maxWidth: ChildInfoSidebar.expandedWidth - 1,
                     child: SizedBox(
-                      width: expandedWidth - 1,
+                      width: ChildInfoSidebar.expandedWidth - 1,
                       child: _buildExpandedPanel(theme, mainViewModel, data),
                     ),
                   ),
@@ -153,7 +170,9 @@ class ChildInfoSidebar extends StatelessWidget {
           ),
         Expanded(
           child: Scrollbar(
+            controller: _scrollController,
             child: SingleChildScrollView(
+              controller: _scrollController,
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,

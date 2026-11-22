@@ -59,7 +59,12 @@ class _CameraCaptureDialogState extends State<CameraCaptureDialog> {
   Uint8List? _frameBytes;
   Uint8List? _photoBytes;
   Uint8List? _avatarBytes;
+  Uint8List? _thumbBytes;
   Offset _cropOffset = Offset.zero;
+
+  /// 裁剪进行中（结果阶段须等字节就绪再进入——先切后填会整屏红闪
+  /// 空引用错误；同时防双击连触重入）。
+  bool _cropping = false;
 
   @override
   void initState() {
@@ -149,24 +154,31 @@ class _CameraCaptureDialogState extends State<CameraCaptureDialog> {
     }
   }
 
-  /// 双击裁剪框：按裁剪框位置截出 720×900 照片并缩放生成 320×320 头像，
-  /// 进入结果阶段。
+  /// 双击裁剪框：按裁剪框位置截出 720×900 照片并缩放生成 320×320 头像
+  /// 与 180×225 缩略图，裁剪完成后才切到结果阶段（结果阶段直接解引用
+  /// 照片/头像字节，先切后填会在首次裁剪时整屏红闪空引用错误）。
   Future<void> _applyCrop() async {
     final frame = _frameBytes;
-    if (frame == null) return;
-    setState(() => _stage = _Stage.result);
+    if (frame == null || _cropping) return;
+    setState(() => _cropping = true);
     try {
       final sx = (_cropOffset.dx / _scale).round().clamp(0, 1200 - 720);
       final sy = (_cropOffset.dy / _scale).round().clamp(0, 1080 - 900);
-      final (photo, avatar) = await _camera.cropLastFrame(sx, sy);
+      final (photo, avatar, thumb) = await _camera.cropLastFrame(sx, sy);
+      if (!mounted) return;
       setState(() {
         _photoBytes = photo;
         _avatarBytes = avatar;
+        _thumbBytes = thumb;
+        _cropping = false;
+        _stage = _Stage.result;
       });
     } catch (e, st) {
       LogHelper.error('client:CameraCaptureDialog._applyCrop', e, st);
-      // 裁剪失败回到预览重拍
-      setState(() => _stage = _Stage.live);
+      // 裁剪失败留在裁剪阶段，可直接重试（无需重拍）
+      if (mounted) {
+        setState(() => _cropping = false);
+      }
       _showError('裁剪失败：${_messageOf(e)}');
     }
   }
@@ -175,11 +187,13 @@ class _CameraCaptureDialogState extends State<CameraCaptureDialog> {
   void _confirm() {
     final photo = _photoBytes;
     final avatar = _avatarBytes;
-    if (photo == null || avatar == null) return;
+    final thumb = _thumbBytes;
+    if (photo == null || avatar == null || thumb == null) return;
     Navigator.of(context).pop(
       CapturedPhoto(
         photoBase64: base64Encode(photo),
         avatarBase64: base64Encode(avatar),
+        thumbBase64: base64Encode(thumb),
       ),
     );
   }
@@ -353,7 +367,7 @@ class _CameraCaptureDialogState extends State<CameraCaptureDialog> {
                       );
                     });
                   },
-                  onDoubleTap: _applyCrop,
+                  onDoubleTap: _cropping ? null : _applyCrop,
                   child: Container(
                     width: _cropDisplayWidth,
                     height: _cropDisplayHeight,
@@ -376,6 +390,23 @@ class _CameraCaptureDialogState extends State<CameraCaptureDialog> {
                   ),
                 ),
               ),
+              // 裁剪进行中：盖住画面防重复触发，字节就绪后才切结果阶段
+              if (_cropping)
+                Positioned.fill(
+                  child: Container(
+                    color: theme.colorScheme.surface.withValues(alpha: 0.6),
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const CircularProgressIndicator(),
+                          const SizedBox(height: 12),
+                          Text('裁剪中...', style: theme.textTheme.bodyMedium),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -391,7 +422,7 @@ class _CameraCaptureDialogState extends State<CameraCaptureDialog> {
             TextButton(onPressed: _cancel, child: const Text('取消')),
             const SizedBox(width: 12),
             OutlinedButton.icon(
-              onPressed: () => setState(() => _stage = _Stage.live),
+              onPressed: _cropping ? null : () => setState(() => _stage = _Stage.live),
               icon: const Icon(Icons.refresh, size: 18),
               label: const Text('重 拍'),
             ),

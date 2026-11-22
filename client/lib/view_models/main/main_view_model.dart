@@ -49,9 +49,11 @@ class MainViewModel extends ChangeNotifier {
 
   // 当前儿童上下文（默认空占位；主界面顶部搜索框精确检索选中后写入，
   // 随 BasePage 分发到各功能页，儿童建档页据此自动载入整档）
-  // 未选定儿童时的空占位（epoch 0 明确「无值」语义；占位值从不参与
-  // 年龄计算与展示，选定真实档案后经 setCurrentChild 整体覆盖）
-  CurrentChild child = CurrentChild(
+  CurrentChild child = _emptyChild();
+
+  /// 未选定儿童的空占位（epoch 0 明确「无值」语义；占位值从不参与
+  /// 年龄计算与展示，选定真实档案后经 setCurrentChild 整体覆盖）。
+  static CurrentChild _emptyChild() => CurrentChild(
     visitCardNo: '',
     patientId: '',
     name: '',
@@ -374,7 +376,8 @@ class MainViewModel extends ChangeNotifier {
   /// 切换「角色-科室」授权组合：调后端校验目标组合归属并更新会话身份
   /// 上下文，成功后以响应下发的用户信息（角色/科室/院区/医院）与角色
   /// 权限菜单刷新全局登录用户与侧边栏（菜单集整体更换，选中/展开/搜索
-  /// 态由 setRoleMenus 清空）。
+  /// 态由 setRoleMenus 清空）；当前儿童与右侧信息侧边栏一并清空——
+  /// 儿童归属旧授权组合的科室/医院，切组合（尤其跨院）后沿用必失配。
   ///param roleId: 目标角色 ID
   ///param deptId: 目标角色适用科室 ID（空/缺省表示存量未指定科室的哨兵组合）
   ///returns: 是否切换成功（失败时 errorMsg 带提示，原会话与菜单不变）
@@ -393,6 +396,14 @@ class MainViewModel extends ChangeNotifier {
       // 以全局值同步工作副本——替换整个实例而非改字段，否则
       // Selector<MainViewModel, LoginUser> 因引用未变不会刷新顶部显示
       loginUser = result.user;
+
+      // 清空当前儿童并隐藏右侧信息侧边栏（使在途侧边栏加载一并失效）：
+      // 儿童归属旧授权组合的科室/医院，切换组合（尤其跨院）后沿用必失配，
+      // 未选儿童时各业务页经各自监听回落到「未选儿童」空态
+      _childSidebarRequestId++;
+      child = _emptyChild();
+      _childSidebarData = null;
+      _childSidebarLoading = false;
 
       // 以新角色下发的菜单重建侧边栏
       setRoleMenus(result.menus);
@@ -418,14 +429,7 @@ class MainViewModel extends ChangeNotifier {
     _expandedIds.clear();
     _collapsed = false;
     _menus = const [];
-    child = CurrentChild(
-      visitCardNo: '',
-      patientId: '',
-      name: '',
-      gender: '',
-      birthDate: DateTime.fromMillisecondsSinceEpoch(0),
-      phone: '',
-    );
+    child = _emptyChild();
     // 侧边栏一并清空，并使在途加载请求失效
     _childSidebarRequestId++;
     _childSidebarData = null;

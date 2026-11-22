@@ -228,13 +228,15 @@ class ChildService {
   /// 与 [search] 的多条件「或」检索互补：本方法面向高级搜索逐字段填写
   /// 场景，支持建档/出生日期区间（CHECK_TIME/BIRTH_DATE，DATE 列字符串
   /// 绑定比较，起止均含端点）、性别、孕周/体重数值区间（经 CHILD_EXT_INFO
-  /// EXISTS 子查询，CHILD_ID 为该表主键）与监护人姓名（经
-  /// CHILD_GUARDIAN_INFO EXISTS 子查询）。文本条件均为精确匹配：姓名/
-  /// 证件号码/联系电话/监护人姓名走 *_HMAC 盲索引等值（密文列不支持
-  /// 模糊），就诊卡号为明文等值；单个文本条件超长时静默跳过。允许全空
-  /// 条件（相当于分页浏览全院档案）。分页参数 page（默认 1）/pageSize
-  /// （默认 20）越界时静默夹取（page ≥ 1、pageSize 1-100），只对当前页
-  /// 行解密。
+  /// EXISTS 子查询，CHILD_ID 为该表主键）、监护人姓名（经
+  /// CHILD_GUARDIAN_INFO EXISTS 子查询）与高危因素（经
+  /// CHILD_HIGH_RISK_FACTOR EXISTS 子查询——highRiskFactorIds 多选为
+  /// 「任一命中」语义，儿童保存过列表中任意一个因素即命中）。文本条件
+  /// 均为精确匹配：姓名/证件号码/联系电话/监护人姓名走 *_HMAC 盲索引
+  /// 等值（密文列不支持模糊），就诊卡号为明文等值；单个文本条件超长时
+  /// 静默跳过。允许全空条件（相当于分页浏览全院档案）。分页参数 page
+  /// （默认 1）/pageSize（默认 20）越界时静默夹取（page ≥ 1、
+  /// pageSize 1-100），只对当前页行解密。
   ///returns: (当前页儿童列表, 总条数, 夹取后的页码, 夹取后的页大小)
   Future<ChildAdvancedQueryPage> advancedQuery({
     required String hospId,
@@ -248,6 +250,7 @@ class ChildService {
     String? certificateNo,
     String? phone,
     String? guardianName,
+    List<String>? highRiskFactorIds,
     int? gestationalWeekFrom,
     int? gestationalWeekTo,
     int? birthWeightFrom,
@@ -354,6 +357,18 @@ class ChildService {
       );
     }
 
+    // 高危因素条件：多选「任一命中」——儿童保存过列表中任意一个因素
+    // 即命中（IN 列表绑定；因素 ID 为 UUID 纯 ASCII，直走绑定路径）。
+    final factorIds = highRiskFactorIds?.map((e) => e.trim()).where((e) => e.isNotEmpty).toList() ?? const <String>[];
+    if (factorIds.isNotEmpty) {
+      final placeholders = List.filled(factorIds.length, '?').join(', ');
+      conditions.add(
+        'EXISTS (SELECT 1 FROM CHILD_HIGH_RISK_FACTOR F '
+        'WHERE F.CHILD_ID = CHILD_INFO.ID AND F.HIGH_RISK_FACTOR_ID IN ($placeholders))',
+      );
+      params.addAll(factorIds);
+    }
+
     final whereClause = conditions.isEmpty ? 'HOSP_ID = ?' : 'HOSP_ID = ? AND (${conditions.join(' AND ')})';
     final whereParams = <Object?>[scope, ...params];
 
@@ -413,6 +428,7 @@ class ChildService {
     List<ChildGuardianInfo> guardians = const [],
     String? photoBase64,
     String? avatarBase64,
+    String? thumbBase64,
     List<({String factorId, String? remark})>? highRiskFactors,
   }) async {
     final scope = (
@@ -487,7 +503,7 @@ class ChildService {
     await _saveExt(newId, ext, creator, creatorText, scope);
     await _saveGuardians(newId, guardians, creator, creatorText, scope);
     if (photoBase64 != null || avatarBase64 != null) {
-      await _savePhoto(newId, photoBase64, avatarBase64, creator, creatorText, scope);
+      await _savePhoto(newId, photoBase64, avatarBase64, thumbBase64, creator, creatorText, scope);
     }
     if (highRiskFactors != null) {
       await _saveHighRiskFactors(newId, highRiskFactors, creator, creatorText, scope);
@@ -511,6 +527,7 @@ class ChildService {
     List<ChildGuardianInfo> guardians = const [],
     String? photoBase64,
     String? avatarBase64,
+    String? thumbBase64,
     List<({String factorId, String? remark})>? highRiskFactors,
   }) async {
     final current = await _requireChild(id, hospId);
@@ -582,7 +599,7 @@ class ChildService {
     }
     await _saveGuardians(idValue, guardians, creator, creatorText, scope);
     if (photoBase64 != null || avatarBase64 != null) {
-      await _savePhoto(idValue, photoBase64, avatarBase64, creator, creatorText, scope);
+      await _savePhoto(idValue, photoBase64, avatarBase64, thumbBase64, creator, creatorText, scope);
     }
     if (highRiskFactors != null) {
       await _saveHighRiskFactors(idValue, highRiskFactors, creator, creatorText, scope);
@@ -633,7 +650,8 @@ class ChildService {
   /// 保存一次拍照记录（追加历史行，最近一条生效），返回该记录。
   ///
   /// 儿童必须存在且属本院；photo/avatar 为 JPEG base64 文本（纯 ASCII，
-  /// 直走 dpi_bind_param 绑定路径），服务层限长 1MB；科室/院区归属沿用
+  /// 直走 dpi_bind_param 绑定路径），服务层限长 1MB；thumb 为照片等比
+  /// 缩略图 base64（可空，非空时同口径限长校验）；科室/院区归属沿用
   /// 档案归属。
   Future<ChildPhoto> savePhoto({
     required String childId,
@@ -643,12 +661,14 @@ class ChildService {
     required String creatorName,
     required String hospId,
     required String hospName,
+    String? thumbBase64,
   }) async {
     final child = await _requireChild(childId, hospId);
     await _savePhoto(
       child.id,
       photoBase64,
       avatarBase64,
+      thumbBase64,
       _requireId(creatorId, '创建人ID'),
       _required(creatorName, '创建人姓名', _creatorNameMaxLength),
       (
@@ -679,6 +699,52 @@ class ChildService {
     );
   }
 
+  /// 查询儿童全部拍照记录（照片管理列表；按创建时间/ID 倒序，最新在前）。
+  ///
+  /// 不含 PHOTO 大图列（省流量）；带 AVATAR（320×320 头像）与
+  /// PHOTO_THUMB（180×225 等比缩略图）——存量行缩略图为 NULL，读取侧
+  /// 客户端回退显示头像。
+  Future<List<ChildPhoto>> listPhotos(String childId, String hospId) async {
+    await _requireChild(childId, hospId);
+    final scope = _requireId(hospId, '医院ID');
+    final result = await _db.query(
+      'SELECT ID, CHILD_ID, AVATAR, PHOTO_THUMB, CREATOR_ID, CREATOR_NAME, '
+      'DEPT_ID, DEPT_NAME, CAMPUS_ID, CAMPUS_NAME, HOSP_ID, '
+      'HOSP_NAME, CREATE_TIME, UPDATE_TIME FROM CHILD_PHOTO '
+      'WHERE CHILD_ID = ? AND HOSP_ID = ? ORDER BY CREATE_TIME DESC, ID DESC',
+      [childId, scope],
+    );
+    return [for (final row in result.rowsAsMaps) _photoFromRow(row, row['AVATAR'], thumbBase64: row['PHOTO_THUMB'])];
+  }
+
+  /// 查询单条拍照记录详情（照片管理预览/下载；含 PHOTO 大图列）。
+  ///
+  /// 照片不存在或非本院记录时抛业务异常（跨院 ID 按不存在处理）。
+  Future<ChildPhoto> photoDetail(String photoId, String hospId) async {
+    final idValue = _requireId(photoId, '照片ID');
+    final scope = _requireId(hospId, '医院ID');
+    final result = await _db.query(
+      'SELECT ID, CHILD_ID, PHOTO, AVATAR, PHOTO_THUMB, CREATOR_ID, '
+      'CREATOR_NAME, DEPT_ID, DEPT_NAME, CAMPUS_ID, CAMPUS_NAME, HOSP_ID, '
+      'HOSP_NAME, CREATE_TIME, UPDATE_TIME FROM CHILD_PHOTO '
+      'WHERE ID = ? AND HOSP_ID = ?',
+      [idValue, scope],
+    );
+    if (result.rows.isEmpty) {
+      throw ChildException(400, 40001, '照片不存在：$idValue');
+    }
+    final row = result.rowsAsMaps.first;
+    return _photoFromRow(row, row['AVATAR'], photoBase64: row['PHOTO'], thumbBase64: row['PHOTO_THUMB']);
+  }
+
+  /// 删除单条拍照记录（按照片 ID；跨院 ID 删不到，返回 0），返回删除
+  /// 行数（0 或 1）。
+  Future<int> deletePhoto(String photoId, String hospId) async {
+    final idValue = _requireId(photoId, '照片ID');
+    final scope = _requireId(hospId, '医院ID');
+    return _db.execute('DELETE FROM CHILD_PHOTO WHERE ID = ? AND HOSP_ID = ?', [idValue, scope]);
+  }
+
   /// 必填照片 base64 校验：去空格、非空、长度不超上限（base64 为纯
   /// ASCII，字符数即字节数）。
   String _requiredPhotoBase64(String? value, String label) {
@@ -694,22 +760,25 @@ class ChildService {
 
   /// 覆盖保存一次拍照记录（INSERT；调用方负责业务时机，保存档案时随
   /// 档案一并落库，科室/院区沿用档案归属）。
-  Future<void> _savePhoto(String childId, String? photoBase64, String? avatarBase64, String creatorId, String creator, _ArchiveScope scope) async {
+  Future<void> _savePhoto(String childId, String? photoBase64, String? avatarBase64, String? thumbBase64, String creatorId, String creator, _ArchiveScope scope) async {
     if (photoBase64 == null || avatarBase64 == null) {
       return;
     }
     final photo = _requiredPhotoBase64(photoBase64, '照片');
     final avatar = _requiredPhotoBase64(avatarBase64, '头像');
+    // 缩略图为可空列（v23 前存量行 NULL）：非空时同口径限长校验。
+    final thumb = thumbBase64 == null ? null : _requiredPhotoBase64(thumbBase64, '照片缩略图');
     await _db.execute(
-      'INSERT INTO CHILD_PHOTO (ID, CHILD_ID, PHOTO, AVATAR, CREATOR_ID, '
-      'CREATOR_NAME, DEPT_ID, DEPT_NAME, CAMPUS_ID, CAMPUS_NAME, HOSP_ID, '
-      'HOSP_NAME, CREATE_TIME) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO CHILD_PHOTO (ID, CHILD_ID, PHOTO, AVATAR, PHOTO_THUMB, '
+      'CREATOR_ID, CREATOR_NAME, DEPT_ID, DEPT_NAME, CAMPUS_ID, CAMPUS_NAME, '
+      'HOSP_ID, HOSP_NAME, CREATE_TIME) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         newUuid(),
         childId,
         photo,
         avatar,
+        thumb,
         creatorId,
         creator,
         scope.deptId,
@@ -737,7 +806,7 @@ class ChildService {
       return const [];
     }
     final result = await _db.query(
-      'SELECT ID, CHILD_ID, HIGH_RISK_FACTOR, RISK_FACTOR_CODE, '
+      'SELECT ID, CHILD_ID, HIGH_RISK_FACTOR_ID, RISK_FACTOR_CODE, '
       'RISK_FACTOR_NAME, RISK_COLOR, RISK_LEVEL, RISK_SCORE, REMARK, '
       'CREATOR_ID, CREATOR_NAME, DEPT_ID, DEPT_NAME, CAMPUS_ID, CAMPUS_NAME, '
       'HOSP_ID, HOSP_NAME, CREATE_TIME, UPDATE_TIME FROM CHILD_HIGH_RISK_FACTOR '
@@ -788,7 +857,7 @@ class ChildService {
     await _db.execute('DELETE FROM CHILD_HIGH_RISK_FACTOR WHERE CHILD_ID = ?', [childId]);
     for (final snapshot in snapshots) {
       await _db.execute(
-        'INSERT INTO CHILD_HIGH_RISK_FACTOR (ID, CHILD_ID, HIGH_RISK_FACTOR, '
+        'INSERT INTO CHILD_HIGH_RISK_FACTOR (ID, CHILD_ID, HIGH_RISK_FACTOR_ID, '
         'RISK_FACTOR_CODE, RISK_FACTOR_NAME, RISK_COLOR, RISK_LEVEL, '
         'RISK_SCORE, REMARK, CREATOR_ID, CREATOR_NAME, DEPT_ID, DEPT_NAME, '
         'CAMPUS_ID, CAMPUS_NAME, HOSP_ID, HOSP_NAME, CREATE_TIME) '
@@ -867,7 +936,7 @@ class ChildService {
   ChildHighRiskFactor _highRiskFactorFromRow(Map<String, String?> row) => ChildHighRiskFactor(
     id: row['ID'],
     childId: row['CHILD_ID'] ?? '',
-    highRiskFactorId: row['HIGH_RISK_FACTOR'] ?? '',
+    highRiskFactorId: row['HIGH_RISK_FACTOR_ID'] ?? '',
     riskFactorCode: row['RISK_FACTOR_CODE'] ?? '',
     riskFactorName: row['RISK_FACTOR_NAME'] ?? '',
     riskColor: row['RISK_COLOR'],
@@ -1451,11 +1520,14 @@ class ChildService {
     updateTime: row['UPDATE_TIME'],
   );
 
-  /// 从数据库行解析拍照记录（avatarBase64 为调用方取好的头像列值）。
-  ChildPhoto _photoFromRow(Map<String, String?> row, String? avatarBase64) => ChildPhoto(
+  /// 从数据库行解析拍照记录（avatarBase64/photoBase64/thumbBase64 为
+  /// 调用方取好的对应列值，按查询口径可选传入）。
+  ChildPhoto _photoFromRow(Map<String, String?> row, String? avatarBase64, {String? photoBase64, String? thumbBase64}) => ChildPhoto(
     id: row['ID'],
     childId: row['CHILD_ID'] ?? '',
     avatarBase64: avatarBase64,
+    photoBase64: photoBase64,
+    thumbBase64: thumbBase64,
     creatorId: row['CREATOR_ID'] ?? '',
     creatorName: row['CREATOR_NAME'] ?? '',
     deptId: row['DEPT_ID'],

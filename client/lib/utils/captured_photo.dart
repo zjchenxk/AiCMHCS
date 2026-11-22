@@ -1,10 +1,11 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-/// 拍照确定后的产出：720×900 照片与 320×320 头像（JPEG base64），
-/// 由拍照对话框返回、随儿童档案保存一并入库。
+/// 拍照/上传裁剪确定后的产出：720×900 照片、320×320 头像与照片等比
+/// 缩略图 180×225（JPEG base64），由拍照/上传对话框返回、随儿童档案
+/// 保存或照片管理独立保存一并入库。
 class CapturedPhoto {
-  const CapturedPhoto({required this.photoBase64, required this.avatarBase64});
+  const CapturedPhoto({required this.photoBase64, required this.avatarBase64, required this.thumbBase64});
 
   /// 照片（竖版 720×900，JPEG base64，无 data: 前缀）。
   final String photoBase64;
@@ -12,9 +13,15 @@ class CapturedPhoto {
   /// 头像（320×320，JPEG base64）。
   final String avatarBase64;
 
+  /// 照片缩略图（180×225，JPEG base64）。
+  final String thumbBase64;
+
   /// 照片字节（界面 Image.memory 显示用）。
   Uint8List get photoBytes => base64Decode(photoBase64);
 
   /// 头像字节（界面 Image.memory 显示用）。
   Uint8List get avatarBytes => base64Decode(avatarBase64);
+
+  /// 缩略图字节（界面 Image.memory 显示用）。
+  Uint8List get thumbBytes => base64Decode(thumbBase64);
 }

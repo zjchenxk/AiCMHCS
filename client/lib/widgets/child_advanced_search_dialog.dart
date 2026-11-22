@@ -1,7 +1,9 @@
 import 'package:client/main.dart';
 import 'package:client/services/child_service.dart';
+import 'package:client/services/high_risk_factor_service.dart';
 import 'package:client/services/time_service.dart';
 import 'package:client/utils/log_helper.dart';
+import 'package:client/utils/risk_color.dart';
 import 'package:client/widgets/glass_panel.dart';
 import 'package:common/model.dart';
 import 'package:flutter/services.dart';
@@ -9,24 +11,29 @@ import 'package:material_ui/material_ui.dart';
 
 /// 高级搜索对话框（主界面顶部「高级搜索」入口，独立组件文件）：多条件
 /// 「与」组合查询本院儿童档案（服务端分页），支持建档/出生日期区间、
-/// 性别、姓名/就诊卡号/证件号码/联系电话/监护人姓名与孕周/体重数值区间。
+/// 性别、姓名/就诊卡号/证件号码/联系电话/监护人姓名、孕周/体重数值区间
+/// 与高危因素多选（候选取本院 BASE_HIGH_RISK_FACTOR 字典，「任一命中」
+/// ——儿童保存过所选因素中任意一个即命中，见 CHILD_HIGH_RISK_FACTOR）。
 ///
 /// 结果行单击选中（高亮）、双击直接选定；底部「确定」返回选中儿童，
 /// 由调用方写入 MainViewModel 当前儿童上下文（setCurrentChild）。文本
 /// 条件均为精确匹配（姓名/证件号码/联系电话/监护人姓名走服务端盲索引，
 /// 密文列不支持模糊查询）；允许全空条件查询（相当于分页浏览全院档案）。
-Future<ChildInfo?> showChildAdvancedSearchDialog(BuildContext context, {ChildService? service}) {
+Future<ChildInfo?> showChildAdvancedSearchDialog(BuildContext context, {ChildService? service, HighRiskFactorService? highRiskFactorService}) {
   return showDialog<ChildInfo>(
     context: context,
-    builder: (dialogContext) => _ChildAdvancedSearchDialog(service: service),
+    builder: (dialogContext) => _ChildAdvancedSearchDialog(service: service, highRiskFactorService: highRiskFactorService),
   );
 }
 
 class _ChildAdvancedSearchDialog extends StatefulWidget {
-  const _ChildAdvancedSearchDialog({this.service});
+  const _ChildAdvancedSearchDialog({this.service, this.highRiskFactorService});
 
   /// 查询服务覆写（测试注入用；缺省经服务定位器获取）。
   final ChildService? service;
+
+  /// 高危因素字典服务覆写（测试注入用；缺省经服务定位器获取）。
+  final HighRiskFactorService? highRiskFactorService;
 
   @override
   State<_ChildAdvancedSearchDialog> createState() => _ChildAdvancedSearchDialogState();
@@ -58,6 +65,18 @@ class _ChildAdvancedSearchDialogState extends State<_ChildAdvancedSearchDialog> 
   /// 性别下拉字段键（重置条件时还原下拉显示值）。
   final _sexFieldKey = GlobalKey<FormFieldState<String>>();
 
+  /// 已选高危因素 ID 集合（空集=不过滤；跨查询保留）。
+  Set<String> _selectedFactorIds = <String>{};
+
+  /// 本院高危因素字典（首次打开选择器时懒加载，已按五色→编码→名称排序）。
+  List<BaseHighRiskFactor>? _factors;
+
+  bool _factorsLoading = false;
+
+  String? _factorsError;
+
+  HighRiskFactorService get _highRiskFactorService => widget.highRiskFactorService ?? getIt<HighRiskFactorService>();
+
   List<ChildInfo> _children = const [];
   int _total = 0;
   int _page = 1;
@@ -85,6 +104,67 @@ class _ChildAdvancedSearchDialogState extends State<_ChildAdvancedSearchDialog> 
   ];
 
   ChildService get _childService => widget.service ?? getIt<ChildService>();
+
+  /// 本院字典按展示口径排序：五色（绿→黄→橙→红→紫）在前、未设置颜色
+  /// 最后，同色内按编码、名称升序（与互斥规则表单下拉同风格）。
+  List<BaseHighRiskFactor> _sortedFactors(List<BaseHighRiskFactor> factors) {
+    final colorOrder = {for (var i = 0; i < BaseHighRiskFactor.riskColors.length; i++) BaseHighRiskFactor.riskColors[i]: i};
+    final last = BaseHighRiskFactor.riskColors.length;
+    return [...factors]..sort((a, b) {
+      final ca = colorOrder[a.riskColor] ?? last;
+      final cb = colorOrder[b.riskColor] ?? last;
+      if (ca != cb) return ca - cb;
+      final code = a.riskFactorCode.compareTo(b.riskFactorCode);
+      if (code != 0) return code;
+      return a.riskFactorName.compareTo(b.riskFactorName);
+    });
+  }
+
+  /// 打开高危因素多选选择器（首次打开懒加载本院字典；确定提交所选集合
+  /// ——空集即清除该过滤条件；取消返回 null 不改动）。
+  Future<void> _openFactorPicker() async {
+    if (_factorsLoading) return;
+    if (_factors == null) {
+      setState(() {
+        _factorsLoading = true;
+        _factorsError = null;
+      });
+      try {
+        final factors = await _highRiskFactorService.queryAll();
+        if (!mounted) return;
+        setState(() {
+          _factors = _sortedFactors(factors);
+          _factorsLoading = false;
+        });
+      } catch (e, st) {
+        LogHelper.error('client:ChildAdvancedSearchDialog._openFactorPicker', e, st);
+        if (!mounted) return;
+        setState(() {
+          _factorsError = _messageOf(e);
+          _factorsLoading = false;
+        });
+      }
+    }
+    if (!mounted) return;
+    final result = await showDialog<Set<String>>(
+      context: context,
+      builder: (_) => _HighRiskFactorPickerDialog(
+        factors: _factors ?? const [],
+        loading: _factorsLoading,
+        error: _factorsError,
+        selected: Set.of(_selectedFactorIds),
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() => _selectedFactorIds = result);
+  }
+
+  /// 已选高危因素摘要（名称（编码）顿号连接；字典未加载完时按数量示意）。
+  String get _selectedFactorSummary {
+    if (_selectedFactorIds.isEmpty) return '';
+    final names = (_factors ?? const <BaseHighRiskFactor>[]).where((f) => _selectedFactorIds.contains(f.id)).map((f) => '${f.riskFactorName}（${f.riskFactorCode}）').toList();
+    return names.isNotEmpty ? names.join('、') : '已选 ${_selectedFactorIds.length} 项';
+  }
 
   @override
   void initState() {
@@ -181,6 +261,7 @@ class _ChildAdvancedSearchDialogState extends State<_ChildAdvancedSearchDialog> 
         certificateNo: _textOf(_certCtrl),
         phone: _textOf(_phoneCtrl),
         guardianName: _textOf(_guardianCtrl),
+        highRiskFactorIds: _selectedFactorIds.isEmpty ? null : _selectedFactorIds.toList(),
         gestationalWeekFrom: weekFrom,
         gestationalWeekTo: weekTo,
         birthWeightFrom: weightFrom,
@@ -219,6 +300,7 @@ class _ChildAdvancedSearchDialogState extends State<_ChildAdvancedSearchDialog> 
     _sexFieldKey.currentState?.reset();
     setState(() {
       _sex = '';
+      _selectedFactorIds = <String>{};
       _errorMsg = null;
     });
   }
@@ -277,6 +359,30 @@ class _ChildAdvancedSearchDialogState extends State<_ChildAdvancedSearchDialog> 
     ],
     onChanged: (value) => setState(() => _sex = value ?? ''),
   );
+
+  /// 高危因素多选字段：仿输入框（Material+InkWell），点击打开多选选择
+  /// 器；已选时显示「名称（编码）」顿号连接摘要，未选时显示提示文案。
+  Widget _buildHighRiskFactorField(ThemeData theme) {
+    final hasSelection = _selectedFactorIds.isNotEmpty;
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: _openFactorPicker,
+        child: InputDecorator(
+          decoration: _decoration(theme, '高危因素').copyWith(
+            suffixIcon: _factorsLoading ? const SizedBox(width: 16, height: 16, child: Center(child: CircularProgressIndicator(strokeWidth: 2))) : Icon(Icons.expand_more, size: 16, color: theme.colorScheme.onSurfaceVariant),
+          ),
+          child: Text(
+            hasSelection ? _selectedFactorSummary : '请选择高危因素（可多选，留空不过滤）',
+            style: theme.textTheme.bodyMedium?.copyWith(color: hasSelection ? theme.colorScheme.onSurface : theme.colorScheme.onSurface.withValues(alpha: 0.45)),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ),
+    );
+  }
 
   /// 两列条件行。
   Widget _pair(Widget left, Widget right) => Row(
@@ -356,6 +462,8 @@ class _ChildAdvancedSearchDialogState extends State<_ChildAdvancedSearchDialog> 
                                 _pair(_numberField(theme, _weekFromCtrl, '出生孕周起始（周）'), _numberField(theme, _weekToCtrl, '出生孕周截止（周）')),
                                 const SizedBox(height: 12),
                                 _pair(_numberField(theme, _weightFromCtrl, '出生体重起始（g）'), _numberField(theme, _weightToCtrl, '出生体重截止（g）')),
+                                const SizedBox(height: 12),
+                                _buildHighRiskFactorField(theme),
                                 const SizedBox(height: 16),
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.end,
@@ -570,6 +678,165 @@ class _ChildAdvancedSearchDialogState extends State<_ChildAdvancedSearchDialog> 
           child: const Text('末页'),
         ),
       ],
+    );
+  }
+}
+
+/// 高危因素多选选择器（毛玻璃对话框，仿用户表单科室多选）：CheckboxListTile
+/// 逐项勾选（五色圆点 + 名称（编码）），支持全选/清空；「确定」提交所选
+/// 集合——**空集允许确定**（语义为清除高危因素过滤条件），「取消」返回
+/// null 不改动当前选择。
+class _HighRiskFactorPickerDialog extends StatefulWidget {
+  const _HighRiskFactorPickerDialog({required this.factors, required this.loading, required this.error, required this.selected});
+
+  /// 本院高危因素字典（已排序）。
+  final List<BaseHighRiskFactor> factors;
+
+  /// 字典加载中。
+  final bool loading;
+
+  /// 字典加载失败信息（非 null 时列表区显示错误态）。
+  final String? error;
+
+  /// 当前已选 ID 集合。
+  final Set<String> selected;
+
+  @override
+  State<_HighRiskFactorPickerDialog> createState() => _HighRiskFactorPickerDialogState();
+}
+
+class _HighRiskFactorPickerDialogState extends State<_HighRiskFactorPickerDialog> {
+  late final Set<String> _selected = Set.of(widget.selected);
+
+  void _toggle(String id, bool checked) {
+    setState(() {
+      checked ? _selected.add(id) : _selected.remove(id);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final allSelected = widget.factors.isNotEmpty && _selected.length == widget.factors.length;
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480, maxHeight: 560),
+        child: GlassPanel(
+          blur: 24,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.medical_services_outlined, color: theme.colorScheme.primary, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '选择高危因素（可多选）',
+                        style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '查询保存过所选因素中任意一个的儿童；不选即不过滤',
+                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+                ),
+                const SizedBox(height: 12),
+                Flexible(
+                  child: widget.loading
+                      ? const Center(child: CircularProgressIndicator())
+                      : widget.error != null
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                '高危因素字典加载失败：${widget.error}',
+                                style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 8),
+                              Text('请关闭后重新打开选择器重试', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6))),
+                            ],
+                          ),
+                        )
+                      : widget.factors.isEmpty
+                      ? Center(
+                          child: Text('本院尚未配置高危因素', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6))),
+                        )
+                      : ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: widget.factors.length,
+                          itemBuilder: (context, index) {
+                            final factor = widget.factors[index];
+                            return CheckboxListTile(
+                              dense: true,
+                              controlAffinity: ListTileControlAffinity.leading,
+                              contentPadding: EdgeInsets.zero,
+                              value: _selected.contains(factor.id),
+                              onChanged: (checked) => _toggle(factor.id, checked ?? false),
+                              title: Row(
+                                children: [
+                                  // 五色色标（同互斥规则/高危因素管理口径）
+                                  Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: BoxDecoration(color: RiskColorPalette.colorOf(factor.riskColor, theme), shape: BoxShape.circle),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      '${factor.riskFactorName}（${factor.riskFactorCode}）',
+                                      style: theme.textTheme.bodyMedium,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: widget.factors.isEmpty || allSelected
+                          ? null
+                          : () => setState(
+                              () => _selected
+                                ..clear()
+                                ..addAll(widget.factors.map((f) => f.id)),
+                            ),
+                      child: const Text('全选'),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: _selected.isEmpty ? null : () => setState(_selected.clear),
+                      child: const Text('清空'),
+                    ),
+                    const Spacer(),
+                    TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('取消')),
+                    const SizedBox(width: 12),
+                    FilledButton(
+                      // 空选允许确定：语义为清除高危因素过滤条件
+                      onPressed: () => Navigator.of(context).pop(Set.of(_selected)),
+                      child: const Text('确 定'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -58,6 +58,7 @@ class FakeChildService extends ChildService {
     List<ChildGuardianInfo> guardians = const [],
     String? photoBase64,
     String? avatarBase64,
+    String? thumbBase64,
     List<({String factorId, String? remark})>? highRiskFactors,
   }) async {
     createCalls++;
@@ -76,6 +77,7 @@ class FakeChildService extends ChildService {
     List<ChildGuardianInfo> guardians = const [],
     String? photoBase64,
     String? avatarBase64,
+    String? thumbBase64,
     List<({String factorId, String? remark})>? highRiskFactors,
   }) async {
     updateCalls++;

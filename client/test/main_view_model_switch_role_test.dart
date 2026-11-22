@@ -1,8 +1,10 @@
 // 主界面切换角色接线测试：MainViewModel.switchRole 调后端切换会话角色 →
 // 全局 loginUser 更新为新角色身份并同步工作副本 → 侧边栏菜单按新角色
-// 下发的权限菜单重建（选中/展开/搜索态清空）；失败时会话与菜单保持原状。
+// 下发的权限菜单重建（选中/展开/搜索态清空），当前儿童上下文与右侧信息
+// 侧边栏一并清空；失败时会话与菜单保持原状。
 import 'package:client/main.dart';
 import 'package:client/services/account_service.dart';
+import 'package:client/services/time_service.dart';
 import 'package:client/view_models/main/main_view_model.dart';
 import 'package:common/model.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -181,4 +183,46 @@ void main() {
     final again = await vm.switchRole('6');
     expect(again, isTrue);
   });
+
+  test('切换成功：当前儿童上下文与右侧信息侧边栏一并清空（隐藏）', () async {
+    // 侧边栏基础数据构建依赖全局时间服务（未校准即本地时钟）
+    if (!getIt.isRegistered<TimeService>()) {
+      getIt.registerLazySingleton<TimeService>(() => TimeService());
+    }
+    loginUser = loginAsRole2();
+    final vm = MainViewModel(accountService: FakeAccountService());
+    vm.syncLoginUser();
+    vm.setRoleMenus(_oldRoleMenus());
+    // 造一个已选定儿童态（setCurrentChild 即时出基础侧边栏，扩展档案
+    // 加载缺 ChildService 依赖失败被内部吞掉、不影响本用例断言）
+    vm.setCurrentChild(_testChildInfo());
+    expect(vm.hasCurrentChild, isTrue);
+    expect(vm.childSidebarData, isNotNull);
+
+    final ok = await vm.switchRole('6', deptId: '9');
+
+    // 角色/科室上下文已更换：当前儿童与侧边栏清空（侧边栏整体隐藏）
+    expect(ok, isTrue);
+    expect(vm.hasCurrentChild, isFalse);
+    expect(vm.child.id, isEmpty);
+    expect(vm.childSidebarData, isNull);
+    expect(vm.childSidebarLoading, isFalse);
+  });
 }
+
+/// 测试用儿童基础档案（最小必填集）。
+ChildInfo _testChildInfo() => ChildInfo(
+  id: 'child-1',
+  checkTime: '2026-11-21',
+  name: '测试儿童',
+  sex: '1',
+  birthDate: '2023-09-01',
+  addressProvince: '330000',
+  addressCity: '330100',
+  addressCounty: '330106',
+  addressDetails: '测试路 1 号',
+  creatorId: 'user-1',
+  creatorName: '测试医生',
+  hospId: 'hosp-1',
+  hospName: '测试医院',
+);

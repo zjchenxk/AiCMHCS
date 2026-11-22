@@ -20,6 +20,7 @@ import 'package:client/services/time_service.dart';
 import 'package:client/services/user_service.dart';
 import 'package:client/utils/log_helper.dart';
 import 'package:client/view_models/child/child_create_view_model.dart';
+import 'package:client/view_models/child/photo_management_view_model.dart';
 import 'package:client/view_models/home/home_view_model.dart';
 import 'package:client/view_models/main/main_view_model.dart';
 import 'package:client/view_models/login/login_view_model.dart';
@@ -122,6 +123,7 @@ void main() async {
         ChangeNotifierProvider(create: (context) => UserManagementViewModel()),
         ChangeNotifierProvider(create: (context) => AdminDivisionManagementViewModel()),
         ChangeNotifierProvider(create: (context) => ChildCreateViewModel()),
+        ChangeNotifierProvider(create: (context) => PhotoManagementViewModel()),
       ],
       child: const MyApp(),
     ),

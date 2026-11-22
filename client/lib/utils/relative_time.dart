@@ -1,5 +1,6 @@
 import 'package:client/main.dart';
 import 'package:client/services/time_service.dart';
+import 'package:client/utils/age_util.dart';
 
 /// 相对时间标签：拍照时间距现在——不足 1 个月显示「{d}天前」；不足
 /// 1 年显示「{m}月前」；1 年及以上显示「{y}年{m}月前」。
@@ -24,4 +25,16 @@ String photoAgeLabel(DateTime time, {DateTime? now}) {
     return '$months月前';
   }
   return rest > 0 ? '$years年$rest月前' : '$years年前';
+}
+
+/// 拍摄年龄：照片拍摄时刻距今的岁/月/天复合文本（如「3岁2个月15天」
+/// 「28天」），与儿童实足年龄同口径（日历对日、不做 30 天/月近似，见
+/// [AgeUtil.formatAgeYmd]）；拍摄时刻晚于当前（时钟偏差）返回空串，由
+/// 调用方回退显示原始拍摄时间。
+///param time: 拍照时间（入库时间，服务端口径）
+///param now: 当前时间（测试注入用；缺省取全局时间服务）
+///returns: 拍摄年龄文本
+String photoTakenAgeLabel(DateTime time, {DateTime? now}) {
+  final current = now ?? getIt<TimeService>().now();
+  return AgeUtil.formatAgeYmd(time, current);
 }

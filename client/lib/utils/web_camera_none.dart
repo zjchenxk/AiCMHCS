@@ -22,9 +22,9 @@ class WebCamera {
   }
 
   /// 从最近截取的帧上裁剪：源区域 (sx,sy) 起 720×900 生成照片，同区域
-  /// 中心方阵缩放生成 320×320 头像。
-  ///returns: (photoBytes, avatarBytes)
-  Future<(Uint8List, Uint8List)> cropLastFrame(int sx, int sy) async {
+  /// 中心方阵缩放生成 320×320 头像，同区域等比缩放生成 180×225 缩略图。
+  ///returns: (photoBytes, avatarBytes, thumbBytes)
+  Future<(Uint8List, Uint8List, Uint8List)> cropLastFrame(int sx, int sy) async {
     throw UnsupportedError('摄像头仅支持 Web 平台');
   }
 

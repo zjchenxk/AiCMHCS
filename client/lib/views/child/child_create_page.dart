@@ -1,4 +1,3 @@
-import 'package:client/utils/captured_photo.dart';
 import 'package:client/view_models/child/child_create_view_model.dart';
 import 'package:client/view_models/main/main_view_model.dart';
 import 'package:client/views/base/base_page.dart';
@@ -256,13 +255,12 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
   }
 
   /// 打开拍照对话框（基本信息 Tab 拍照区点击头像触发；浏览态由表单侧
-  /// 禁用入口），确定后把 720×900 照片与 320×320 头像记为待保存结果。
+  /// 禁用入口），确定后把 720×900 照片、320×320 头像与 180×225 缩略图
+  /// 记为待保存结果。
   Future<void> _startCapture() async {
     final result = await CameraCaptureDialog.show(context);
     if (result != null && mounted) {
-      _viewModel.setPendingPhoto(
-        CapturedPhoto(photoBase64: result.photoBase64, avatarBase64: result.avatarBase64),
-      );
+      _viewModel.setPendingPhoto(result);
     }
   }
 

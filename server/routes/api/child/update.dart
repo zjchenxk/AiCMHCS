@@ -42,6 +42,7 @@ Future<Response> onRequest(RequestContext context) async {
       guardians: parseGuardians(body['guardians']),
       photoBase64: parsePhotoField(body['photo'], 'photoBase64'),
       avatarBase64: parsePhotoField(body['photo'], 'avatarBase64'),
+      thumbBase64: parsePhotoField(body['photo'], 'thumbBase64'),
       highRiskFactors: parseHighRiskFactors(body['highRiskFactors']),
       hospId: hospId,
     );

@@ -18,6 +18,7 @@ import 'package:client/view_models/main/main_view_model.dart';
 import 'package:client/views/login/login_page.dart';
 import 'package:client/views/main/change_password_dialog.dart';
 import 'package:client/views/main/child_info_sidebar.dart';
+import 'package:client/views/main/child_quick_search_field.dart';
 import 'package:flutter_svg/svg.dart';
 import 'dart:convert';
 import 'dart:ui';
@@ -33,8 +34,6 @@ class MainPage extends StatefulWidget {
 
 class _MainPageState extends State<MainPage> {
   final TextEditingController _searchController = TextEditingController();
-  // 顶部儿童精确搜索框
-  final TextEditingController _childSearchController = TextEditingController();
   // 用户菜单控制器
   final MenuController _userMenuController = MenuController();
   // 设置菜单控制器
@@ -45,7 +44,6 @@ class _MainPageState extends State<MainPage> {
   @override
   void dispose() {
     _searchController.dispose();
-    _childSearchController.dispose();
     super.dispose();
   }
 
@@ -113,8 +111,13 @@ class _MainPageState extends State<MainPage> {
           children: [
             // LOGO 及系统名称（可多行，字号分层）
             _buildLogo(theme),
-            // 居中：儿童精确搜索框 + 高级搜索入口
-            Expanded(child: Center(child: _buildChildSearch(theme))),
+            // 居中：儿童精确搜索框 + 高级搜索入口（组件见
+            // child_quick_search_field.dart——焦点全选/儿童变更清空）
+            Expanded(
+              child: Center(
+                child: ChildQuickSearchField(onSearch: _searchChild, onAdvancedSearch: _showAdvancedSearchDialog),
+              ),
+            ),
             // 用户 / 设置 / 帮助
             _buildHeaderActions(theme),
           ],
@@ -171,75 +174,11 @@ class _MainPageState extends State<MainPage> {
     );
   }
 
-  /// 顶部居中儿童精确搜索区：单个关键词同时按姓名（盲索引）/就诊卡号/
-  /// 证件号码/电话号码精确匹配，回车触发；命中单个直接载入当前儿童
-  /// 上下文，命中多个弹列表选择；右侧「高级搜索」仅展示条件弹窗（查询
-  /// 逻辑暂未实现）。
-  Widget _buildChildSearch(ThemeData theme) {
-    const searchTip = '输入就诊号/就诊卡号/姓名/证件号码/电话号码精确搜索儿童...';
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 600),
-      child: Row(
-        children: [
-          Expanded(
-            child: Tooltip(
-              message: searchTip,
-              child: TextField(
-                controller: _childSearchController,
-                style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer),
-                textInputAction: TextInputAction.search,
-                onSubmitted: (_) => _searchChild(),
-                decoration: InputDecoration(
-                  hintText: searchTip,
-                  hintStyle: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.5),
-                  ),
-                  prefixIcon: Icon(
-                    Icons.person_search_outlined,
-                    color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.6),
-                    size: 18,
-                  ),
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                  filled: true,
-                  fillColor: theme.colorScheme.surface.withValues(alpha: 0.5),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide.none,
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(color: theme.colorScheme.primary),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Tooltip(
-            message: '高级搜索',
-            child: OutlinedButton.icon(
-              onPressed: _showAdvancedSearchDialog,
-              icon: Icon(Icons.tune, size: 16, color: theme.colorScheme.onPrimaryContainer),
-              label: Text(
-                '高级搜索',
-                style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer),
-              ),
-              style: OutlinedButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                side: BorderSide(color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.4)),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 回车精确搜索儿童：无命中提示「无此儿童！」；命中一位直接载入
-  /// 当前儿童上下文；命中多位弹列表由用户确认选择。
-  Future<void> _searchChild() async {
-    final keyword = _childSearchController.text.trim();
+  /// 回车精确搜索儿童（关键词来自快速搜索框，见 child_quick_search_field.dart）：
+  /// 单个关键词同时按姓名（盲索引）/就诊卡号/证件号码/电话号码精确匹配；
+  /// 无命中提示「无此儿童！」；命中一位直接载入当前儿童上下文；命中多位
+  /// 弹列表由用户确认选择。
+  Future<void> _searchChild(String keyword) async {
     if (keyword.isEmpty) {
       _toast('请输入就诊号/就诊卡号/姓名/证件号码或电话号码');
       return;

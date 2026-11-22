@@ -114,13 +114,15 @@ class WebCamera {
   }
 
   /// 从最近截取的帧上裁剪：源区域 (sx,sy) 起 720×900 生成照片；同区域
-  /// 中心方阵（720×720）缩放为 320×320 生成头像。
-  ///returns: (photoBytes, avatarBytes)
-  Future<(Uint8List, Uint8List)> cropLastFrame(int sx, int sy) async {
+  /// 中心方阵（720×720）缩放为 320×320 生成头像；同区域等比缩放为
+  /// 180×225 生成缩略图。
+  ///returns: (photoBytes, avatarBytes, thumbBytes)
+  Future<(Uint8List, Uint8List, Uint8List)> cropLastFrame(int sx, int sy) async {
     final source = await _loadImage(_frameDataUrl);
     final photo = _cropToBytes(source, sx, sy, 720, 900, 720, 900);
     final avatar = _cropToBytes(source, sx, sy + 90, 720, 720, 320, 320);
-    return (photo, avatar);
+    final thumb = _cropToBytes(source, sx, sy, 720, 900, 180, 225);
+    return (photo, avatar, thumb);
   }
 
   /// 关闭摄像头并释放预览流（getTracks 走 dynamic 调用，理由同
