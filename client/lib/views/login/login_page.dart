@@ -239,7 +239,9 @@ class _LoginPageState extends State<LoginPage> {
                                               context.read<MainViewModel>()
                                                 ..setRoles(loginViewModel.roles)
                                                 ..setRoleMenus(loginViewModel.roleMenus)
-                                                ..syncLoginUser();
+                                                ..syncLoginUser()
+                                                //默认打开首页 Dashboard（角色未授权首页菜单时维持占位）
+                                                ..openDefaultMenu();
 
                                               //登录成功，替换路由跳转到主页
                                               Navigator.pushReplacement(

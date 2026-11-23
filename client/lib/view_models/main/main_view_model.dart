@@ -494,4 +494,31 @@ class MainViewModel extends ChangeNotifier {
     _breadcrumbs = ['帮助中心'];
     notifyListeners();
   }
+
+  /// 登录成功后默认打开首页：在角色菜单树中递归找 route 为 '/home' 的
+  /// 叶子菜单并按侧边栏点击同口径选中（含面包屑）；角色未授权首页菜单
+  /// 时不动，内容区维持「请从左侧选择功能菜单」占位。
+  void openDefaultMenu() {
+    MenuItem? found;
+    var path = <String>[];
+
+    void search(List<MenuItem> list, List<String> parentPath) {
+      for (final menu in list) {
+        if (found != null) return;
+        final p = [...parentPath, menu.title];
+        if (menu.children.isEmpty) {
+          if (menu.route == '/home') {
+            found = menu;
+            path = p;
+          }
+        } else {
+          search(menu.children, p);
+        }
+      }
+    }
+
+    search(menus, []);
+    if (found == null) return;
+    selectMenu(found!, path);
+  }
 }

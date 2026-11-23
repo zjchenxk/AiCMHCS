@@ -16,5 +16,9 @@ server/build/
 # 构建中途失败时会残留——构建前由 start_backend.sh 清理）
 server/pubspec_overrides.yaml
 
+# dart_frog build / 后端测试环境脚本在成员目录留下的临时锁（workspace
+# 真锁在根 pubspec.lock，已跟踪；成员级锁会被 pub 当 stray 自动清理）
+server/pubspec.lock
+
 # PowerDesigner 本地工作区缓存与日志（建模文件 documents/AICMHCS.pdma 本体提交）
 documents/.AICMHCS/
