@@ -1,17 +1,25 @@
 #!/usr/bin/env bash
 # =====================================================================
-# 启动测试环境后端（http://localhost:8090，从 server/build 生产产物运行）。
+# 启动测试环境后端（http://localhost:8090，从部署副本运行）。
 #
-# 与开发环境共用开发库（DM8 AICMHCS 模式）；工作目录为 server/build，
-# 产物自身的数据目录（data/）与开发的 server/data 隔离，但库内敏感字段
-# 是开发环境密钥加密的，因此经 AICMHCS_FIELD_KEY_FILE 绝对路径沿用同一
-# 把字段加密密钥（server/data/aicmhcs.field.key），否则登录解密会失败。
+# 后端产物由 ./tools/deploy_test.sh 部署到 <部署根>/backend/server/build
+# （含镜像的 common 副本 <部署根>/backend/common，相对结构与开发仓库一致），
+# 与开发仓库的 server/build 解耦——测试后端运行中不再锁住 server/build，
+# 开发侧 dart_frog build / F5 不受影响。
 #
-# 可配置环境变量：AICMHCS_TEST_PORT（默认 8090）
+# 与开发环境共用开发库（DM8 AICMHCS 模式）；库内敏感字段是开发环境密钥
+# 加密的，因此经 AICMHCS_FIELD_KEY_FILE 绝对路径沿用开发仓库同一把字段
+# 加密密钥（server/data/aicmhcs.field.key，单一来源不复制副本），
+# 否则登录解密会失败。
+#
+# 可配置环境变量：
+#   AICMHCS_TEST_ROOT  测试环境部署根目录（默认 /d/AiCMHCS-Test）
+#   AICMHCS_TEST_PORT  监听端口（默认 8090）
 # =====================================================================
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TEST_ROOT="${AICMHCS_TEST_ROOT:-/d/AiCMHCS-Test}"
 PORT="${AICMHCS_TEST_PORT:-8090}"
 
 # 清理旧测试实例，避免端口占用
@@ -22,8 +30,8 @@ if [ -n "${PID:-}" ]; then
   sleep 1
 fi
 
-if [ ! -f "$ROOT/server/build/bin/server.dart" ]; then
-  echo "缺少后端产物（server/build/bin/server.dart），请先执行 ./tools/deploy_test.sh" >&2
+if [ ! -f "$TEST_ROOT/backend/server/build/bin/server.dart" ]; then
+  echo "缺少后端部署副本（$TEST_ROOT/backend/server/build/bin/server.dart），请先执行 ./tools/deploy_test.sh" >&2
   exit 1
 fi
 if [ ! -f "$ROOT/server/data/aicmhcs.field.key" ]; then
@@ -31,8 +39,8 @@ if [ ! -f "$ROOT/server/data/aicmhcs.field.key" ]; then
   exit 1
 fi
 
-echo "== 启动测试后端 http://localhost:$PORT（共用开发库）=="
-cd "$ROOT/server/build"
+echo "== 启动测试后端 http://localhost:$PORT（部署副本，共用开发库）=="
+cd "$TEST_ROOT/backend/server/build"
 export PORT
 export AICMHCS_DB_DRIVER="${AICMHCS_DB_DRIVER:-dm}"
 export AICMHCS_FIELD_KEY_FILE="$ROOT/server/data/aicmhcs.field.key"

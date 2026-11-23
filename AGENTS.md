@@ -18,7 +18,7 @@ client/   Flutter 应用（MVVM，原 aicmhcs_flutter 更名并入）
 server/   Dart Frog 后端：routes / lib(database(engine, migrator), services, utils, models) / tool / test
 common/   前后端共享包：lib/models（basic 行政区划 / system 医院、登录用户）+ lib/utils（SecurePayload 报文加解密）
 database/         DBA 级初始化脚本：01_init_schema.sql（DM8 表空间+账号，SYSDBA 执行）、01_init_postgres.sql（PostgreSQL 建库+应用角色，超级用户 psql 执行）；建表与结构变更在代码中（server/lib/database/migrator/migrations/，三方言迁移）
-tools/            init_db.sh / start_backend.sh / serve_frontend.sh（Git Bash 运行）
+tools/            init_db.sh / start_backend.sh / serve_frontend.sh / deploy_test.sh / start_backend_test.sh / serve_frontend_test.sh（Git Bash 运行）。deploy_test.sh 一键发布测试环境到 `D:\AiCMHCS-Test`：后端镜像副本 backend/server/build × backend/common（相对结构与仓库一致，产物零改写）+ 前端副本，与 server/build 解耦——**测试环境运行中不阻塞 dart_frog build / F5**；结束自动经计划任务重新拉起 8090/5273
 ```
 
 **禁止手动编辑**（生成物，改动会被覆盖）：

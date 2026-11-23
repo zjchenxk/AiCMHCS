@@ -73,8 +73,9 @@ AiCMHCS/
 │   ├── init_db.sh            # 达梦初始化（01 脚本 + 迁移 + 演示账号）
 │   ├── start_backend.sh      # 构建并启动后端（8080 端口）
 │   ├── serve_frontend.sh     # 构建并静态托管前端（5173 端口）
-│   ├── deploy_test.sh        # 一键发布测试版（构建 + 部署前端副本）
-│   ├── start_backend_test.sh # 启动测试后端（8090 端口，从 server/build 运行）
+│   ├── deploy_test.sh        # 一键发布测试版（构建并部署后端/前端副本到 D:\AiCMHCS-Test，
+│   │                         #   结束自动经计划任务重启 8090/5273）
+│   ├── start_backend_test.sh # 启动测试后端（8090 端口，从部署副本运行）
 │   ├── serve_frontend_test.sh  # 托管测试前端（5273 端口；无 python 时自动回退 Dart）
 │   └── serve_static.dart     # 零依赖静态文件服务器（python http.server 的 Dart 替代）
 └── README.md
@@ -139,19 +140,22 @@ cd client && flutter run -d chrome # 或 -d web-server --web-port 5173
 
 与开发环境同机隔离的测试部署：共用开发库（达梦 AICMHCS 模式，结构迁移由
 测试后端启动时自动执行，无需单独初始化），以端口与部署目录区分，两套环境
-可同时运行。
+可同时运行。后端与前端一样从部署根 `D:\AiCMHCS-Test` 下的**独立副本**运行，
+与开发仓库的 `server/build` 彻底解耦——测试环境运行中不阻塞开发侧
+`dart_frog build` / F5，开发侧重建也不会动到测试环境。
 
 | 服务 | 地址 | 说明 |
 |---|---|---|
 | 测试前端 | http://localhost:5273 | 静态托管部署副本 `D:\AiCMHCS-Test\frontend`（apiUrl 已指向测试后端） |
-| 测试后端 | http://localhost:8090 | 从 `server/build` 生产产物运行，数据库为开发库 DM8 |
+| 测试后端 | http://localhost:8090 | 从部署副本 `D:\AiCMHCS-Test\backend\server\build` 运行（含镜像的 common 副本），数据库为开发库 DM8 |
 
 ### 发布与启动（Git Bash，仓库根目录）
 
 ```bash
-./tools/deploy_test.sh          # 发布新版本：构建后端 + 前端并部署前端副本
-./tools/start_backend_test.sh   # 启动测试后端（:8090）
-./tools/serve_frontend_test.sh  # 托管测试前端（:5273）
+./tools/deploy_test.sh          # 发布新版本：构建后端+前端、部署副本，
+                                #   并自动经计划任务重启 8090/5273
+./tools/start_backend_test.sh   # 单独启动测试后端（:8090，从部署副本运行）
+./tools/serve_frontend_test.sh  # 单独托管测试前端（:5273）
 ```
 
 前端托管优先用 `python -m http.server`；机器未装 Python（如 Windows Store
@@ -189,23 +193,27 @@ bat 仍可带窗口手动运行（关掉窗口即停止服务）。改动任务�
 
 ### 隔离机制
 
-- 后端工作目录为 `server/build`，运行数据落在 `server/build/data`（与开发的
-  `server/data` 互不影响）；因与开发环境共用数据库，经 `AICMHCS_FIELD_KEY_FILE`
-  绝对路径沿用开发字段加密密钥 `server/data/aicmhcs.field.key`，否则存量
+- 后端部署副本为 `<部署根>/backend/server/build`（`server/build` 产物复制）+
+  `<部署根>/backend/common`（仓库 common 包复制），**镜像开发仓库的相对结构**
+  ——产物内共享包相对路径 `..\..\common`（相对 build/ 上两级）原样即可解析，
+  产物零改写；部署后在副本内重新 `dart pub get`，使 package_config 指向副本
+  自身而非开发仓库。测试后端运行中不再锁住开发仓库的 `server/build`，开发侧
+  `dart_frog build` / F5 与测试环境互不干扰；
+- 后端运行数据落在副本自身的 `data/` 目录（与开发的 `server/data` 互不影响）；
+  因与开发环境共用数据库，经 `AICMHCS_FIELD_KEY_FILE` 绝对路径沿用开发字段
+  加密密钥 `server/data/aicmhcs.field.key`（单一来源，不复制副本），否则存量
   敏感字段（手机号/证件号）无法解密；
 - 前端部署副本的后端地址在部署时改写其 `assets/assets/config.json`
   （rootBundle 运行时读取，改文件即生效，无需重新构建）；仓库内
   `client/assets/config.json` 仍指向开发后端 8080，开发调试不受影响；
-- `server/build` 产物对仓库内共享包有相对路径依赖，不能拷出仓库运行；
-- 注意：测试环境的增删改会直接写入开发库；开发环境若以生产模式运行
-  （`tools/start_backend.sh` 会重建 `server/build`），测试后端下次启动前
-  重跑 `deploy_test.sh` 保持版本一致。
+- 注意：测试环境的增删改会直接写入开发库；开发侧改动后端/前端代码后需重跑
+  `deploy_test.sh`，测试环境才会更新到新版本。
 
 ### 测试环境可配置环境变量
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
-| AICMHCS_TEST_ROOT | /d/AiCMHCS-Test | 测试环境部署根目录（前端副本所在处） |
+| AICMHCS_TEST_ROOT | /d/AiCMHCS-Test | 测试环境部署根目录（后端/前端副本所在处） |
 | AICMHCS_TEST_API | http://localhost:8090 | 部署时写入前端的测试后端地址 |
 | AICMHCS_TEST_PORT | 8090 | 测试后端端口 |
 | AICMHCS_TEST_WEB_PORT | 5273 | 测试前端托管端口 |
