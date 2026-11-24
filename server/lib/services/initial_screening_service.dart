@@ -61,6 +61,12 @@ class InitialScreeningService {
   /// 达梦把空串按 NULL 处理，不可用空串占位）。
   static const String noReferralText = '无';
 
+  /// 儿童转诊类别：初筛转诊（CHILD_REFERRAL.REFERRAL_TYPE）。
+  static const String referralTypeInitial = '1';
+
+  /// 初筛转诊默认转诊原因（CHILD_REFERRAL.REFERRAL_REASON）。
+  static const String initialReferralReason = '孤独症初筛异常';
+
   /// 各字段长度上限（与表列宽对齐；WARNING_SIGN_RESULT/LANGUAGE_... 为
   /// 中文条目名称顿号连接，达梦 VARCHAR 按字节计，按 UTF-8 字节数校验）。
   static const int _warningSignMaxBytes = 200;
@@ -139,7 +145,8 @@ class InitialScreeningService {
   /// 儿童必须存在且属本院；归属医院/创建人与科室/院区上下文由路由层
   /// 从令牌会话推导传入（新增写入、修改沿用原值）；检查医生必须为本院
   /// 同科室的启用医生（防越科室/越院乱挂）。hasReferral='0'（无转诊）
-  /// 时转诊医院名称统一落「无」、转诊科室清空；'1' 时转诊医院名称必填。
+  /// 时转诊医院名称统一落「无」、转诊科室清空；'1' 时转诊医院名称必填，
+  /// 并自动联动写入儿童转诊表 CHILD_REFERRAL（转诊类别=1、转诊原因默认「孤独症初筛异常」，见下方 _upsertReferralIfNeeded）。
   Future<InitialScreening> save({
     required InitialScreening record,
     required String operatorId,
@@ -177,6 +184,16 @@ class InitialScreeningService {
       throw const AsdException(400, 40002, '初筛结果不能为空且不能超过 $_checkResultMaxLength 个字符');
     }
     final checkDate = _requiredDate(record.checkDate);
+
+    // 会话归属上下文（新增初筛/转诊写入用；修改初筛沿用记录原归属）
+    final sessionScope = (
+      hospId: scope,
+      hospName: _required(hospName, '医院名称', _referralHospMaxLength),
+      deptId: _optionalId(deptId),
+      deptName: _optional(deptName, '科室名称', _referralDeptMaxLength),
+      campusId: _optionalId(campusId),
+      campusName: _optional(campusName, '院区名称', _referralDeptMaxLength),
+    );
 
     // 同一儿童同一时段查重：已存在则更新（沿用原归属/创建人），否则新增
     final existing = await _db.query(
@@ -217,6 +234,16 @@ class InitialScreeningService {
           id,
           scope,
         ],
+      );
+      await _upsertReferralIfNeeded(
+        hasReferral: hasReferral,
+        childId: childIdValue,
+        referralDate: checkDate,
+        referralHospName: referralHospName,
+        referralDeptName: referralDeptName,
+        operatorId: operatorId,
+        operatorName: operatorName,
+        scope: sessionScope,
       );
       return _getById(id, scope);
     }
@@ -264,6 +291,16 @@ class InitialScreeningService {
         formatTimestamp(DateTime.now()),
       ],
     );
+    await _upsertReferralIfNeeded(
+      hasReferral: hasReferral,
+      childId: childIdValue,
+      referralDate: checkDate,
+      referralHospName: referralHospName,
+      referralDeptName: referralDeptName,
+      operatorId: operatorId,
+      operatorName: operatorName,
+      scope: sessionScope,
+    );
     return _getById(newId, scope);
   }
 
@@ -274,6 +311,79 @@ class InitialScreeningService {
       throw const AsdException(400, 40002, '初筛记录ID不能为空');
     }
     return _db.execute('DELETE FROM ASD_INITIAL_SCREENING WHERE ID = ? AND HOSP_ID = ?', [idValue, hospId.trim()]);
+  }
+
+  /// 初筛转诊联动：保存的初筛记录存在转诊（HAS_REFERRAL='1'）时自动写
+  /// 入儿童转诊表 CHILD_REFERRAL——转诊类别固定初筛转诊（TYPE=1）、
+  /// 转诊原因默认「孤独症初筛异常」、转诊日期=初筛检查日期、接诊日期/
+  /// 接诊情况留空（后续复诊环节补录）。同一儿童同一天的初筛转诊至多
+  /// 一条：按「CHILD_ID + REFERRAL_TYPE=1 + REFERRAL_DATE + HOSP_ID」
+  /// 查重（日期+类别需求口径之外再加儿童与本院限定，防跨儿童/跨院误
+  /// 并），命中即更新转诊医院/科室与原因（沿用原创建人与归属），否则
+  /// 新增（创建人与科室/院区/医院归属取自本次会话）。无转诊的保存不
+  /// 回溯删除已生成的转诊记录（历史转诊不因后续改判而丢失）。
+  Future<void> _upsertReferralIfNeeded({
+    required String hasReferral,
+    required String childId,
+    required String referralDate,
+    required String referralHospName,
+    required String? referralDeptName,
+    required String operatorId,
+    required String operatorName,
+    required ({String hospId, String hospName, String? deptId, String? deptName, String? campusId, String? campusName}) scope,
+  }) async {
+    if (hasReferral != '1') {
+      return;
+    }
+    final existing = await _db.query(
+      'SELECT ID FROM CHILD_REFERRAL '
+      'WHERE CHILD_ID = ? AND REFERRAL_TYPE = ? AND REFERRAL_DATE = ? AND HOSP_ID = ?',
+      [childId, referralTypeInitial, referralDate, scope.hospId],
+    );
+    if (existing.rows.isNotEmpty) {
+      await _db.execute(
+        'UPDATE CHILD_REFERRAL SET REFERRAL_REASON = ?, REFERRAL_HOSP_NAME = ?, '
+        'REFERRAL_DEPT_NAME = ?, UPDATE_TIME = ? '
+        'WHERE ID = ? AND HOSP_ID = ?',
+        [
+          initialReferralReason,
+          referralHospName,
+          referralDeptName,
+          formatTimestamp(DateTime.now()),
+          existing.rowsAsMaps.first['ID'] ?? '',
+          scope.hospId,
+        ],
+      );
+      return;
+    }
+    await _db.execute(
+      'INSERT INTO CHILD_REFERRAL (ID, CHILD_ID, REFERRAL_DATE, REFERRAL_TYPE, '
+      'REFERRAL_REASON, REFERRAL_HOSP_NAME, REFERRAL_DEPT_NAME, '
+      'CONSULTATION_DATE, CONSULTATION_DESC, CREATOR_ID, CREATOR_NAME, '
+      'DEPT_ID, DEPT_NAME, CAMPUS_ID, CAMPUS_NAME, HOSP_ID, HOSP_NAME, '
+      'CREATE_TIME) '
+      'VALUES (${List.filled(18, '?').join(', ')})',
+      [
+        newUuid(),
+        childId,
+        referralDate,
+        referralTypeInitial,
+        initialReferralReason,
+        referralHospName,
+        referralDeptName,
+        null,
+        null,
+        _required(operatorId, '创建人ID', 36),
+        _required(operatorName, '创建人姓名', _doctorNameMaxLength),
+        scope.deptId,
+        scope.deptName,
+        scope.campusId,
+        scope.campusName,
+        scope.hospId,
+        scope.hospName,
+        formatTimestamp(DateTime.now()),
+      ],
+    );
   }
 
   // ---------------- 内部辅助 ----------------

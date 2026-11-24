@@ -32,9 +32,9 @@ const List<(int, String)> screeningTabs = [
 ///
 /// 数据流：页面监听主界面「当前儿童」变化经 [syncChild] 同步，儿童变化
 /// 时清空全部状态并三路并行重载（初筛记录 / 扩展档案（早产矫正年龄
-/// 依据）/ 检查医生）；装载完成后按实足年龄算出 [autoTabMonth]（页面
-/// 据此自动切 TAB，仅首个未消费的值生效）。预警征象条目在 TAB 首次
-/// 进入时经 [ensureScaleItems] 按月龄懒加载缓存。
+/// 依据）/ 检查医生）。实足年龄推算口径见 [computeAutoTabMonth]
+/// （页面每次进入按需应用，自动定位到对应时段 TAB）。预警征象条目
+/// 在 TAB 首次进入时经 [ensureScaleItems] 按月龄懒加载缓存。
 class InitialScreeningViewModel extends ChangeNotifier {
   /// 构造函数：可选注入服务（缺省经服务定位器取，便于测试覆写）。
   InitialScreeningViewModel({InitialScreeningService? screeningService, ChildService? childService, MenuService? menuService, TimeService? timeService})
@@ -137,21 +137,13 @@ class InitialScreeningViewModel extends ChangeNotifier {
   /// 指定检查时段是否已做初筛（TAB 红点依据）。
   bool hasRecord(int month) => _recordsByMonth.containsKey(month);
 
-  /// 自动切换 TAB 的检查时段（装载完成后按实足年龄推算；null 表示无法
+  /// 按当前儿童实足年龄推算应自动切换到的 TAB 检查时段（null 表示无法
   /// 推算——未选儿童或年龄早于首个筛查窗口，页面维持首签）。
-  int? _autoTabMonth;
-
-  /// 页面已消费自动切 TAB（避免同一儿童的后续通知反复跳转）。
-  bool _autoTabConsumed = false;
-
-  /// 自动切换 TAB 的检查时段（页面经 [markAutoTabConsumed] 消费后返回
-  /// null；儿童切换时重算并复位）。
-  int? get autoTabMonth => _autoTabConsumed ? null : _autoTabMonth;
-
-  /// 标记自动切 TAB 已被页面消费。
-  void markAutoTabConsumed() {
-    _autoTabConsumed = true;
-  }
+  ///
+  /// 按需现算（不缓存）：VM 是全局单例，页面反复进出时各自按需取值，
+  /// 由页面自行保证「每儿童每次进页只应用一次」，避免缓存消费标记导致
+  /// 二次进页不再自动切换。
+  int? computeAutoTabMonth() => _computeAutoTabMonth();
 
   /// 业务当前时间（全局时间服务口径；表单默认值等业务时间统一取这里）。
   DateTime now() => _timeService.now();
@@ -201,8 +193,6 @@ class InitialScreeningViewModel extends ChangeNotifier {
     _doctors = const [];
     _doctorsLoaded = false;
     _ext = null;
-    _autoTabMonth = null;
-    _autoTabConsumed = false;
     _loadFailed = false;
   }
 
@@ -245,7 +235,6 @@ class InitialScreeningViewModel extends ChangeNotifier {
       failed = true;
     }
     _loadFailed = failed;
-    _autoTabMonth = _computeAutoTabMonth();
     notifyListeners();
   }
 

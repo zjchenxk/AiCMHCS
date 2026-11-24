@@ -12,11 +12,15 @@ import 'package:provider/provider.dart';
 /// 孤独症初筛记录表页（路由 /asd/initialScreening）：11 个月龄 TAB
 /// （3/6/8/12/18/24/30/36 月龄与 4/5/6 岁），每个 TAB 独立展示与编辑
 /// 该月龄的初筛记录（同一儿童同一时段至多一条）。已做初筛的 TAB 标签
-/// 右上方显示红点；打开页面按当前儿童实足年龄自动切换 TAB（需求窗口
-/// 口径见 [InitialScreeningViewModel]）；未做初筛的月龄默认进入新增
-/// 状态。按钮按操作权限 0301000001-新增/0301000002-修改/0301000003-
-/// 保存/0301000004-删除/0301000005-打印灰化控制；【打印】弹出菜单含
-/// 打印初筛记录表/打印转诊单两项（打印功能待后续开发）。
+/// 右上方显示红点；按当前儿童实足年龄命中的 TAB 标签红字醒目，打开
+/// 页面时自动切换到该 TAB（页面每次进入都按需应用，见
+/// [_InitialScreeningPageState._tryApplyAutoTab]）；未做初筛的月龄默认
+/// 进入新增状态。操作模式与儿童建档一致：浏览态可【新增】/【修改】，
+/// 录入态（新增/修改）中二者灰化并出现【取消】按钮撤消本次操作。
+/// 按钮按操作权限 0301000001-新增/0301000002-修改/0301000003-保存/
+/// 0301000004-删除/0301000005-打印灰化控制。【打印】在逐 TAB 操作行，
+/// 弹出菜单含打印初筛记录表/打印转诊单两项（打印功能待后续开发）。
+/// 保存存在转诊时服务端自动联动写 CHILD_REFERRAL（初筛转诊）。
 class InitialScreeningPage extends BasePage {
   const InitialScreeningPage({super.key, required super.loginUser, required super.child});
 
@@ -32,6 +36,10 @@ class _InitialScreeningPageState extends State<InitialScreeningPage> with Single
 
   late final MainViewModel _mainViewModel;
 
+  /// 已应用「自动切 TAB」的儿童 ID（每儿童只应用一次；页面每次进入
+  /// 重置——VM 是全局单例，反复进出页面都要重新定位到实足年龄时段）。
+  String? _autoTabAppliedChildId;
+
   @override
   void initState() {
     super.initState();
@@ -44,6 +52,8 @@ class _InitialScreeningPageState extends State<InitialScreeningPage> with Single
       if (!mounted) return;
       _viewModel.loadPermissions();
       _viewModel.syncChild(_mainViewModel.hasCurrentChild ? _mainViewModel.child : null);
+      // 二次进页（同一儿童数据已就绪、不再触发通知）也要自动定位时段
+      _tryApplyAutoTab();
       _ensureActiveScaleItems();
     });
   }
@@ -63,17 +73,10 @@ class _InitialScreeningPageState extends State<InitialScreeningPage> with Single
     _viewModel.syncChild(_mainViewModel.hasCurrentChild ? _mainViewModel.child : null);
   }
 
-  /// VM 变化：消费自动切 TAB（每儿童一次，消费后 VM 返回 null）+ 错误提示。
+  /// VM 变化：尝试自动切 TAB（每儿童一次）+ 错误提示。
   void _onViewModelChanged() {
     if (!mounted) return;
-    final autoMonth = _viewModel.autoTabMonth;
-    if (autoMonth != null) {
-      final index = screeningTabs.indexWhere((tab) => tab.$1 == autoMonth);
-      if (index >= 0) {
-        _viewModel.markAutoTabConsumed();
-        _tabController.animateTo(index);
-      }
-    }
+    _tryApplyAutoTab();
     final theme = Theme.of(context);
     if (_viewModel.errorMsg != null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -87,6 +90,26 @@ class _InitialScreeningPageState extends State<InitialScreeningPage> with Single
       );
       // 提示后立即清空，避免同一错误重复弹出
       _viewModel.clearError();
+    }
+  }
+
+  /// 按实足年龄自动切 TAB：每儿童每次进页只应用一次（儿童变化或页面
+  /// 重新进入时重置）。VM 是全局单例，反复进出页面时数据已就绪、不再
+  /// 触发通知，故 initState 与 VM 通知两路都尝试应用。
+  void _tryApplyAutoTab() {
+    final childId = _viewModel.child?.id ?? '';
+    if (childId.isEmpty || _autoTabAppliedChildId == childId) {
+      return;
+    }
+    final month = _viewModel.computeAutoTabMonth();
+    // 无法推算（早于首窗）同样记为已应用，避免每个通知反复尝试
+    _autoTabAppliedChildId = childId;
+    if (month == null) {
+      return;
+    }
+    final index = screeningTabs.indexWhere((tab) => tab.$1 == month);
+    if (index >= 0 && index != _tabController.index) {
+      _tabController.animateTo(index);
     }
   }
 
@@ -118,6 +141,8 @@ class _InitialScreeningPageState extends State<InitialScreeningPage> with Single
   Widget build(BuildContext context) {
     final viewModel = context.watch<InitialScreeningViewModel>();
     final theme = Theme.of(context);
+    // 实足年龄命中的月龄（TAB 标签红字醒目）
+    final ageMonth = viewModel.computeAutoTabMonth();
     return Card(
       color: theme.colorScheme.surfaceContainer,
       margin: const EdgeInsets.all(8),
@@ -134,7 +159,7 @@ class _InitialScreeningPageState extends State<InitialScreeningPage> with Single
                         isScrollable: true,
                         tabAlignment: TabAlignment.start,
                         tabs: [
-                          for (final (month, label) in screeningTabs) _MonthTab(label: label, hasRecord: viewModel.hasRecord(month)),
+                          for (final (month, label) in screeningTabs) _MonthTab(label: label, hasRecord: viewModel.hasRecord(month), highlight: month == ageMonth),
                         ],
                       ),
                       Expanded(
@@ -159,7 +184,7 @@ class _InitialScreeningPageState extends State<InitialScreeningPage> with Single
     );
   }
 
-  /// 顶部工具栏：标题 + 当前儿童摘要 + 刷新 + 打印菜单。
+  /// 顶部工具栏：标题 + 当前儿童摘要 + 刷新。
   Widget _buildToolbar(ThemeData theme, InitialScreeningViewModel viewModel) {
     final child = viewModel.child;
     return Container(
@@ -188,34 +213,15 @@ class _InitialScreeningPageState extends State<InitialScreeningPage> with Single
                   ),
           ),
           const SizedBox(width: 12),
-          _toolbarButton(
-            theme,
-            icon: Icons.refresh_outlined,
-            label: '刷新',
-            enabled: viewModel.hasChild && !viewModel.busy,
-            onPressed: () => _viewModel.reload(),
-          ),
-          const SizedBox(width: 8),
-          PopupMenuButton<String>(
-            tooltip: '打印',
-            enabled: viewModel.canPrint && viewModel.hasChild,
-            style: IconButton.styleFrom(
+          OutlinedButton.icon(
+            onPressed: viewModel.hasChild && !viewModel.busy ? () => _viewModel.reload() : null,
+            icon: const Icon(Icons.refresh_outlined, size: 18),
+            label: const Text('刷新'),
+            style: OutlinedButton.styleFrom(
               foregroundColor: theme.colorScheme.onPrimaryContainer,
-              backgroundColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.08),
+              side: BorderSide(color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.4)),
+              backgroundColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.06),
             ),
-            icon: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.print_outlined, size: 18, color: theme.colorScheme.onPrimaryContainer),
-                const SizedBox(width: 4),
-                Text('打印', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer)),
-              ],
-            ),
-            itemBuilder: (_) => const [
-              PopupMenuItem<String>(value: 'record', child: Text('打印初筛记录表')),
-              PopupMenuItem<String>(value: 'referral', child: Text('打印转诊单')),
-            ],
-            onSelected: (value) => _printPlaceholder(value == 'record' ? '打印初筛记录表' : '打印转诊单'),
           ),
         ],
       ),
@@ -226,28 +232,19 @@ class _InitialScreeningPageState extends State<InitialScreeningPage> with Single
     final text = child.actualAge;
     return text.isEmpty ? '' : '　$text';
   }
-
-  Widget _toolbarButton(ThemeData theme, {required IconData icon, required String label, required bool enabled, required VoidCallback onPressed}) {
-    return OutlinedButton.icon(
-      onPressed: enabled ? onPressed : null,
-      icon: Icon(icon, size: 18),
-      label: Text(label),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: theme.colorScheme.onPrimaryContainer,
-        side: BorderSide(color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.4)),
-        backgroundColor: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.06),
-      ),
-    );
-  }
 }
 
-/// TAB 标签：月龄文案 + 已做初筛时右上角红点标记。
+/// TAB 标签：月龄文案（实足年龄命中的时段红字醒目）+ 已做初筛时右上
+/// 角红点标记。
 class _MonthTab extends StatelessWidget {
-  const _MonthTab({required this.label, required this.hasRecord});
+  const _MonthTab({required this.label, required this.hasRecord, required this.highlight});
 
   final String label;
 
   final bool hasRecord;
+
+  /// 是否为实足年龄命中的检查时段（红字醒目显示）。
+  final bool highlight;
 
   @override
   Widget build(BuildContext context) {
@@ -259,7 +256,10 @@ class _MonthTab extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-            child: Text(label, style: theme.textTheme.bodyMedium),
+            child: Text(
+              label,
+              style: highlight ? theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error, fontWeight: FontWeight.bold) : theme.textTheme.bodyMedium,
+            ),
           ),
           if (hasRecord)
             // 已做初筛红点：标签右上方 4px 圆点
@@ -280,6 +280,9 @@ class _MonthTab extends StatelessWidget {
 
 /// 单个月龄 TAB 的表单页：浏览（已做初筛）/ 新增（未做初筛默认）/ 修改
 /// 三态，每页状态独立保存（TabBarView + KeepAlive，切 TAB 不丢录入）。
+/// 操作模式与儿童建档一致：浏览态开放新增/修改，录入态二者灰化并出现
+/// 【取消】撤消；表单按「每行 3 个组件」布局（对照服务规范表 2~4），
+/// 字段标签统一置于输入框内（labelText）。
 class _MonthFormPage extends StatefulWidget {
   const _MonthFormPage({super.key, required this.month, required this.viewModel, required this.loginUser, required this.onPrint});
 
@@ -289,7 +292,7 @@ class _MonthFormPage extends StatefulWidget {
 
   final LoginUser loginUser;
 
-  /// 打印菜单占位回调（页级工具栏统一弹出）。
+  /// 打印菜单占位回调（页级统一弹出 SnackBar 提示）。
   final void Function(String label) onPrint;
 
   @override
@@ -304,8 +307,12 @@ class _MonthFormPageState extends State<_MonthFormPage> with AutomaticKeepAliveC
   static const String _socialDisorder = '社会交往能力障碍或倒退';
 
   final TextEditingController _checkDateCtrl = TextEditingController();
+  final TextEditingController _actualAgeCtrl = TextEditingController();
+  final TextEditingController _correctedAgeCtrl = TextEditingController();
   final TextEditingController _referralHospCtrl = TextEditingController();
   final TextEditingController _referralDeptCtrl = TextEditingController();
+  final TextEditingController _operatorCtrl = TextEditingController();
+  final TextEditingController _hospitalCtrl = TextEditingController();
 
   /// 转诊医院/科室字典数据项（自由输入 + 下拉选择并存，值存 ITEM_VALUE）。
   List<DictItem>? _referralHospItems;
@@ -337,8 +344,7 @@ class _MonthFormPageState extends State<_MonthFormPage> with AutomaticKeepAliveC
     widget.viewModel.addListener(_onViewModelChanged);
     _loadDictItems();
     _hydrate(force: true);
-    // 打开 TAB 即懒加载本页预警征象条目（相邻 TAB 由页级 TabBar 切换
-    // 监听触发；KeepAlive 页初始未挂载的不触发也无妨，进入时触发）
+    // 打开 TAB 即懒加载本页预警征象条目
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) widget.viewModel.ensureScaleItems(widget.month);
     });
@@ -348,8 +354,12 @@ class _MonthFormPageState extends State<_MonthFormPage> with AutomaticKeepAliveC
   void dispose() {
     widget.viewModel.removeListener(_onViewModelChanged);
     _checkDateCtrl.dispose();
+    _actualAgeCtrl.dispose();
+    _correctedAgeCtrl.dispose();
     _referralHospCtrl.dispose();
     _referralDeptCtrl.dispose();
+    _operatorCtrl.dispose();
+    _hospitalCtrl.dispose();
     super.dispose();
   }
 
@@ -400,8 +410,7 @@ class _MonthFormPageState extends State<_MonthFormPage> with AutomaticKeepAliveC
 
   /// 表单水合：儿童或记录变化时重填（浏览态填记录值，无记录进新增态）。
   ///
-  /// 打印水合键区分「该月龄尚无记录」与「有记录」；保存成功/删除成功后
-  /// 记录集合变化，键随之变化触发重填。
+  /// 保存成功/删除成功/取消操作后置空 [_hydratedKey] 触发重填。
   void _hydrate({required bool force}) {
     final vm = widget.viewModel;
     final record = vm.recordOf(widget.month);
@@ -435,6 +444,7 @@ class _MonthFormPageState extends State<_MonthFormPage> with AutomaticKeepAliveC
     _referralHospCtrl.text = record.hasReferral == '1' ? record.referralHospName : '';
     _referralDeptCtrl.text = record.referralDeptName ?? '';
     _doctorId = record.doctorId;
+    _refreshDisplayFields();
   }
 
   /// 新增态：清空并给检查日期默认今天（业务时间口径）、医生默认候选。
@@ -449,6 +459,21 @@ class _MonthFormPageState extends State<_MonthFormPage> with AutomaticKeepAliveC
     _referralHospCtrl.clear();
     _referralDeptCtrl.clear();
     _doctorId = _defaultDoctorId();
+    _refreshDisplayFields();
+  }
+
+  /// 浏览/录入态的展示字段刷新：实足年龄、纠正年龄随检查日期现算；
+  /// 操作人员/检查医院浏览态取记录归属、录入态取当前登录用户。
+  void _refreshDisplayFields() {
+    final vm = widget.viewModel;
+    final record = vm.recordOf(widget.month);
+    final actual = _checkDate == null ? null : vm.actualAgePartsFor(_checkDate!);
+    final corrected = _checkDate == null ? null : vm.correctedAgePartsFor(_checkDate!);
+    _actualAgeCtrl.text = actual == null ? '——' : _fmtAge(actual);
+    _correctedAgeCtrl.text = corrected == null ? '不适用' : _fmtAge(corrected);
+    final browsing = _mode == _FormMode.browse && record != null;
+    _operatorCtrl.text = browsing ? record.creatorName : widget.loginUser.userName;
+    _hospitalCtrl.text = browsing ? record.hospName : (widget.loginUser.hospName ?? '');
   }
 
   /// 新增（按钮）：清空当前 TAB 表单进入新增态（该月龄已有记录时保存
@@ -457,15 +482,31 @@ class _MonthFormPageState extends State<_MonthFormPage> with AutomaticKeepAliveC
     setState(_resetForAdd);
   }
 
-  /// 修改（按钮）：进入编辑态。
+  /// 修改（按钮）：进入编辑态（字段已是记录值）。
   void _startEdit() {
     final record = widget.viewModel.recordOf(widget.month);
     if (record == null) return;
-    setState(() => _mode = _FormMode.edit);
+    setState(() {
+      _mode = _FormMode.edit;
+      _refreshDisplayFields();
+    });
+  }
+
+  /// 取消（按钮）：撤消本次新增/修改——有记录回浏览态（还原记录值），
+  /// 无记录回到空白新增默认态。
+  void _cancelEdit() {
+    final record = widget.viewModel.recordOf(widget.month);
+    setState(() {
+      if (record != null) {
+        _applyRecord(record);
+      } else {
+        _resetForAdd();
+      }
+    });
   }
 
   /// 保存：客户端校验 → 组装记录 → VM 保存（成功后记录变化触发重填回
-  /// 浏览态）。
+  /// 浏览态；有转诊时服务端自动联动写 CHILD_REFERRAL）。
   Future<void> _save() async {
     final vm = widget.viewModel;
     final theme = Theme.of(context);
@@ -620,6 +661,12 @@ class _MonthFormPageState extends State<_MonthFormPage> with AutomaticKeepAliveC
 
   String _fmtDate(DateTime date) => '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
+  String _fmtAge(({int years, int months, int days}) parts) => [
+    if (parts.years > 0) '${parts.years}岁',
+    if (parts.months > 0) '${parts.months}个月',
+    if (parts.days > 0 || (parts.years == 0 && parts.months == 0)) '${parts.days}天',
+  ].join();
+
   String _tabLabel(int month) {
     for (final (m, label) in screeningTabs) {
       if (m == month) return label;
@@ -647,13 +694,61 @@ class _MonthFormPageState extends State<_MonthFormPage> with AutomaticKeepAliveC
             children: [
               _buildHeader(theme, vm, record),
               const SizedBox(height: 12),
-              _buildFieldGrid(theme, vm, editable),
+              _responsiveRow([
+                _dateField(theme, editable),
+                _disabledField(theme, controller: _actualAgeCtrl, label: '实足年龄'),
+                _disabledField(theme, controller: _correctedAgeCtrl, label: '纠正年龄'),
+              ]),
               const SizedBox(height: 12),
               _buildWarningSigns(theme, vm, editable),
               const SizedBox(height: 12),
               _buildLanguageSocial(theme, editable),
               const SizedBox(height: 12),
-              _buildReferralSection(theme, editable),
+              TextFormField(
+                key: ValueKey('checkResult-${_derivedCheckResult()}'),
+                initialValue: _derivedCheckResult(),
+                readOnly: true,
+                enabled: false,
+                style: theme.textTheme.bodyMedium,
+                // 初筛结果由预警征象与询问结果自动推导，界面只读展示
+                decoration: _decoration(theme, '初筛结果'),
+              ),
+              const SizedBox(height: 12),
+              _responsiveRow([
+                DropdownButtonFormField<String>(
+                  // ValueKey 随外部赋值重建：initialValue 仅首次生效（3.33+
+                  // value 参数已弃用），选择后 onChanged 更新状态触发重建回显
+                  key: ValueKey('referral-$_hasReferral'),
+                  initialValue: _hasReferral,
+                  items: const [
+                    DropdownMenuItem(value: '0', child: Text('无')),
+                    DropdownMenuItem(value: '1', child: Text('有')),
+                  ],
+                  enabled: editable,
+                  onChanged: editable
+                      ? (v) {
+                          setState(() {
+                            _hasReferral = v ?? '0';
+                            // 切回无转诊时清空转诊医院/科室
+                            if (_hasReferral == '0') {
+                              _referralHospCtrl.clear();
+                              _referralDeptCtrl.clear();
+                            }
+                          });
+                        }
+                      : null,
+                  style: theme.textTheme.bodyMedium,
+                  decoration: _decoration(theme, '有无转诊'),
+                ),
+                _referralCombo(theme, controller: _referralHospCtrl, items: _referralHospItems, enabled: editable && _hasReferral == '1', label: '转诊医院名称', hint: '下拉选择或自由输入'),
+                _referralCombo(theme, controller: _referralDeptCtrl, items: _referralDeptItems, enabled: editable && _hasReferral == '1', label: '转诊科室名称', hint: '下拉选择或自由输入'),
+              ]),
+              const SizedBox(height: 12),
+              _responsiveRow([
+                _doctorField(theme, vm, editable),
+                _disabledField(theme, controller: _operatorCtrl, label: '操作人员'),
+                _disabledField(theme, controller: _hospitalCtrl, label: '检查医院'),
+              ]),
             ],
           ),
         ),
@@ -661,19 +756,32 @@ class _MonthFormPageState extends State<_MonthFormPage> with AutomaticKeepAliveC
     );
   }
 
-  /// 表单头：模式提示 + 新增/修改/保存/删除按钮行。
+  /// 表单头：模式提示 + 新增/修改/保存/取消/删除/打印按钮行（操作模式
+  /// 与儿童建档一致：录入态中新增/修改灰化并出现【取消】）。
   Widget _buildHeader(ThemeData theme, InitialScreeningViewModel vm, InitialScreening? record) {
+    final browsing = _mode == _FormMode.browse;
+    final editing = _mode != _FormMode.browse;
+    final createReady = vm.canCreate && browsing && vm.hasChild && !vm.busy;
+    final updateReady = vm.canUpdate && browsing && record != null && !vm.busy;
+    final saveReady = vm.canSave && editing && vm.hasChild && !vm.busy;
+    final deleteReady = vm.canDelete && browsing && record != null && !vm.busy;
+    final printReady = vm.canPrint && browsing && record != null && !vm.busy;
+
     final modeText = switch (_mode) {
       _FormMode.browse => '浏览（已做初筛）',
-      _FormMode.add => record == null ? '新增（该月龄尚未初筛）' : '新增（保存后将覆盖已有记录）',
-      _FormMode.edit => '修改',
+      _FormMode.add => record == null ? '新增——录入完成请点击【保存】' : '新增中——保存后将覆盖已有记录',
+      _FormMode.edit => '修改中——录入完成请点击【保存】',
     };
-    Widget actionButton({required IconData icon, required String label, required bool enabled, required VoidCallback onPressed, Color? color}) {
-      return FilledButton.tonalIcon(
-        onPressed: enabled ? onPressed : null,
-        icon: Icon(icon, size: 18),
-        label: Text(label),
-        style: FilledButton.styleFrom(foregroundColor: color ?? theme.colorScheme.primary),
+
+    Widget actionButton({required IconData icon, required String label, required bool enabled, required String tip, required VoidCallback onPressed, Color? color}) {
+      return Tooltip(
+        message: tip,
+        child: FilledButton.tonalIcon(
+          onPressed: enabled ? onPressed : null,
+          icon: Icon(icon, size: 18),
+          label: Text(label),
+          style: FilledButton.styleFrom(foregroundColor: color ?? theme.colorScheme.primary),
+        ),
       );
     }
 
@@ -690,180 +798,163 @@ class _MonthFormPageState extends State<_MonthFormPage> with AutomaticKeepAliveC
         actionButton(
           icon: Icons.add_outlined,
           label: '新增',
-          enabled: vm.canCreate && vm.hasChild && !vm.busy,
+          enabled: createReady,
+          tip: vm.canCreate ? '新增${_tabLabel(widget.month)}初筛记录' : '无新增操作权限',
           onPressed: _startAdd,
         ),
         actionButton(
           icon: Icons.edit_outlined,
           label: '修改',
-          enabled: record != null && vm.canUpdate && !vm.busy,
+          enabled: updateReady,
+          tip: !vm.canUpdate ? '无修改操作权限' : (record != null ? '修改${_tabLabel(widget.month)}初筛记录' : '该月龄尚未初筛，请直接录入'),
           onPressed: _startEdit,
         ),
         actionButton(
           icon: Icons.save_outlined,
           label: '保存',
-          enabled: _mode != _FormMode.browse && vm.canSave && vm.hasChild && !vm.busy,
+          enabled: saveReady,
+          tip: vm.canSave ? (editing ? '保存${_tabLabel(widget.month)}初筛记录' : '请先点击【新增】或【修改】') : '无保存操作权限',
           onPressed: _save,
         ),
+        if (editing)
+          OutlinedButton.icon(
+            onPressed: vm.busy ? null : _cancelEdit,
+            icon: const Icon(Icons.cancel_outlined, size: 18),
+            label: const Text('取消'),
+          ),
         actionButton(
           icon: Icons.delete_outlined,
           label: '删除',
-          color: theme.colorScheme.error,
-          enabled: record != null && vm.canDelete && !vm.busy,
+          enabled: deleteReady,
+          tip: !vm.canDelete ? '无删除操作权限' : (record != null ? '删除${_tabLabel(widget.month)}初筛记录' : '该月龄尚未初筛'),
           onPressed: _confirmDelete,
+          color: theme.colorScheme.error,
+        ),
+        // 打印菜单：打印初筛记录表 / 打印转诊单（打印功能待后续开发）
+        Tooltip(
+          message: !vm.canPrint ? '无打印操作权限' : (record != null ? '打印初筛记录表/转诊单' : '该月龄尚未初筛'),
+          child: PopupMenuButton<String>(
+            enabled: printReady,
+            itemBuilder: (_) => const [
+              PopupMenuItem<String>(value: 'record', child: Text('打印初筛记录表')),
+              PopupMenuItem<String>(value: 'referral', child: Text('打印转诊单')),
+            ],
+            onSelected: (value) => widget.onPrint(value == 'record' ? '打印初筛记录表' : '打印转诊单'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: theme.colorScheme.primary,
+              side: BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.4)),
+            ),
+            icon: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.print_outlined, size: 18, color: printReady ? theme.colorScheme.primary : theme.colorScheme.onSurface.withValues(alpha: 0.38)),
+                const SizedBox(width: 4),
+                Text('打印', style: theme.textTheme.bodyMedium),
+              ],
+            ),
+          ),
         ),
         if (vm.busy) const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
       ],
     );
   }
 
-  /// 基础字段网格：检查日期/实足年龄/纠正年龄/初筛结果/有无转诊/转诊
-  /// 医院/转诊科室/检查医生（窄屏 Wrap 自动换行，宽屏两列）。
-  Widget _buildFieldGrid(ThemeData theme, InitialScreeningViewModel vm, bool editable) {
-    final actual = _checkDate == null ? null : vm.actualAgePartsFor(_checkDate!);
-    final corrected = _checkDate == null ? null : vm.correctedAgePartsFor(_checkDate!);
-    final ageText = actual == null ? '' : _fmtAge(actual);
-    final correctedText = corrected == null ? '不适用' : _fmtAge(corrected);
+  /// 宽屏每行 3 个组件（对照服务规范表 2~4 布局），窄屏纵向堆叠。
+  Widget _responsiveRow(List<Widget> fields) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth >= 700;
+        if (wide) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var i = 0; i < fields.length; i++) ...[
+                if (i > 0) const SizedBox(width: 16),
+                Expanded(child: fields[i]),
+              ],
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var i = 0; i < fields.length; i++) ...[
+              if (i > 0) const SizedBox(height: 12),
+              fields[i],
+            ],
+          ],
+        );
+      },
+    );
+  }
 
-    return Wrap(
-      spacing: 16,
-      runSpacing: 12,
-      children: [
-        _fieldBox(
-          theme,
-          label: '检查日期',
-          required: editable,
-          child: TextFormField(
-            controller: _checkDateCtrl,
-            readOnly: true,
-            enabled: editable,
-            style: theme.textTheme.bodyMedium,
-            decoration: _decoration(theme, '检查日期', required: editable),
-            onTap: editable
-                ? () async {
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: _checkDate ?? DateTime.now(),
-                      firstDate: DateTime(1900),
-                      lastDate: DateTime(2100),
-                      helpText: '选择检查日期',
-                    );
-                    if (picked != null && mounted) {
-                      setState(() {
-                        _checkDate = picked;
-                        _checkDateCtrl.text = _fmtDate(picked);
-                      });
-                    }
-                  }
-                : null,
+  /// 检查日期（选择后自动算实足/纠正年龄并刷新展示字段）。
+  Widget _dateField(ThemeData theme, bool editable) {
+    return TextFormField(
+      controller: _checkDateCtrl,
+      readOnly: true,
+      enabled: editable,
+      style: theme.textTheme.bodyMedium,
+      decoration: _decoration(theme, '检查日期'),
+      onTap: editable
+          ? () async {
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: _checkDate ?? DateTime.now(),
+                firstDate: DateTime(1900),
+                lastDate: DateTime(2100),
+                helpText: '选择检查日期',
+              );
+              if (picked != null && mounted) {
+                setState(() {
+                  _checkDate = picked;
+                  _checkDateCtrl.text = _fmtDate(picked);
+                  _refreshDisplayFields();
+                });
+              }
+            }
+          : null,
+    );
+  }
+
+  /// 只读展示字段（实足年龄/纠正年龄/操作人员/检查医院，控制器驱动）。
+  Widget _disabledField(ThemeData theme, {required TextEditingController controller, required String label}) {
+    return TextFormField(
+      controller: controller,
+      readOnly: true,
+      enabled: false,
+      style: theme.textTheme.bodyMedium,
+      decoration: _decoration(theme, label),
+    );
+  }
+
+  /// 检查医生下拉（同科室候选；无候选时灰显提示）。
+  Widget _doctorField(ThemeData theme, InitialScreeningViewModel vm, bool editable) {
+    if (vm.doctors.isEmpty) {
+      return TextFormField(
+        initialValue: vm.doctorsLoaded ? '当前科室无医生候选' : '加载中...',
+        readOnly: true,
+        enabled: false,
+        style: theme.textTheme.bodyMedium,
+        decoration: _decoration(theme, '检查医生'),
+      );
+    }
+    return DropdownButtonFormField<String>(
+      // ValueKey 随外部赋值重建（水合/默认医生），见「有无转诊」注
+      key: ValueKey('doctor-$_doctorId'),
+      initialValue: _doctorId != null && vm.doctors.any((d) => d.id == _doctorId) ? _doctorId : null,
+      items: [
+        for (final d in vm.doctors)
+          DropdownMenuItem(
+            value: d.id,
+            child: Text(d.userName, style: theme.textTheme.bodyMedium),
           ),
-        ),
-        _fieldBox(
-          theme,
-          label: '实足年龄',
-          child: _displayField(theme, ageText.isEmpty ? '——' : ageText),
-        ),
-        _fieldBox(
-          theme,
-          label: '纠正年龄',
-          child: _displayField(theme, correctedText),
-        ),
-        _fieldBox(
-          theme,
-          label: '初筛结果',
-          required: true,
-          child: DropdownButtonFormField<String>(
-            // 初筛结果由预警征象与询问结果自动推导，界面只读展示；经
-            // ValueKey 随推导值重建（initialValue 仅首次生效）
-            key: ValueKey('result-${_derivedCheckResult()}'),
-            initialValue: _derivedCheckResult(),
-            items: const [
-              DropdownMenuItem(value: _noneAbnormal, child: Text(_noneAbnormal)),
-              DropdownMenuItem(value: '异常', child: Text('异常')),
-            ],
-            onChanged: null,
-            style: theme.textTheme.bodyMedium,
-            decoration: _decoration(theme, '初筛结果', required: true),
-          ),
-        ),
-        _fieldBox(
-          theme,
-          label: '有无转诊',
-          required: true,
-          child: DropdownButtonFormField<String>(
-            // ValueKey 随外部赋值重建：initialValue 仅首次生效（3.33+
-            // value 参数已弃用），选择后 onChanged 更新状态触发重建回显
-            key: ValueKey('referral-$_hasReferral'),
-            initialValue: _hasReferral,
-            items: const [
-              DropdownMenuItem(value: '0', child: Text('无')),
-              DropdownMenuItem(value: '1', child: Text('有')),
-            ],
-            enabled: editable,
-            onChanged: editable
-                ? (v) {
-                    setState(() {
-                      _hasReferral = v ?? '0';
-                      // 切回无转诊时清空转诊医院/科室
-                      if (_hasReferral == '0') {
-                        _referralHospCtrl.clear();
-                        _referralDeptCtrl.clear();
-                      }
-                    });
-                  }
-                : null,
-            style: theme.textTheme.bodyMedium,
-            decoration: _decoration(theme, '有无转诊', required: true),
-          ),
-        ),
-        _fieldBox(
-          theme,
-          label: '转诊医院名称',
-          required: _hasReferral == '1',
-          child: _referralCombo(
-            theme,
-            controller: _referralHospCtrl,
-            items: _referralHospItems,
-            enabled: editable && _hasReferral == '1',
-            hint: _hasReferral == '1' ? '下拉选择或自由输入' : '无转诊时不可填',
-          ),
-        ),
-        _fieldBox(
-          theme,
-          label: '转诊科室名称',
-          child: _referralCombo(
-            theme,
-            controller: _referralDeptCtrl,
-            items: _referralDeptItems,
-            enabled: editable && _hasReferral == '1',
-            hint: _hasReferral == '1' ? '下拉选择或自由输入' : '无转诊时不可填',
-          ),
-        ),
-        _fieldBox(
-          theme,
-          label: '检查医生',
-          required: true,
-          child: vm.doctors.isEmpty
-              ? _displayField(theme, vm.doctorsLoaded ? '当前科室无医生候选' : '加载中...')
-              : DropdownButtonFormField<String>(
-                  // ValueKey 随外部赋值重建（水合/默认医生），见「有无转诊」注
-                  key: ValueKey('doctor-$_doctorId'),
-                  initialValue: _doctorId != null && vm.doctors.any((d) => d.id == _doctorId) ? _doctorId : null,
-                  items: [
-                    for (final d in vm.doctors)
-                      DropdownMenuItem(
-                        value: d.id,
-                        child: Text(d.userName, style: theme.textTheme.bodyMedium),
-                      ),
-                  ],
-                  enabled: editable,
-                  onChanged: editable ? (v) => setState(() => _doctorId = v) : null,
-                  hint: Text('请选择检查医生', style: theme.textTheme.bodyMedium),
-                  style: theme.textTheme.bodyMedium,
-                  decoration: _decoration(theme, '检查医生', required: true),
-                ),
-        ),
       ],
+      enabled: editable,
+      onChanged: editable ? (v) => setState(() => _doctorId = v) : null,
+      hint: Text('请选择检查医生', style: theme.textTheme.bodyMedium),
+      style: theme.textTheme.bodyMedium,
+      decoration: _decoration(theme, '检查医生'),
     );
   }
 
@@ -873,8 +964,7 @@ class _MonthFormPageState extends State<_MonthFormPage> with AutomaticKeepAliveC
     final loading = vm.scaleItemsLoading(widget.month);
     return _sectionBox(
       theme,
-      title: '预警征象筛查结果',
-      required: true,
+      title: '预警征象筛查',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -944,8 +1034,7 @@ class _MonthFormPageState extends State<_MonthFormPage> with AutomaticKeepAliveC
   Widget _buildLanguageSocial(ThemeData theme, bool editable) {
     return _sectionBox(
       theme,
-      title: '语言功能和社会交往能力询问结果',
-      required: true,
+      title: '语言功能与社会交往能力询问',
       child: Wrap(
         spacing: 8,
         runSpacing: 4,
@@ -992,88 +1081,22 @@ class _MonthFormPageState extends State<_MonthFormPage> with AutomaticKeepAliveC
     });
   }
 
-  /// 转诊信息段落标题（有无转诊下拉在字段网格内，此处仅组合说明）。
-  Widget _buildReferralSection(ThemeData theme, bool editable) {
-    return _sectionBox(
-      theme,
-      title: '转诊说明',
-      child: Text(
-        _hasReferral == '1' ? '已选择转诊：请填写转诊医院与转诊科室（可下拉选择字典项或自由输入）。' : '未转诊：转诊医院/科室不可填写。初筛异常时请选择转诊并填写转诊信息。',
-        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
-      ),
-    );
-  }
-
   // ---------------- 通用小组件 ----------------
 
-  String _fmtAge(({int years, int months, int days}) parts) => [
-    if (parts.years > 0) '${parts.years}岁',
-    if (parts.months > 0) '${parts.months}个月',
-    if (parts.days > 0 || (parts.years == 0 && parts.months == 0)) '${parts.days}天',
-  ].join();
-
-  Widget _fieldBox(ThemeData theme, {required String label, required Widget child, bool required = false}) {
-    return SizedBox(
-      width: 320,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text.rich(
-            TextSpan(
-              text: label,
-              style: theme.textTheme.bodySmall,
-              children: [
-                if (required)
-                  TextSpan(
-                    text: ' *',
-                    style: TextStyle(color: theme.colorScheme.error),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 4),
-          child,
-        ],
-      ),
-    );
-  }
-
-  Widget _sectionBox(ThemeData theme, {required String title, required Widget child, bool required = false}) {
+  Widget _sectionBox(ThemeData theme, {required String title, required Widget child}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text.rich(
-          TextSpan(
-            text: title,
-            style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
-            children: [
-              if (required)
-                TextSpan(
-                  text: ' *',
-                  style: TextStyle(color: theme.colorScheme.error),
-                ),
-            ],
-          ),
-        ),
+        Text(title, style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         child,
       ],
     );
   }
 
-  Widget _displayField(ThemeData theme, String text) {
-    return TextFormField(
-      initialValue: text,
-      readOnly: true,
-      enabled: false,
-      style: theme.textTheme.bodyMedium,
-      decoration: _decoration(theme, null),
-    );
-  }
-
   /// 转诊名称组合框：DropdownMenu 支持自由输入 + 下拉选择（enableFilter
   /// 输入过滤；禁用态沿用控制器文本展示）。
-  Widget _referralCombo(ThemeData theme, {required TextEditingController controller, required List<DictItem>? items, required bool enabled, required String hint}) {
+  Widget _referralCombo(ThemeData theme, {required TextEditingController controller, required List<DictItem>? items, required bool enabled, required String label, required String hint}) {
     final entries = [
       for (final item in items ?? const <DictItem>[]) DropdownMenuEntry<String>(value: item.itemValue, label: item.itemValue),
     ];
@@ -1088,6 +1111,7 @@ class _MonthFormPageState extends State<_MonthFormPage> with AutomaticKeepAliveC
         surfaceTintColor: WidgetStatePropertyAll(theme.colorScheme.surface),
       ),
       textStyle: theme.textTheme.bodyMedium,
+      label: Text(label, style: theme.textTheme.bodyMedium),
       hintText: hint,
       trailingIcon: Icon(Icons.arrow_drop_down_outlined, size: 20, color: theme.colorScheme.onSurfaceVariant),
       dropdownMenuEntries: entries,
@@ -1130,7 +1154,7 @@ class _MonthFormPageState extends State<_MonthFormPage> with AutomaticKeepAliveC
     );
   }
 
-  InputDecoration _decoration(ThemeData theme, String? label, {bool required = false}) {
+  InputDecoration _decoration(ThemeData theme, String? label) {
     OutlineInputBorder glassBorder(ThemeData theme, Color color) => OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
       borderSide: BorderSide(color: color),

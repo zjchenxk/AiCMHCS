@@ -607,8 +607,9 @@ class ChildService {
     return load(id, hospId);
   }
 
-  /// 删除儿童档案（连带删除扩展信息、监护人、全部拍照记录与高危因素
-  /// 记录），返回删除行数（0 或 1）。
+  /// 删除儿童档案（连带删除扩展信息、监护人、全部拍照记录、高危因素
+  /// 记录、孤独症初筛记录与初筛/转诊等儿童子表记录），返回删除行数
+  /// （0 或 1）。
   Future<int> delete(String id, String hospId) async {
     await _requireChild(id, hospId);
     final idValue = _requireId(id, '儿童ID');
@@ -617,6 +618,10 @@ class ChildService {
     await _db.execute('DELETE FROM CHILD_EXT_INFO WHERE CHILD_ID = ?', [idValue]);
     await _db.execute('DELETE FROM CHILD_PHOTO WHERE CHILD_ID = ?', [idValue]);
     await _db.execute('DELETE FROM CHILD_HIGH_RISK_FACTOR WHERE CHILD_ID = ?', [idValue]);
+    // v25/v26 新增的儿童子表随档案级联清理（防孤儿数据；转诊记录目前
+    // 仅初筛联动自动写入，无独立入口）
+    await _db.execute('DELETE FROM ASD_INITIAL_SCREENING WHERE CHILD_ID = ?', [idValue]);
+    await _db.execute('DELETE FROM CHILD_REFERRAL WHERE CHILD_ID = ?', [idValue]);
     return _db.execute('DELETE FROM CHILD_INFO WHERE ID = ? AND HOSP_ID = ?', [idValue, scope]);
   }
 

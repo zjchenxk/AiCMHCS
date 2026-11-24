@@ -71,6 +71,28 @@ CREATE TABLE SCALE_WSCMBD (
 )''');
     await db.executeDirect('CREATE TABLE CHILD_INFO (ID TEXT PRIMARY KEY NOT NULL, HOSP_ID TEXT NOT NULL)');
     await db.executeDirect('''
+CREATE TABLE CHILD_REFERRAL (
+  ID TEXT PRIMARY KEY NOT NULL,
+  CHILD_ID TEXT NOT NULL,
+  REFERRAL_DATE TEXT NOT NULL,
+  REFERRAL_TYPE INTEGER NOT NULL,
+  REFERRAL_REASON TEXT NOT NULL,
+  REFERRAL_HOSP_NAME TEXT NOT NULL,
+  REFERRAL_DEPT_NAME TEXT,
+  CONSULTATION_DATE TEXT,
+  CONSULTATION_DESC TEXT,
+  CREATOR_ID TEXT NOT NULL,
+  CREATOR_NAME TEXT NOT NULL,
+  DEPT_ID TEXT,
+  DEPT_NAME TEXT,
+  CAMPUS_ID TEXT,
+  CAMPUS_NAME TEXT,
+  HOSP_ID TEXT NOT NULL,
+  HOSP_NAME TEXT NOT NULL,
+  CREATE_TIME TEXT NOT NULL,
+  UPDATE_TIME TEXT
+)''');
+    await db.executeDirect('''
 CREATE TABLE SYS_USER (
   ID TEXT PRIMARY KEY NOT NULL,
   USER_CODE TEXT,
@@ -317,6 +339,78 @@ CREATE TABLE SYS_USER (
     expect(m8, hasLength(1));
     expect(m8.single.itemName, '不会独坐');
     expect(await service.wscmbdItems(72), isEmpty);
+  });
+
+  test('save：有转诊自动写 CHILD_REFERRAL（TYPE=1、原因默认、同儿童同日同键更新）', () async {
+    final saved = await saveDraft(
+      draft(hasReferral: '1', referralHospName: '市儿童医院', referralDeptName: '儿童康复科'),
+    );
+    final rows = await db.query(
+      'SELECT ID, CHILD_ID, REFERRAL_DATE, REFERRAL_TYPE, REFERRAL_REASON, '
+      'REFERRAL_HOSP_NAME, REFERRAL_DEPT_NAME, CREATOR_ID, DEPT_ID, HOSP_ID, UPDATE_TIME '
+      'FROM CHILD_REFERRAL',
+    );
+    expect(rows.rowsAsMaps, hasLength(1));
+    final row = rows.rowsAsMaps.single;
+    expect(row['CHILD_ID'], child1Id);
+    expect(row['REFERRAL_DATE'], '2026-11-23');
+    expect(row['REFERRAL_TYPE'], '1');
+    expect(row['REFERRAL_REASON'], InitialScreeningService.initialReferralReason);
+    expect(row['REFERRAL_HOSP_NAME'], '市儿童医院');
+    expect(row['REFERRAL_DEPT_NAME'], '儿童康复科');
+    expect(row['CREATOR_ID'], operator1Id);
+    expect(row['DEPT_ID'], dept1Id);
+    expect(row['HOSP_ID'], hosp1Id);
+    expect(row['UPDATE_TIME'], isNull);
+
+    // 同儿童同日再保存（同键覆盖）→ 更新同一条而非新增
+    await saveDraft(
+      draft(hasReferral: '1', referralHospName: '省儿童医院'),
+    );
+    final after = await db.query('SELECT ID, REFERRAL_HOSP_NAME, REFERRAL_DEPT_NAME, UPDATE_TIME FROM CHILD_REFERRAL');
+    expect(after.rowsAsMaps, hasLength(1));
+    expect(after.rowsAsMaps.single['ID'], row['ID']);
+    expect(after.rowsAsMaps.single['REFERRAL_HOSP_NAME'], '省儿童医院');
+    expect(after.rowsAsMaps.single['REFERRAL_DEPT_NAME'], isNull);
+    expect(after.rowsAsMaps.single['UPDATE_TIME'], isNotNull);
+
+    // 改判检查日期 → 生成新一天的转诊（旧日期记录保留）
+    const moved = InitialScreening(
+      childId: child1Id,
+      checkDate: '2026-11-24',
+      ageYear: 1,
+      ageMonth: 0,
+      ageDay: 6,
+      checkMonth: 12,
+      warningSignResult: '未见异常',
+      languageSocialCommunicationResult: '未见异常',
+      checkResult: '异常',
+      hasReferral: '1',
+      referralHospName: '市儿童医院',
+      doctorId: doctor1Id,
+      doctorName: '王心怡',
+      creatorId: operator1Id,
+      creatorName: '测试员',
+      hospId: hosp1Id,
+      hospName: '示例人民医院',
+    );
+    await service.save(record: moved, operatorId: operator1Id, operatorName: '测试员', hospId: hosp1Id, hospName: '示例人民医院', deptId: dept1Id, deptName: '儿童保健科');
+    final both = await db.query('SELECT REFERRAL_DATE FROM CHILD_REFERRAL ORDER BY REFERRAL_DATE');
+    expect(both.rowsAsMaps.map((r) => r['REFERRAL_DATE']).toList(), ['2026-11-23', '2026-11-24']);
+    expect(saved.id, isNotNull);
+  });
+
+  test('save：无转诊不写 CHILD_REFERRAL；改判无转诊保留已生成记录', () async {
+    await saveDraft(
+      draft(hasReferral: '1', referralHospName: '市儿童医院'),
+    );
+    expect((await db.query('SELECT ID FROM CHILD_REFERRAL')).rows, hasLength(1));
+    // 改回无转诊：转诊记录不回溯删除
+    await saveDraft(draft());
+    expect((await db.query('SELECT ID FROM CHILD_REFERRAL')).rows, hasLength(1));
+    // 纯无转诊保存：不产生转诊记录
+    await saveDraft(draft(checkMonth: 24));
+    expect((await db.query('SELECT ID FROM CHILD_REFERRAL')).rows, hasLength(1));
   });
 
   test('listDoctors：同科室启用医生，排除其他科室/类别/停用；科室为空返回空', () async {

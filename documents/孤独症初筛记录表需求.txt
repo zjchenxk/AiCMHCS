@@ -154,3 +154,138 @@
       
       12. 点击【打印】按钮，弹出菜单，菜单包含【打印初筛记录表】和【打印转诊单】2个菜单项，具体打印功能改天再继续。
       
+      
+      
+      
+      
+      
+孤独症初筛记录表修改需求：
+
+1. 在打开初筛记录表界面后，根据当前儿童出生日期与当前日期计算实足年龄，并根据实足年龄自动切换到对应的TAB页面。测试发现，选择儿童后，首次是可以自动切换到对应的TAB页面。但是，当点击【儿童建档】菜单后，打开儿童建档浏览页面，然后再点击【初筛记录表】菜单后，并没有自动切换到对应月龄TAB页面，而是切换到了第一个TAB页面。
+
+2. 在打开初筛记录表界面后，根据当前儿童出生日期与当前日期计算实足年龄，并根据实足年龄将对应TAB页面标签用【红字】醒目显示。
+
+3. 将标题栏中的【打印】按钮，移到每个TAB页面中。
+
+4. 目前【新增】、【修改】按钮的操作模式，与儿童建档不一致。在儿童建档界面，当处于新增状态时，新增按钮灰化，同时在【保存】按钮后显示一个【取消】按钮，点击取消按钮，撤消新增操作；当处于修改状态时，修改按钮灰化，同时在【保存】按钮后显示一个【取消】按钮，点击取消按钮，撤消修改操作。请修改孤独症初筛记录表的操作模式，与儿童建档一致。
+
+5. 取消初筛信息新增/修改界面上每个输入框和下拉选择框上方的标签，与儿童建档界面保持一致。
+
+6. 参照《国家卫生健康委办公厅关于印发0～6岁儿童孤独症筛查干预服务规范（试行）的通知》附件2的表2~4，修改初筛信息新增/修改界面布局，每行显示3个组件，布局如下：
+
+   ----------        ----------         ---------
+   | 检查日期 |       | 实足年龄 |        | 纠正年龄 |
+   ----------        ----------         ---------
+   
+   -----------------------------------------------
+   | 预警征象筛查                                  |
+   -----------------------------------------------
+   
+   -----------------------------------------------
+   | 语言功能与社会交往能力询问                      |
+   -----------------------------------------------
+
+   -----------------------------------------------
+   | 初筛结果                                     |
+   -----------------------------------------------
+
+   ----------        ----------         ---------
+   | 有无转诊 |       | 转诊医院 |        | 转诊科室 |
+   ----------        ----------         ---------
+
+   ----------        ----------         ---------
+   | 检查医生 |       | 操作人员 |        | 检查医院 |
+   ----------        ----------         ---------
+
+   注意：上述界面布局中，【操作人员】显示当前登录用户姓名，【检查医院】显示当前登录用户所属医院名称。
+   
+7. 取消现有界面上的【转诊说明】及文字。
+
+8. 我建立了一个儿童转诊记录表，表名为CHILD_REFERRAL，达梦数据库建表语句如下：
+
+	CREATE TABLE CHILD_REFERRAL(
+		ID CHAR(36) NOT NULL,
+		CHILD_ID CHAR(36) NOT NULL,
+		REFERRAL_DATE DATE NOT NULL,
+		REFERRAL_TYPE TINYINT NOT NULL,
+		REFERRAL_REASON VARCHAR(200) NOT NULL,
+		REFERRAL_HOSP_NAME VARCHAR(100) NOT NULL,
+		REFERRAL_DEPT_NAME VARCHAR(50),
+		CONSULTATION_DATE DATE,
+		CONSULTATION_DESC VARCHAR(2000),
+		CREATOR_ID CHAR(36) NOT NULL,
+		CREATOR_NAME VARCHAR(30) NOT NULL,
+		DEPT_ID CHAR(36),
+		DEPT_NAME VARCHAR(50),
+		CAMPUS_ID CHAR(36),
+		CAMPUS_NAME VARCHAR(50),
+		HOSP_ID CHAR(36) NOT NULL,
+		HOSP_NAME VARCHAR(100) NOT NULL,
+		CREATE_TIME TIMESTAMP NOT NULL,
+		UPDATE_TIME TIMESTAMP,
+		PRIMARY KEY (ID)
+	);
+	COMMENT ON TABLE CHILD_REFERRAL IS '儿童转诊表';
+	COMMENT ON COLUMN CHILD_REFERRAL.ID IS '主键（UUID v7）';
+	COMMENT ON COLUMN CHILD_REFERRAL.CHILD_ID IS '儿童ID（UUID v7）';
+	COMMENT ON COLUMN CHILD_REFERRAL.REFERRAL_DATE IS '转诊日期';
+	COMMENT ON COLUMN CHILD_REFERRAL.REFERRAL_TYPE IS '转诊类别（1-初筛转诊，2-复筛转诊，3-诊断转诊，4-干预康复转诊）';
+	COMMENT ON COLUMN CHILD_REFERRAL.REFERRAL_REASON IS '转诊原因';
+	COMMENT ON COLUMN CHILD_REFERRAL.REFERRAL_HOSP_NAME IS '转诊医院名称';
+	COMMENT ON COLUMN CHILD_REFERRAL.REFERRAL_DEPT_NAME IS '转诊科室名称';
+	COMMENT ON COLUMN CHILD_REFERRAL.CONSULTATION_DATE IS '接诊日期';
+	COMMENT ON COLUMN CHILD_REFERRAL.CONSULTATION_DESC IS '接诊情况';
+	COMMENT ON COLUMN CHILD_REFERRAL.CREATOR_ID IS '创建人ID（UUID v7）';
+	COMMENT ON COLUMN CHILD_REFERRAL.CREATOR_NAME IS '创建人姓名';
+	COMMENT ON COLUMN CHILD_REFERRAL.DEPT_ID IS '科室ID（UUID v7）';
+	COMMENT ON COLUMN CHILD_REFERRAL.DEPT_NAME IS '科室名称';
+	COMMENT ON COLUMN CHILD_REFERRAL.CAMPUS_ID IS '院区ID（UUID v7）';
+	COMMENT ON COLUMN CHILD_REFERRAL.CAMPUS_NAME IS '院区名称';
+	COMMENT ON COLUMN CHILD_REFERRAL.HOSP_ID IS '医院ID（UUID v7）';
+	COMMENT ON COLUMN CHILD_REFERRAL.HOSP_NAME IS '医院名称';
+	COMMENT ON COLUMN CHILD_REFERRAL.CREATE_TIME IS '创建时间';
+	COMMENT ON COLUMN CHILD_REFERRAL.UPDATE_TIME IS '更新时间';
+
+   要求：
+   
+   1. 在保存初筛记录时，如果存在转诊，则自动向表CHILD_REFERRAL中插入一条数据。如果表CHILD_REFERRAL中存在REFERRAL_TYPE=1且REFERRAL_DATE=表ASD_INITIAL_SCREENING的CHECK_DATE的记录，则更新此数据。
+   
+   2. 字段【转诊类别】默认为【1】。
+   
+   3. 字段【转诊原因】默认为【孤独症初筛异常】。
+   
+
+   
+孤独症初筛记录表第二轮修改需求：
+
+1. 取消操作按钮前面的月龄标签，操作提示
+
+2. 【打印】按钮样式，与【新增】、【修改】、【保存】和【删除】等按钮样式不一致
+
+3. 布局重新调整，如下所示：
+
+   -------------------------    -------------------------     -------------------------
+   | 检查日期                |   | 实足年龄                |    | 纠正年龄                |
+   -------------------------    -------------------------     -------------------------
+   
+   -------------------------    -------------------------     -------------------------
+   | 预警征象筛查            |    | 语言功能与社会交往能力询问 |    | 初筛结果                |
+   -------------------------    -------------------------     -------------------------
+
+   ------------------------------------------------------------------------------------
+   | 指导建议                                                                       |...|
+   ------------------------------------------------------------------------------------
+
+   -------------------------    -------------------------     -------------------------
+   | 有无转诊               |    | 转诊医院                |    | 转诊科室                |
+   -------------------------    -------------------------     -------------------------
+
+   -------------------------    -------------------------     -------------------------
+   | 下次检查日期            |    | 检查医生                |    | 操作人员                |
+   -------------------------    -------------------------     -------------------------
+
+4. 【预警征象筛查】，改成下拉选择框，【未见异常】选项与预警征象选项互斥，并且预警征象允许多选，类似
+
+5. 【语言功能与社会交往能力询问】，改成下拉选择框，【未见异常】选项与【语言功能障碍或倒退】、【社会交往能力障碍或倒退】选项互斥，并且【语言功能障碍或倒退】和【社会交往能力障碍或倒退】选项允许多选
+
+6. 
