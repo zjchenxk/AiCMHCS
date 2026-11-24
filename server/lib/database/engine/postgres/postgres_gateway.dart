@@ -30,11 +30,22 @@ class PostgresGateway extends WorkerGateway {
 
   /// 启动（或复用）网关。dart_frog dev 热重载会重新执行 main 入口，
   /// 缓存保证不会泄漏出多个工作隔离区。
-  static Future<PostgresGateway> start({required String host, required int port, required String database, required String user, required String password}) async {
+  ///
+  /// ssl 为 true 时库连接要求 TLS（SslMode.require）；默认 false——
+  /// 信创内网直连场景库侧通常不提供 SSL，且业务报文已有信封加密承担
+  /// 通信保密性（配置见 AppConfig.dbSsl / 环境变量 AICMHCS_DB_SSL）。
+  static Future<PostgresGateway> start({
+    required String host,
+    required int port,
+    required String database,
+    required String user,
+    required String password,
+    bool ssl = false,
+  }) async {
     if (_cached case final cached? when !cached.isClosed) return cached;
     final gateway = await WorkerGateway.spawn(
       entry: _postgresWorkerMain,
-      boot: {'host': host, 'port': port, 'database': database, 'user': user, 'password': password},
+      boot: {'host': host, 'port': port, 'database': database, 'user': user, 'password': password, 'ssl': ssl},
       build: PostgresGateway._,
     );
     return _cached = gateway;
@@ -129,8 +140,13 @@ Future<Connection> _connect(Map<Object?, Object?> boot) => Connection.open(
     password: boot['password']! as String,
   ),
   // 与网关层的 30 秒操作超时（WorkerGateway.invoke）对齐，避免底层
-  // 查询久挂占住串行工作区。
-  settings: const ConnectionSettings(connectTimeout: Duration(seconds: 10), queryTimeout: Duration(seconds: 30)),
+  // 查询久挂占住串行工作区。SSL 默认关闭（信创内网直连场景库侧通常
+  // 不提供 SSL，业务报文已有信封加密），可经 boot['ssl'] 打开。
+  settings: ConnectionSettings(
+    connectTimeout: const Duration(seconds: 10),
+    queryTimeout: const Duration(seconds: 30),
+    sslMode: boot['ssl'] == true ? SslMode.require : SslMode.disable,
+  ),
 );
 
 class _ConnRef {

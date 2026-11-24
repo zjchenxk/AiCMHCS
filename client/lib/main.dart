@@ -12,6 +12,7 @@ import 'package:client/services/department_service.dart';
 import 'package:client/services/dict_service.dart';
 import 'package:client/services/high_risk_factor_exclusion_service.dart';
 import 'package:client/services/high_risk_factor_service.dart';
+import 'package:client/services/holiday_service.dart';
 import 'package:client/services/hospital_service.dart';
 import 'package:client/services/initial_screening_service.dart';
 import 'package:client/services/log_service.dart';
@@ -32,6 +33,7 @@ import 'package:client/view_models/system/department_management_view_model.dart'
 import 'package:client/view_models/system/dict_management_view_model.dart';
 import 'package:client/view_models/system/high_risk_factor_exclusion_management_view_model.dart';
 import 'package:client/view_models/system/high_risk_factor_management_view_model.dart';
+import 'package:client/view_models/system/holiday_management_view_model.dart';
 import 'package:client/view_models/system/hospital_management_view_model.dart';
 import 'package:client/view_models/system/menu_management_view_model.dart';
 import 'package:client/view_models/system/role_management_view_model.dart';
@@ -68,6 +70,7 @@ void setupServiceLocator() {
   getIt.registerLazySingleton<DictService>(() => DictService());
   getIt.registerLazySingleton<HighRiskFactorService>(() => HighRiskFactorService());
   getIt.registerLazySingleton<HighRiskFactorExclusionService>(() => HighRiskFactorExclusionService());
+  getIt.registerLazySingleton<HolidayService>(() => HolidayService());
   getIt.registerLazySingleton<ChildService>(() => ChildService());
   getIt.registerLazySingleton<InitialScreeningService>(() => InitialScreeningService());
   getIt.registerLazySingleton<MenuService>(() => MenuService());
@@ -121,6 +124,7 @@ void main() async {
         ChangeNotifierProvider(create: (context) => DictManagementViewModel()),
         ChangeNotifierProvider(create: (context) => HighRiskFactorManagementViewModel()),
         ChangeNotifierProvider(create: (context) => HighRiskFactorExclusionManagementViewModel()),
+        ChangeNotifierProvider(create: (context) => HolidayManagementViewModel()),
         ChangeNotifierProvider(create: (context) => MenuManagementViewModel()),
         ChangeNotifierProvider(create: (context) => RoleManagementViewModel()),
         ChangeNotifierProvider(create: (context) => UserManagementViewModel()),

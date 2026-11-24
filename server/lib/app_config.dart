@@ -13,6 +13,7 @@ final class AppConfig {
     this.dmHome,
     this.fieldMasterKey,
     this.fieldKeyFile = 'data/aicmhcs.field.key',
+    this.dbSsl = 'disable',
   });
 
   /// 数据库驱动：`dm`（达梦，网络版默认）/ `sqlite`（单机版）/
@@ -29,6 +30,11 @@ final class AppConfig {
 
   /// PostgreSQL 数据库名（仅 dbDriver=postgres 时使用）。
   final String dbName;
+
+  /// PostgreSQL 连接 SSL 模式（仅 dbDriver=postgres 时使用）：
+  /// `disable`（默认，内网直连——业务报文已有信封加密承担通信保密性）/
+  /// `require`（要求库连接走 SSL，由前端负载均衡或库侧提供 TLS）。
+  final String dbSsl;
 
   /// 达梦安装目录（用于定位 dmdpi.dll 及其依赖），空表示交给加载器推断。
   final String? dmHome;
@@ -63,6 +69,7 @@ final class AppConfig {
       dbPassword: Platform.environment['AICMHCS_DB_PASSWORD'] ?? 'Aicmhcs@2026',
       dbFile: Platform.environment['AICMHCS_DB_FILE'] ?? 'data/aicmhcs.db',
       dbName: Platform.environment['AICMHCS_DB_NAME'] ?? 'aicmhcs',
+      dbSsl: Platform.environment['AICMHCS_DB_SSL'] ?? 'disable',
       dmHome: Platform.environment['DM_HOME'],
       fieldMasterKey: Platform.environment['AICMHCS_FIELD_MASTER_KEY'],
       fieldKeyFile: Platform.environment['AICMHCS_FIELD_KEY_FILE'] ?? 'data/aicmhcs.field.key',

@@ -14,6 +14,7 @@ import 'package:server/services/department_service.dart';
 import 'package:server/services/dict_service.dart';
 import 'package:server/services/high_risk_factor_exclusion_service.dart';
 import 'package:server/services/high_risk_factor_service.dart';
+import 'package:server/services/holiday_service.dart';
 import 'package:server/services/hospital_service.dart';
 import 'package:server/services/initial_screening_service.dart';
 import 'package:server/services/menu_service.dart';
@@ -46,6 +47,7 @@ Future<HttpServer> run(Handler handler, InternetAddress ip, int port) async {
   final dicts = DictService(db);
   final highRiskFactors = HighRiskFactorService(db);
   final highRiskFactorExclusions = HighRiskFactorExclusionService(db);
+  final holidays = HolidayService(db);
   final children = ChildService(db, cipher);
   final initialScreenings = InitialScreeningService(db);
   final menus = MenuService(db);
@@ -67,6 +69,7 @@ Future<HttpServer> run(Handler handler, InternetAddress ip, int port) async {
       .use(provider<DictService>((_) => dicts))
       .use(provider<HighRiskFactorService>((_) => highRiskFactors))
       .use(provider<HighRiskFactorExclusionService>((_) => highRiskFactorExclusions))
+      .use(provider<HolidayService>((_) => holidays))
       .use(provider<ChildService>((_) => children))
       .use(provider<InitialScreeningService>((_) => initialScreenings))
       .use(provider<MenuService>((_) => menus))

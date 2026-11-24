@@ -439,18 +439,19 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
     // 模式/目标档案变化时换新表单键（须在用键构建表单前执行）
     _ensureFormKeys(vm);
 
-    return Padding(
-      padding: const EdgeInsets.all(16),
+    // 与照片管理/初筛记录表页同款骨架：Card 容器 + 60px 标题栏（标题、
+    // 当前儿童摘要与操作按钮）+ TabBar/表单内容区
+    return Card(
+      color: theme.colorScheme.surfaceContainer,
+      margin: const EdgeInsets.all(8),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildButtonBar(theme, vm, editing),
-          //const SizedBox(height: 12),
+          _buildTitleBar(theme, vm, editing),
           Expanded(
             child: vm.loading
                 ? const Center(child: CircularProgressIndicator())
                 : Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -507,10 +508,11 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
     );
   }
 
-  /// 按钮栏：新增/修改/保存/删除四个按钮常驻，按操作权限与当前模式
-  /// 灰化（onPressed 置 null 即禁用），Tooltip 说明禁用原因——无权限
-  /// 时灰化而非隐藏，便于用户感知功能存在与授权缺口。
-  Widget _buildButtonBar(ThemeData theme, ChildCreateViewModel vm, bool editing) {
+  /// 标题栏（与照片管理/初筛记录表页同款）：图标 + 页面标题 + 当前儿童
+  /// 摘要/模式提示 + 新增/修改/取消/保存/删除按钮。按钮按操作权限与
+  /// 当前模式灰化（onPressed 置 null 即禁用），Tooltip 说明禁用原因——
+  /// 无权限时灰化而非隐藏，便于用户感知功能存在与授权缺口。
+  Widget _buildTitleBar(ThemeData theme, ChildCreateViewModel vm, bool editing) {
     final createReady = vm.canCreate && !editing; // 录入态中不可再点新增
     final updateReady = vm.canUpdate && vm.browsing; // 浏览态（已载入档案）才可进入修改
     final saveReady = vm.canSave && (vm.creating || vm.editing); // 保存独立授权，录入态才有效
@@ -523,13 +525,38 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
       saveTip = '请先新增或载入儿童档案';
     }
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 8,
-        crossAxisAlignment: WrapCrossAlignment.center,
+    final child = vm.child;
+    final summary = switch (vm.mode) {
+      ChildFormMode.empty => '未选定儿童——请先在主界面顶部搜索选定，或点击【新增】建档',
+      ChildFormMode.browse => '${child!.name}　${_sexLabel(child.sex)}　出生日期 ${child.birthDate}',
+      ChildFormMode.create => '新增建档中——录入完成请点击【保存】',
+      ChildFormMode.edit => '修改中：${child!.name}',
+    };
+
+    return Container(
+      height: 60,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primaryContainer,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+      ),
+      child: Row(
         children: [
+          Icon(Icons.child_care_outlined, size: 20, color: theme.colorScheme.onPrimaryContainer),
+          const SizedBox(width: 8),
+          Text(
+            '儿童建档',
+            style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.onPrimaryContainer),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              summary,
+              style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 12),
           Tooltip(
             message: vm.canCreate ? '新增儿童档案' : '无新增操作权限',
             child: OutlinedButton.icon(
@@ -538,6 +565,7 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
               label: const Text('新增'),
             ),
           ),
+          const SizedBox(width: 8),
           Tooltip(
             message: !vm.canUpdate ? '无修改操作权限' : (vm.browsing ? '修改当前儿童档案' : '请先新增或载入儿童档案'),
             child: OutlinedButton.icon(
@@ -546,6 +574,7 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
               label: const Text('修改'),
             ),
           ),
+          const SizedBox(width: 8),
           Tooltip(
             message: saveTip,
             child: FilledButton.icon(
@@ -554,12 +583,15 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
               label: const Text('保 存'),
             ),
           ),
-          if (editing)
+          if (editing) ...[
+            const SizedBox(width: 8),
             OutlinedButton.icon(
               onPressed: vm.busy ? null : _cancelEdit,
               icon: const Icon(Icons.cancel_outlined, size: 18),
               label: const Text('取消'),
             ),
+          ],
+          const SizedBox(width: 8),
           Tooltip(
             message: !vm.canDelete ? '无删除操作权限' : (vm.browsing ? '删除当前儿童档案' : '请先新增或载入儿童档案'),
             child: OutlinedButton.icon(
@@ -568,13 +600,11 @@ class _ChildCreatePageState extends State<ChildCreatePage> with SingleTickerProv
               label: Text('删除', style: TextStyle(color: theme.colorScheme.error)),
             ),
           ),
-          if (!editing && vm.child != null)
-            Text(
-              '浏览模式：${vm.child!.name}（点击【修改】编辑，【新增】建档）',
-              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
-            ),
         ],
       ),
     );
   }
+
+  /// 性别码值转显示（1-男，2-女，其余空）。
+  String _sexLabel(String? sex) => sex == '1' ? '男' : (sex == '2' ? '女' : '');
 }

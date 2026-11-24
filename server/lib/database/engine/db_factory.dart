@@ -27,6 +27,7 @@ Future<DatabaseGateway> openDatabaseGateway(AppConfig config) async {
         database: config.dbName,
         user: config.dbUser,
         password: config.dbPassword,
+        ssl: config.dbSsl == 'require',
       );
     default:
       throw FormatException(
