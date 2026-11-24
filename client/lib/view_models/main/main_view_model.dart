@@ -426,8 +426,10 @@ class MainViewModel extends ChangeNotifier {
   /// 切换「角色-科室」授权组合：调后端校验目标组合归属并更新会话身份
   /// 上下文，成功后以响应下发的用户信息（角色/科室/院区/医院）与角色
   /// 权限菜单刷新全局登录用户与侧边栏（菜单集整体更换，选中/展开/搜索
-  /// 态由 setRoleMenus 清空）；当前儿童与右侧信息侧边栏一并清空——
-  /// 儿童归属旧授权组合的科室/医院，切组合（尤其跨院）后沿用必失配。
+  /// 态由 setRoleMenus 清空，随后与登录同口径默认打开首页——新角色未
+  /// 授权首页菜单时维持「请从左侧选择功能菜单」占位）；当前儿童与右侧
+  /// 信息侧边栏一并清空——儿童归属旧授权组合的科室/医院，切组合
+  /// （尤其跨院）后沿用必失配。
   ///param roleId: 目标角色 ID
   ///param deptId: 目标角色适用科室 ID（空/缺省表示存量未指定科室的哨兵组合）
   ///returns: 是否切换成功（失败时 errorMsg 带提示，原会话与菜单不变）
@@ -455,8 +457,12 @@ class MainViewModel extends ChangeNotifier {
       _childSidebarData = null;
       _childSidebarLoading = false;
 
-      // 以新角色下发的菜单重建侧边栏
+      // 以新角色下发的菜单重建侧边栏，随后与登录同口径默认打开首页：
+      // 身份上下文（医院/院区/科室/角色）整体变化后回落 Dashboard，
+      // 避免内容区停在「请从左侧选择功能菜单」空占位；新角色未授权
+      // 首页菜单时 openDefaultMenu 不动，维持占位
       setRoleMenus(result.menus);
+      openDefaultMenu();
 
       return true;
     } catch (e, st) {

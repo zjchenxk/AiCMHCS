@@ -1,6 +1,7 @@
 // 主界面切换角色接线测试：MainViewModel.switchRole 调后端切换会话角色 →
 // 全局 loginUser 更新为新角色身份并同步工作副本 → 侧边栏菜单按新角色
-// 下发的权限菜单重建（选中/展开/搜索态清空），当前儿童上下文与右侧信息
+// 下发的权限菜单重建（选中/展开/搜索态清空，随后与登录同口径默认打开
+// 首页；新角色未授权首页菜单时维持占位），当前儿童上下文与右侧信息
 // 侧边栏一并清空；失败时会话与菜单保持原状。
 import 'package:client/main.dart';
 import 'package:client/services/account_service.dart';
@@ -11,6 +12,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// 返回固定切换结果（系统管理员 × 护理部）的伪账户服务。
 class FakeAccountService extends AccountService {
+  /// 是否随切换结果下发首页菜单（默认不下发，验证维持占位）。
+  final bool includeHomeMenu;
+
+  FakeAccountService({this.includeHomeMenu = false});
+
   /// 切换时捕获的科室 ID（断言「角色-科室」组合一并提交）。
   String? capturedDeptId;
 
@@ -33,6 +39,28 @@ class FakeAccountService extends AccountService {
         deptName: '护理部',
       ),
       menus: [
+        if (includeHomeMenu)
+          const Menu(
+            id: '11',
+            parentId: null,
+            itemCode: 'GEN01',
+            itemName: '通用',
+            itemType: '1',
+            menuRoute: null,
+            menuIcon: 'apps',
+            visible: '1',
+          ),
+        if (includeHomeMenu)
+          const Menu(
+            id: '12',
+            parentId: '11',
+            itemCode: 'GEN0101',
+            itemName: '首页',
+            itemType: '2',
+            menuRoute: '/home',
+            menuIcon: 'home',
+            visible: '1',
+          ),
         const Menu(
           id: '9',
           parentId: null,
@@ -150,9 +178,28 @@ void main() {
     expect(vm.menus.first.title, '业务管理');
     expect(vm.menus.first.children.single.title, '儿童档案');
     expect(vm.menus.first.children.single.route, '/business/child');
-    // 选中/展开/搜索态已随菜单集更换清空
+    // 选中/展开/搜索态已随菜单集更换清空；新角色未授权首页菜单
+    // （Fake 默认不下发）时维持「请从左侧选择功能菜单」占位
     expect(vm.selectedMenuId, isNull);
     expect(vm.breadcrumbs, isEmpty);
+  });
+
+  test('切换成功且新角色授权首页菜单：与登录同口径默认打开首页', () async {
+    loginUser = loginAsRole2();
+    final vm = MainViewModel(accountService: FakeAccountService(includeHomeMenu: true));
+    vm.syncLoginUser();
+    vm.setRoleMenus(_oldRoleMenus());
+
+    final ok = await vm.switchRole('6', deptId: '9');
+
+    expect(ok, isTrue);
+    // 选中态指向新角色菜单树中的首页菜单（递归查找命中叶子）
+    final selected = vm.findMenuById(vm.selectedMenuId);
+    expect(selected, isNotNull);
+    expect(selected!.route, '/home');
+    expect(selected.title, '首页');
+    // 面包屑为「模块名 + 菜单名」，与侧边栏点击同口径
+    expect(vm.breadcrumbs, ['通用', '首页']);
   });
 
   test('切换失败：返回 false、errorMsg 带提示，会话身份与菜单保持原状', () async {
