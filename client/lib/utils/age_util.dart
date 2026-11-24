@@ -31,7 +31,7 @@ class AgeUtil {
   ///returns: 岁/月/天年龄文本
   static String formatAgeYmd(DateTime birth, DateTime now) {
     if (birth.millisecondsSinceEpoch <= 0 || now.isBefore(birth)) return '';
-    final parts = _ageParts(birth, now);
+    final parts = ageParts(birth, now);
     if (parts.years == 0 && parts.months == 0 && parts.days == 0) return '0天';
     return [
       if (parts.years > 0) '${parts.years}岁',
@@ -59,6 +59,34 @@ class AgeUtil {
     String? gestationalWeek,
     String? gestationalDay,
   }) {
+    final anchor = _correctedAnchor(birthDate: birthDate, now: now, gestationalWeek: gestationalWeek, gestationalDay: gestationalDay);
+    if (anchor == null) return null;
+    return formatAgeYmd(anchor, now);
+  }
+
+  /// 早产儿矫正年龄拆分为完整的年/月/天数值（条件同 [formatCorrectedAge]；
+  /// 不满足时返回 null）。供需要三段数值的场景（如初筛记录的
+  /// CORRECTED_AGE_YEAR/MONTH/DAY 列）与格式化文本共用同一口径。
+  ///returns: (years, months, days) 三段数值；不满足矫正条件时为 null
+  static ({int years, int months, int days})? correctedAgeParts({
+    required DateTime birthDate,
+    required DateTime now,
+    String? gestationalWeek,
+    String? gestationalDay,
+  }) {
+    final anchor = _correctedAnchor(birthDate: birthDate, now: now, gestationalWeek: gestationalWeek, gestationalDay: gestationalDay);
+    if (anchor == null) return null;
+    return ageParts(anchor, now);
+  }
+
+  /// 矫正年龄锚点：早产儿在矫正窗口内时返回预产期（= 出生日期 + 剩余
+  /// 宫内天数），否则返回 null（条件见 [formatCorrectedAge] 注释）。
+  static DateTime? _correctedAnchor({
+    required DateTime birthDate,
+    required DateTime now,
+    String? gestationalWeek,
+    String? gestationalDay,
+  }) {
     if (birthDate.millisecondsSinceEpoch <= 0) return null;
     final week = int.tryParse(gestationalWeek?.trim() ?? '');
     if (week == null || week < 20 || week >= 37) {
@@ -75,14 +103,19 @@ class AgeUtil {
 
     // 矫正随访窗口：极早产儿可矫正至 3 岁，其余至 2 岁
     final maxMonths = gestationalDays < extremelyPretermDays ? extremelyPretermCorrectedAgeMaxMonths : correctedAgeMaxMonths;
-    final corrected = _ageParts(expectedDeliveryDate, now);
+    final corrected = ageParts(expectedDeliveryDate, now);
     if (corrected.years * 12 + corrected.months >= maxMonths) return null;
 
-    return formatAgeYmd(expectedDeliveryDate, now);
+    return expectedDeliveryDate;
   }
 
-  /// 年龄拆分为完整的年/月/天（月末出生按目标月份天数封顶）。
-  static ({int years, int months, int days}) _ageParts(DateTime birth, DateTime now) {
+  /// 实足年龄拆分为完整的年/月/天数值（月末出生按目标月份天数封顶；
+  /// 出生日期晚于当前时间时各段为 0）。供需要三段数值的场景（如初筛
+  /// 记录的 AGE_YEAR/AGE_MONTH/AGE_DAY 列）与格式化文本共用同一口径。
+  ///param birth: 出生日期
+  ///param now: 业务当前时间（全局时间服务口径）
+  ///returns: (years, months, days) 三段数值
+  static ({int years, int months, int days}) ageParts(DateTime birth, DateTime now) {
     var years = now.year - birth.year;
     var months = now.month - birth.month;
     if (now.day < birth.day) months--;

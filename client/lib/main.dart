@@ -13,12 +13,14 @@ import 'package:client/services/dict_service.dart';
 import 'package:client/services/high_risk_factor_exclusion_service.dart';
 import 'package:client/services/high_risk_factor_service.dart';
 import 'package:client/services/hospital_service.dart';
+import 'package:client/services/initial_screening_service.dart';
 import 'package:client/services/log_service.dart';
 import 'package:client/services/menu_service.dart';
 import 'package:client/services/role_service.dart';
 import 'package:client/services/time_service.dart';
 import 'package:client/services/user_service.dart';
 import 'package:client/utils/log_helper.dart';
+import 'package:client/view_models/asd/initial_screening_view_model.dart';
 import 'package:client/view_models/child/child_create_view_model.dart';
 import 'package:client/view_models/child/photo_management_view_model.dart';
 import 'package:client/view_models/home/home_view_model.dart';
@@ -67,6 +69,7 @@ void setupServiceLocator() {
   getIt.registerLazySingleton<HighRiskFactorService>(() => HighRiskFactorService());
   getIt.registerLazySingleton<HighRiskFactorExclusionService>(() => HighRiskFactorExclusionService());
   getIt.registerLazySingleton<ChildService>(() => ChildService());
+  getIt.registerLazySingleton<InitialScreeningService>(() => InitialScreeningService());
   getIt.registerLazySingleton<MenuService>(() => MenuService());
   getIt.registerLazySingleton<RoleService>(() => RoleService());
   getIt.registerLazySingleton<UserService>(() => UserService());
@@ -123,6 +126,7 @@ void main() async {
         ChangeNotifierProvider(create: (context) => UserManagementViewModel()),
         ChangeNotifierProvider(create: (context) => AdminDivisionManagementViewModel()),
         ChangeNotifierProvider(create: (context) => ChildCreateViewModel()),
+        ChangeNotifierProvider(create: (context) => InitialScreeningViewModel()),
         ChangeNotifierProvider(create: (context) => PhotoManagementViewModel()),
       ],
       child: const MyApp(),

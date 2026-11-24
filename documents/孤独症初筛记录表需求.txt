@@ -1,0 +1,156 @@
+0～6岁儿童孤独症初筛记录表需求如下：
+
+1. 菜单名称【初筛记录表】，路由【/asd/initialScreening】
+
+2. 初筛涉及2张数据库表：
+
+   1. 初筛记录表，数据库表名为【ASD_INITIAL_SCREENING】，达梦建表语句如下：
+
+	CREATE TABLE ASD_INITIAL_SCREENING(
+		ID CHAR(36) NOT NULL,
+		CHILD_ID CHAR(36) NOT NULL,
+		CHECK_DATE DATE NOT NULL,
+		AGE_YEAR TINYINT NOT NULL,
+		AGE_MONTH TINYINT NOT NULL,
+		AGE_DAY TINYINT NOT NULL,
+		CORRECTED_AGE_YEAR TINYINT,
+		CORRECTED_AGE_MONTH TINYINT,
+		CORRECTED_AGE_DAY TINYINT,
+		CHECK_MONTH TINYINT NOT NULL,
+		WARNING_SIGN_RESULT VARCHAR(200) NOT NULL,
+		LANGUAGE_SOCIAL_COMMUNICATION_RESULT VARCHAR(100) NOT NULL,
+		CHECK_RESULT VARCHAR(20) NOT NULL,
+		HAS_REFERRAL CHAR(1) NOT NULL,
+		REFERRAL_HOSP_ID CHAR(36),
+		REFERRAL_HOSP_NAME VARCHAR(100) NOT NULL,
+		REFERRAL_DEPT_ID CHAR(36),
+		REFERRAL_DEPT_NAME VARCHAR(50),
+		DOCTOR_ID CHAR(36) NOT NULL,
+		DOCTOR_NAME VARCHAR(30) NOT NULL,
+		CREATOR_ID CHAR(36) NOT NULL,
+		CREATOR_NAME VARCHAR(30) NOT NULL,
+		DEPT_ID CHAR(36),
+		DEPT_NAME VARCHAR(50),
+		CAMPUS_ID CHAR(36),
+		CAMPUS_NAME VARCHAR(50),
+		HOSP_ID CHAR(36) NOT NULL,
+		HOSP_NAME VARCHAR(100) NOT NULL,
+		CREATE_TIME TIMESTAMP NOT NULL,
+		UPDATE_TIME TIMESTAMP,
+		PRIMARY KEY (ID)
+	);
+	COMMENT ON TABLE ASD_INITIAL_SCREENING IS '孤独症初筛记录表';
+	COMMENT ON COLUMN ASD_INITIAL_SCREENING.ID IS '主键（UUID v7）';
+	COMMENT ON COLUMN ASD_INITIAL_SCREENING.CHILD_ID IS '儿童ID（UUID v7）';
+	COMMENT ON COLUMN ASD_INITIAL_SCREENING.CHECK_DATE IS '检查日期';
+	COMMENT ON COLUMN ASD_INITIAL_SCREENING.AGE_YEAR IS '实足年龄-岁';
+	COMMENT ON COLUMN ASD_INITIAL_SCREENING.AGE_MONTH IS '实足年龄-月';
+	COMMENT ON COLUMN ASD_INITIAL_SCREENING.AGE_DAY IS '实足年龄-天';
+	COMMENT ON COLUMN ASD_INITIAL_SCREENING.CORRECTED_AGE_YEAR IS '纠正年龄-岁';
+	COMMENT ON COLUMN ASD_INITIAL_SCREENING.CORRECTED_AGE_MONTH IS '纠正年龄-月';
+	COMMENT ON COLUMN ASD_INITIAL_SCREENING.CORRECTED_AGE_DAY IS '纠正年龄-天';
+	COMMENT ON COLUMN ASD_INITIAL_SCREENING.CHECK_MONTH IS '检查时段（3-3月龄，6-6月龄，8-8月龄，12-12月龄，18-18月龄，24-24月龄，30-30月龄，36-36月龄，48-4岁，60-5岁，72-6岁）';
+	COMMENT ON COLUMN ASD_INITIAL_SCREENING.WARNING_SIGN_RESULT IS '预警征象筛查结果，如未见异常、对很大声音没有反应等';
+	COMMENT ON COLUMN ASD_INITIAL_SCREENING.LANGUAGE_SOCIAL_COMMUNICATION_RESULT IS '语言功能和社会交往能力询问结果，如未见异常、语言功能障碍或倒退等';
+	COMMENT ON COLUMN ASD_INITIAL_SCREENING.CHECK_RESULT IS '初筛结果，如未见异常、异常';
+	COMMENT ON COLUMN ASD_INITIAL_SCREENING.HAS_REFERRAL IS '有无转诊（0-无/1-有）';
+	COMMENT ON COLUMN ASD_INITIAL_SCREENING.REFERRAL_HOSP_NAME IS '转诊医院名称';
+	COMMENT ON COLUMN ASD_INITIAL_SCREENING.REFERRAL_DEPT_NAME IS '转诊科室名称';
+	COMMENT ON COLUMN ASD_INITIAL_SCREENING.DOCTOR_ID IS '检查医生ID（UUID v7）';
+	COMMENT ON COLUMN ASD_INITIAL_SCREENING.DOCTOR_NAME IS '检查医生姓名';
+	COMMENT ON COLUMN ASD_INITIAL_SCREENING.CREATOR_ID IS '创建人ID（UUID v7）';
+	COMMENT ON COLUMN ASD_INITIAL_SCREENING.CREATOR_NAME IS '创建人姓名';
+	COMMENT ON COLUMN ASD_INITIAL_SCREENING.DEPT_ID IS '科室ID（UUID v7）';
+	COMMENT ON COLUMN ASD_INITIAL_SCREENING.DEPT_NAME IS '科室名称';
+	COMMENT ON COLUMN ASD_INITIAL_SCREENING.CAMPUS_ID IS '院区ID（UUID v7）';
+	COMMENT ON COLUMN ASD_INITIAL_SCREENING.CAMPUS_NAME IS '院区名称';
+	COMMENT ON COLUMN ASD_INITIAL_SCREENING.HOSP_ID IS '医院ID（UUID v7）';
+	COMMENT ON COLUMN ASD_INITIAL_SCREENING.HOSP_NAME IS '医院名称';
+	COMMENT ON COLUMN ASD_INITIAL_SCREENING.CREATE_TIME IS '创建时间';
+	COMMENT ON COLUMN ASD_INITIAL_SCREENING.UPDATE_TIME IS '更新时间';
+
+   2. 儿童心理行为发育问题预警征象筛查表，数据库表名为【SCALE_WSCMBD】，达梦数据库建表语句如下：
+   
+	CREATE TABLE SCALE_WSCMBD(
+		ID BIGINT NOT NULL IDENTITY(1,1),
+		MONTH TINYINT NOT NULL,
+		ITEM_NAME VARCHAR(50) NOT NULL,
+		ITEM_TYPE TINYINT NOT NULL,
+		ITEM_ORDER TINYINT NOT NULL,
+		ITEM_DESC VARCHAR(500),
+		PRIMARY KEY (ID)
+	);
+	COMMENT ON TABLE SCALE_WSCMBD IS '儿童心理行为发育问题预警征象筛查表';
+	COMMENT ON COLUMN SCALE_WSCMBD.ID IS '主键';
+	COMMENT ON COLUMN SCALE_WSCMBD.MONTH IS '月龄';
+	COMMENT ON COLUMN SCALE_WSCMBD.ITEM_NAME IS '条目名称';
+	COMMENT ON COLUMN SCALE_WSCMBD.ITEM_TYPE IS '条目类别（1-语言，2-个人社交，3-精细动作，4-大运动）';
+	COMMENT ON COLUMN SCALE_WSCMBD.ITEM_ORDER IS '条目序号';
+	COMMENT ON COLUMN SCALE_WSCMBD.ITEM_DESC IS '条目描述';
+
+	注意：这张表为基础数据表，无需开发管理界面。
+	
+3. 点击【初筛记录表】菜单，打开初筛记录表界面，该界面由11个TAB页面组成，每个TAB页面分别对应【3月龄】、【6月龄】、【8月龄】、【12月龄】，【18月龄】、【24月龄】、【30月龄】、【36月龄】、【4岁】、【5岁】和【6岁】的孤独症初筛记录，要求：
+
+   1. 如果窄屏，支持水平触控滚动11个TAB标签。
+   
+   2. 在打开初筛记录表界面后，应从数据库表【ASD_INITIAL_SCREENING】中，读取当前儿童的初筛记录，根据字段【CHECK_MONTH】的值，自动在对应的TAB标签右上方显示一个红色圆点（或者其它标志），表示该月龄已做筛查。
+
+   3. 在打开初筛记录表界面后，可以根据当前儿童出生日期与当前日期计算实足年龄，并根据实足年龄自动切换到对应的TAB页面。规则如下：
+   
+      1. 实足年龄>=2个月15天，且<5个月15天，切换到【3月龄】TAB页。
+      
+      2. 实足年龄>=5个月15天，且<7个月15天，切换到【6月龄】TAB页。
+
+      3. 实足年龄>=7个月15天，且<11个月15天，切换到【8月龄】TAB页。
+      
+      4. 实足年龄>=11个月15天，且<17个月，切换到【12月龄】TAB页。
+
+      5. 实足年龄>=17个月，且<23个月，切换到【18月龄】TAB页。
+
+      6. 实足年龄>=23个月，且<29个月，切换到【24月龄】TAB页。
+
+      7. 实足年龄>=29个月，且<35个月，切换到【30月龄】TAB页。
+
+      8. 实足年龄>=35个月，且<47个月，切换到【36月龄】TAB页。
+
+      9. 实足年龄>=47个月，且<59个月，切换到【4岁】TAB页。
+
+      10. 实足年龄>=59个月，且<71个月，切换到【5岁】TAB页。
+
+      11. 实足年龄>=71个月，切换到【6岁】TAB页。
+
+   4. 切换或点击TAB标签后，显示对应月龄的孤独症初筛信息新增、修改和浏览界面。要求：
+   
+      1. 每个TAB页面都支持独立的新增、修改、保存、删除，以及打印等操作。操作权限代码如下：新增权限代码为【0301000001】，修改权限代码为【0301000002】，保存权限代码为【0301000003】，删除权限代码为【0301000004】，打印权限代码为【0301000005】。
+   
+      2. 如果对应月龄已做初筛，应显示并浏览孤独症初筛信息。如果对应月龄未做初筛，则默认进入新增状态。
+   
+      3. 输入【检查日期】后，能够根据当前儿童的出生日期，自动计算并显示实足年龄。如果当前儿童是早产儿，且符合胎龄纠正条件（如普通早产儿纠正到2岁，出生孕周<28则纠正到3岁），可以自动计算并显示纠正年龄。
+      
+      4. 【检查时段】不用在界面显示，默认为当前活动TAB对应的年龄段，如：12月龄，则为12。
+      
+      5. 【预警征象筛查结果】不能为空，选项默认根据当前活动TAB对应的年龄（月龄），从数据库表【SCALE_WSCMBD】中，读取并显示相应的预警征象条目，按字段【ITEM_ORDER】升序排序。再加一个【未见异常】选项，排在首位。要求：
+      
+         1. 预警征象选项支持多选。
+         
+         2. 【未见异常】选项，与预警征象选项互斥。即如果选中【未见异常】，则自动清除预警征象选中项。如果选中任一预警征象，则自动清除【未见异常】选中。
+         
+      6. 【语言功能和社会交往能力询问结果】不能为空，选项包括：【未见异常】、【语言功能障碍或倒退】和【社会交往能力障碍或倒退】3项。要求：
+      
+         1. 【语言功能障碍或倒退】和【社会交往能力障碍或倒退】2项，支持多选。
+         
+         2. 【未见异常】选项，与【语言功能障碍或倒退】和【社会交往能力障碍或倒退】2项互斥。即如果选中【未见异常】，则自动清除【语言功能障碍或倒退】和【社会交往能力障碍或倒退】2项选中。如果选中【语言功能障碍或倒退】和【社会交往能力障碍或倒退】中任一项，则自动清除【未见异常】选中。
+      
+      7. 【初筛结果】不能为空，选项为【未见异常】和【异常】。如果【预警征象筛查结果】为【未见异常】，并且【语言功能和社会交往能力询问结果】为【未见异常】，则初筛结果自动设为【未见异常】。如果存在预警征象，或者存在语言功能障碍或倒退，或者存在社会交往能力障碍或倒退，则初筛结果自动设为【异常】。
+      
+      8. 【有无转诊】下拉选择框，如果选择【无】，则灰化【转诊医院名称】和【转诊科室名称】下拉输入框；如果选择【有】，则激活【转诊医院名称】和【转诊科室名称】下拉输入框。
+      
+      9. 【转诊医院名称】下拉输入框，支持下拉选择和自由输入，选项从数据字典表BASE_DICT和BASE_DICT_ITEM读取，DICT_CODE=0201001，默认存储BASE_DICT_ITEM表的ITEM_VALUE。
+      
+      10. 【转诊科室名称】下拉输入框，支持下拉选择和自由输入，选项从数据字典表BASE_DICT和BASE_DICT_ITEM读取，DICT_CODE=0201002，默认存储BASE_DICT_ITEM表的ITEM_VALUE。
+      
+      11. 【检查医生】下拉选择框，根据当前登录用户所属的科室，从数据库用户表SYS_USER中，读取同科室且USER_TYPE为DOCTOR的用户姓名和用户ID。
+      
+      12. 点击【打印】按钮，弹出菜单，菜单包含【打印初筛记录表】和【打印转诊单】2个菜单项，具体打印功能改天再继续。
+      
