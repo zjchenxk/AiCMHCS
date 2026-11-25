@@ -20,7 +20,9 @@ const operator1Id = 'f0000000-0000-0000-0000-000000000001'; // 医院 1 操作�
 
 /// 孤独症初筛记录服务单元测试（SQLite :memory:）：按儿童装载与医院
 /// 隔离、预警征象条目按序号排序、检查医生候选过滤、新增/修改查重、
-/// 字段校验（时段/日期/结果/转诊/医生）、删除与跨院隔离。
+/// 字段校验（时段/日期/结果匹配 12.1-12.4/转诊/医生）、转诊联动
+/// （REFL_* + DATA_SRC 键 upsert）、预约与检查汇总同步（下次日期空删
+/// 预约）、删除与跨院隔离。
 void main() {
   late SqliteGateway db;
   late InitialScreeningService service;
@@ -42,11 +44,13 @@ CREATE TABLE ASD_INITIAL_SCREENING (
   WARNING_SIGN_RESULT TEXT NOT NULL,
   LANGUAGE_SOCIAL_COMMUNICATION_RESULT TEXT NOT NULL,
   CHECK_RESULT TEXT NOT NULL,
+  GUIDANCE TEXT,
   HAS_REFERRAL TEXT NOT NULL,
   REFERRAL_HOSP_ID TEXT,
   REFERRAL_HOSP_NAME TEXT NOT NULL,
   REFERRAL_DEPT_ID TEXT,
   REFERRAL_DEPT_NAME TEXT,
+  NEXT_CHECK_DATE TEXT,
   DOCTOR_ID TEXT NOT NULL,
   DOCTOR_NAME TEXT NOT NULL,
   CREATOR_ID TEXT NOT NULL,
@@ -74,13 +78,64 @@ CREATE TABLE SCALE_WSCMBD (
 CREATE TABLE CHILD_REFERRAL (
   ID TEXT PRIMARY KEY NOT NULL,
   CHILD_ID TEXT NOT NULL,
-  REFERRAL_DATE TEXT NOT NULL,
-  REFERRAL_TYPE INTEGER NOT NULL,
-  REFERRAL_REASON TEXT NOT NULL,
-  REFERRAL_HOSP_NAME TEXT NOT NULL,
-  REFERRAL_DEPT_NAME TEXT,
-  CONSULTATION_DATE TEXT,
-  CONSULTATION_DESC TEXT,
+  REFL_DATE TEXT NOT NULL,
+  REFL_TYPE INTEGER NOT NULL,
+  REFL_REASON TEXT NOT NULL,
+  REFL_HOSP_NAME TEXT NOT NULL,
+  REFL_DEPT_NAME TEXT,
+  CONSULT_DATE TEXT,
+  CONSULT_DESC TEXT,
+  DATA_SRC_NAME TEXT NOT NULL,
+  DATA_SRC_ID TEXT NOT NULL,
+  CREATOR_ID TEXT NOT NULL,
+  CREATOR_NAME TEXT NOT NULL,
+  DEPT_ID TEXT,
+  DEPT_NAME TEXT,
+  CAMPUS_ID TEXT,
+  CAMPUS_NAME TEXT,
+  HOSP_ID TEXT NOT NULL,
+  HOSP_NAME TEXT NOT NULL,
+  CREATE_TIME TEXT NOT NULL,
+  UPDATE_TIME TEXT
+)''');
+    await db.executeDirect('''
+CREATE TABLE CHILD_APPOINTMENT (
+  ID TEXT PRIMARY KEY NOT NULL,
+  CHILD_ID TEXT NOT NULL,
+  APPT_DATE TEXT NOT NULL,
+  APPT_CHECK_TYPE TEXT NOT NULL,
+  APPT_DOCTOR_ID TEXT,
+  APPT_DOCTOR_NAME TEXT,
+  APPT_DEPT_ID TEXT,
+  APPT_DEPT_NAME TEXT,
+  APPT_CAMPUS_ID TEXT,
+  APPT_CAMPUS_NAME TEXT,
+  DATA_SRC_NAME TEXT NOT NULL,
+  DATA_SRC_ID TEXT NOT NULL,
+  CREATOR_ID TEXT NOT NULL,
+  CREATOR_NAME TEXT NOT NULL,
+  DEPT_ID TEXT,
+  DEPT_NAME TEXT,
+  CAMPUS_ID TEXT,
+  CAMPUS_NAME TEXT,
+  HOSP_ID TEXT NOT NULL,
+  HOSP_NAME TEXT NOT NULL,
+  CREATE_TIME TEXT NOT NULL,
+  UPDATE_TIME TEXT
+)''');
+    await db.executeDirect('''
+CREATE TABLE CHILD_CHECK_RECORD (
+  ID TEXT PRIMARY KEY NOT NULL,
+  CHILD_ID TEXT NOT NULL,
+  CHECK_DATE TEXT NOT NULL,
+  AGE_YEAR INTEGER NOT NULL,
+  AGE_MONTH INTEGER NOT NULL,
+  AGE_DAY INTEGER NOT NULL,
+  CHECK_TYPE TEXT NOT NULL,
+  CHECK_FINDINGS TEXT,
+  CHECK_RESULT TEXT,
+  DATA_SRC_NAME TEXT NOT NULL,
+  DATA_SRC_ID TEXT NOT NULL,
   CREATOR_ID TEXT NOT NULL,
   CREATOR_NAME TEXT NOT NULL,
   DEPT_ID TEXT,
@@ -145,7 +200,7 @@ CREATE TABLE SYS_USER (
     db.close();
   });
 
-  /// 构造一条合法初筛记录草稿（医院 1 儿童 1、12 月龄、无转诊）。
+  /// 构造一条合法初筛记录草稿（医院 1 儿童 1、12 月龄、未见异常、无转诊）。
   InitialScreening draft({
     String childId = child1Id,
     int checkMonth = 12,
@@ -162,6 +217,8 @@ CREATE TABLE SYS_USER (
     int? correctedYear,
     int? correctedMonth,
     int? correctedDay,
+    String? guidance,
+    String? nextCheckDate,
   }) => InitialScreening(
     childId: childId,
     checkDate: '2026-11-23',
@@ -175,11 +232,13 @@ CREATE TABLE SYS_USER (
     warningSignResult: warning,
     languageSocialCommunicationResult: languageSocial,
     checkResult: checkResult,
+    guidance: guidance,
     hasReferral: hasReferral,
     referralHospId: referralHospId,
     referralHospName: referralHospName,
     referralDeptId: referralDeptId,
     referralDeptName: referralDeptName,
+    nextCheckDate: nextCheckDate,
     doctorId: doctorId,
     doctorName: doctorName,
     creatorId: operator1Id,
@@ -215,6 +274,17 @@ CREATE TABLE SYS_USER (
     expect(saved.creatorId, operator1Id);
     expect(saved.createTime, isNotNull);
     expect(saved.updateTime, isNull);
+    expect(saved.guidance, isNull);
+    expect(saved.nextCheckDate, isNull);
+  });
+
+  test('save：指导建议与下次检查日期随入参落库并回读', () async {
+    final saved = await saveDraft(draft(guidance: '请定期复查，注意目光交流训练', nextCheckDate: '2027-03-22'));
+    expect(saved.guidance, '请定期复查，注意目光交流训练');
+    expect(saved.nextCheckDate, '2027-03-22');
+    final list = await service.listByChild(child1Id, hosp1Id);
+    expect(list.single.guidance, '请定期复查，注意目光交流训练');
+    expect(list.single.nextCheckDate, '2027-03-22');
   });
 
   test('save：有转诊时医院名称必填、ID/科室随入参落库', () async {
@@ -222,6 +292,8 @@ CREATE TABLE SYS_USER (
       draft(
         hasReferral: '1',
         checkResult: InitialScreeningService.checkResultAbnormal,
+        warning: '不会挥手表示“再见”或拍手表示“欢迎”',
+        languageSocial: '语言功能障碍或倒退',
         referralHospName: '市儿童医院',
         referralHospId: 'g0000000-0000-0000-0000-000000000001',
         referralDeptName: '儿童保健科',
@@ -238,7 +310,16 @@ CREATE TABLE SYS_USER (
   test('save：同一儿童同一时段重复保存走更新（ID/创建人不变），不同时段各自成条', () async {
     final first = await saveDraft();
     final updated = await saveDraft(
-      draft(warning: '不会挥手表示“再见”或拍手表示“欢迎”', languageSocial: '语言功能障碍或倒退', checkResult: InitialScreeningService.checkResultAbnormal, correctedYear: 1, correctedMonth: 2, correctedDay: 3),
+      draft(
+        warning: '不会挥手表示“再见”或拍手表示“欢迎”',
+        languageSocial: '语言功能障碍或倒退',
+        checkResult: InitialScreeningService.checkResultAbnormal,
+        hasReferral: '1',
+        referralHospName: '市儿童医院',
+        correctedYear: 1,
+        correctedMonth: 2,
+        correctedDay: 3,
+      ),
     );
     expect(updated.id, first.id);
     expect(updated.creatorId, first.creatorId);
@@ -263,7 +344,39 @@ CREATE TABLE SYS_USER (
     expect(await service.listByChild(child1Id, ''), isEmpty);
   });
 
-  test('save：校验失败不落库', () async {
+  test('save：初筛结果与询问结果匹配校验（12.1/12.2）', () async {
+    // 均未见异常但结果=异常 → 初筛结果应为未见异常
+    await expectLater(
+      saveDraft(draft(checkResult: InitialScreeningService.checkResultAbnormal)),
+      throwsA(predicate((e) => e is AsdException && e.message == '初筛结果应为未见异常，请检查确认')),
+    );
+    // 存在异常项但结果=未见异常 → 初筛结果应为异常
+    await expectLater(
+      saveDraft(draft(warning: '不会独坐')),
+      throwsA(predicate((e) => e is AsdException && e.message == '初筛结果应为异常，请检查确认')),
+    );
+    await expectLater(
+      saveDraft(draft(languageSocial: '社会交往能力障碍或倒退')),
+      throwsA(predicate((e) => e is AsdException && e.message == '初筛结果应为异常，请检查确认')),
+    );
+    // 匹配组合放行
+    await saveDraft();
+    await saveDraft(
+      draft(checkMonth: 24, warning: '不会独坐', checkResult: InitialScreeningService.checkResultAbnormal, hasReferral: '1', referralHospName: '市儿童医院'),
+    );
+    expect(await service.listByChild(child1Id, hosp1Id), hasLength(2));
+  });
+
+  test('save：异常必须转诊（12.3）', () async {
+    await expectLater(
+      saveDraft(
+        draft(warning: '不会独坐', checkResult: InitialScreeningService.checkResultAbnormal),
+      ),
+      throwsA(predicate((e) => e is AsdException && e.message == '初筛阳性，必须转诊到县级妇幼保健机构进行复筛')),
+    );
+  });
+
+  test('save：其余校验失败不落库', () async {
     // 检查时段非法
     await expectLater(saveDraft(draft(checkMonth: 9)), throwsA(predicate((e) => e is AsdException && e.code == 40002)));
     // 儿童不存在/非本院
@@ -307,16 +420,28 @@ CREATE TABLE SYS_USER (
     );
     // 检查医生非医生类别
     await expectLater(saveDraft(draft(doctorId: doctor3Id)), throwsA(predicate((e) => e is AsdException)));
+    // 检查医生为空（12.5）
+    await expectLater(saveDraft(draft(doctorId: '  ')), throwsA(predicate((e) => e is AsdException && e.message == '检查医生不能为空')));
     // 初筛结果为空
     await expectLater(saveDraft(draft(checkResult: '  ')), throwsA(predicate((e) => e is AsdException && e.code == 40002)));
     // 有无转诊取值非法
     await expectLater(saveDraft(draft(hasReferral: '2')), throwsA(predicate((e) => e is AsdException && e.code == 40002)));
-    // 有转诊但医院名称为空
-    await expectLater(saveDraft(draft(hasReferral: '1')), throwsA(predicate((e) => e is AsdException && e.message.contains('转诊医院名称'))));
+    // 有转诊但医院名称为空（12.4）
+    await expectLater(
+      saveDraft(
+        draft(warning: '不会独坐', checkResult: InitialScreeningService.checkResultAbnormal, hasReferral: '1'),
+      ),
+      throwsA(predicate((e) => e is AsdException && e.message == '转诊医院不能为空')),
+    );
     // 预警征象为空 / 超出字节上限
     await expectLater(saveDraft(draft(warning: '')), throwsA(predicate((e) => e is AsdException && e.message.contains('预警征象'))));
     final longWarning = '不会挥手表示“再见”或拍手表示“欢迎”、' * 4;
     await expectLater(saveDraft(draft(warning: longWarning)), throwsA(predicate((e) => e is AsdException && e.message.contains('预警征象'))));
+    // 指导建议超长（>1000 字节）
+    await expectLater(
+      saveDraft(draft(guidance: '长' * 400)),
+      throwsA(predicate((e) => e is AsdException && e.message.contains('指导建议'))),
+    );
 
     final list = await service.listByChild(child1Id, hosp1Id);
     expect(list, isEmpty); // 全部非法保存均未落库
@@ -341,82 +466,94 @@ CREATE TABLE SYS_USER (
     expect(await service.wscmbdItems(72), isEmpty);
   });
 
-  test('save：有转诊自动写 CHILD_REFERRAL（TYPE=1、原因默认、同儿童同日同键更新）', () async {
-    final saved = await saveDraft(
-      draft(hasReferral: '1', referralHospName: '市儿童医院', referralDeptName: '儿童康复科'),
-    );
-    final rows = await db.query(
-      'SELECT ID, CHILD_ID, REFERRAL_DATE, REFERRAL_TYPE, REFERRAL_REASON, '
-      'REFERRAL_HOSP_NAME, REFERRAL_DEPT_NAME, CREATOR_ID, DEPT_ID, HOSP_ID, UPDATE_TIME '
-      'FROM CHILD_REFERRAL',
-    );
-    expect(rows.rowsAsMaps, hasLength(1));
-    final row = rows.rowsAsMaps.single;
-    expect(row['CHILD_ID'], child1Id);
-    expect(row['REFERRAL_DATE'], '2026-11-23');
-    expect(row['REFERRAL_TYPE'], '1');
-    expect(row['REFERRAL_REASON'], InitialScreeningService.initialReferralReason);
-    expect(row['REFERRAL_HOSP_NAME'], '市儿童医院');
-    expect(row['REFERRAL_DEPT_NAME'], '儿童康复科');
-    expect(row['CREATOR_ID'], operator1Id);
-    expect(row['DEPT_ID'], dept1Id);
-    expect(row['HOSP_ID'], hosp1Id);
-    expect(row['UPDATE_TIME'], isNull);
-
-    // 同儿童同日再保存（同键覆盖）→ 更新同一条而非新增
-    await saveDraft(
-      draft(hasReferral: '1', referralHospName: '省儿童医院'),
-    );
-    final after = await db.query('SELECT ID, REFERRAL_HOSP_NAME, REFERRAL_DEPT_NAME, UPDATE_TIME FROM CHILD_REFERRAL');
-    expect(after.rowsAsMaps, hasLength(1));
-    expect(after.rowsAsMaps.single['ID'], row['ID']);
-    expect(after.rowsAsMaps.single['REFERRAL_HOSP_NAME'], '省儿童医院');
-    expect(after.rowsAsMaps.single['REFERRAL_DEPT_NAME'], isNull);
-    expect(after.rowsAsMaps.single['UPDATE_TIME'], isNotNull);
-
-    // 改判检查日期 → 生成新一天的转诊（旧日期记录保留）
-    const moved = InitialScreening(
-      childId: child1Id,
-      checkDate: '2026-11-24',
-      ageYear: 1,
-      ageMonth: 0,
-      ageDay: 6,
-      checkMonth: 12,
-      warningSignResult: '未见异常',
-      languageSocialCommunicationResult: '未见异常',
-      checkResult: '异常',
-      hasReferral: '1',
-      referralHospName: '市儿童医院',
-      doctorId: doctor1Id,
-      doctorName: '王心怡',
-      creatorId: operator1Id,
-      creatorName: '测试员',
-      hospId: hosp1Id,
-      hospName: '示例人民医院',
-    );
-    await service.save(record: moved, operatorId: operator1Id, operatorName: '测试员', hospId: hosp1Id, hospName: '示例人民医院', deptId: dept1Id, deptName: '儿童保健科');
-    final both = await db.query('SELECT REFERRAL_DATE FROM CHILD_REFERRAL ORDER BY REFERRAL_DATE');
-    expect(both.rowsAsMaps.map((r) => r['REFERRAL_DATE']).toList(), ['2026-11-23', '2026-11-24']);
-    expect(saved.id, isNotNull);
-  });
-
-  test('save：无转诊不写 CHILD_REFERRAL；改判无转诊保留已生成记录', () async {
-    await saveDraft(
-      draft(hasReferral: '1', referralHospName: '市儿童医院'),
-    );
-    expect((await db.query('SELECT ID FROM CHILD_REFERRAL')).rows, hasLength(1));
-    // 改回无转诊：转诊记录不回溯删除
-    await saveDraft(draft());
-    expect((await db.query('SELECT ID FROM CHILD_REFERRAL')).rows, hasLength(1));
-    // 纯无转诊保存：不产生转诊记录
-    await saveDraft(draft(checkMonth: 24));
-    expect((await db.query('SELECT ID FROM CHILD_REFERRAL')).rows, hasLength(1));
-  });
-
   test('listDoctors：同科室启用医生，排除其他科室/类别/停用；科室为空返回空', () async {
     final doctors = await service.listDoctors(dept1Id);
     expect(doctors.map((d) => d.id), [doctor1Id]); // 排除心理科/护士/停用
     expect(doctors.single.userName, '王心怡');
     expect(await service.listDoctors(''), isEmpty);
+  });
+
+  test('转诊联动：有转诊写 CHILD_REFERRAL（REFL_*+DATA_SRC 键 upsert），改判日期更新原行', () async {
+    final first = await saveDraft(
+      draft(hasReferral: '1', checkResult: InitialScreeningService.checkResultAbnormal, warning: '不会独坐', referralHospName: '市儿童医院', referralDeptName: '儿童康复科'),
+    );
+    final rows = await db.query(
+      'SELECT ID, CHILD_ID, REFL_DATE, REFL_TYPE, REFL_REASON, REFL_HOSP_NAME, '
+      'REFL_DEPT_NAME, DATA_SRC_NAME, DATA_SRC_ID, CREATOR_ID, DEPT_ID, HOSP_ID, UPDATE_TIME '
+      'FROM CHILD_REFERRAL',
+    );
+    expect(rows.rowsAsMaps, hasLength(1));
+    final row = rows.rowsAsMaps.single;
+    expect(row['CHILD_ID'], child1Id);
+    expect(row['REFL_DATE'], '2026-11-23');
+    expect(row['REFL_TYPE'], '1');
+    expect(row['REFL_REASON'], InitialScreeningService.initialReferralReason);
+    expect(row['REFL_HOSP_NAME'], '市儿童医院');
+    expect(row['REFL_DEPT_NAME'], '儿童康复科');
+    expect(row['DATA_SRC_NAME'], 'ASD_INITIAL_SCREENING');
+    expect(row['DATA_SRC_ID'], first.id);
+    expect(row['CREATOR_ID'], operator1Id);
+    expect(row['DEPT_ID'], dept1Id);
+    expect(row['HOSP_ID'], hosp1Id);
+    expect(row['UPDATE_TIME'], isNull);
+
+    // 同一初筛记录改判检查日期 → 更新原行（DATA_SRC 键），不另起新行
+    await saveDraft(
+      draft(hasReferral: '1', checkResult: InitialScreeningService.checkResultAbnormal, warning: '不会独坐', referralHospName: '省儿童医院', referralDeptName: null),
+    );
+    final after = await db.query('SELECT REFL_DATE, REFL_HOSP_NAME, REFL_DEPT_NAME, UPDATE_TIME FROM CHILD_REFERRAL');
+    expect(after.rowsAsMaps, hasLength(1));
+    expect(after.rowsAsMaps.single['REFL_HOSP_NAME'], '省儿童医院');
+    expect(after.rowsAsMaps.single['REFL_DEPT_NAME'], isNull);
+    expect(after.rowsAsMaps.single['UPDATE_TIME'], isNotNull);
+
+    // 改回无转诊：转诊记录不回溯删除
+    await saveDraft();
+    expect((await db.query('SELECT ID FROM CHILD_REFERRAL')).rows, hasLength(1));
+  });
+
+  test('预约与检查汇总联动：有下次日期写两表，日期清空删预约、汇总保留更新', () async {
+    final first = await saveDraft(draft(nextCheckDate: '2027-03-22'));
+    final appts = await db.query('SELECT APPT_DATE, APPT_CHECK_TYPE, APPT_DOCTOR_ID, APPT_DOCTOR_NAME, DATA_SRC_ID, APPT_DEPT_ID FROM CHILD_APPOINTMENT');
+    expect(appts.rowsAsMaps, hasLength(1));
+    final appt = appts.rowsAsMaps.single;
+    expect(appt['APPT_DATE'], '2027-03-22');
+    expect(appt['APPT_CHECK_TYPE'], '孤独症初筛');
+    expect(appt['APPT_DOCTOR_ID'], doctor1Id);
+    expect(appt['APPT_DOCTOR_NAME'], '王心怡');
+    expect(appt['DATA_SRC_ID'], first.id);
+    expect(appt['APPT_DEPT_ID'], isNull);
+
+    final records = await db.query('SELECT CHECK_DATE, AGE_YEAR, CHECK_TYPE, CHECK_FINDINGS, CHECK_RESULT, DATA_SRC_ID FROM CHILD_CHECK_RECORD');
+    expect(records.rowsAsMaps, hasLength(1));
+    final record = records.rowsAsMaps.single;
+    expect(record['CHECK_DATE'], '2026-11-23');
+    expect(record['AGE_YEAR'], '1');
+    expect(record['CHECK_TYPE'], '孤独症初筛');
+    expect(record['CHECK_FINDINGS'], '预警征象筛查：未见异常，语言功能和社会交往能力询问：未见异常');
+    expect(record['CHECK_RESULT'], '未见异常');
+    expect(record['DATA_SRC_ID'], first.id);
+
+    // 再次保存（同键更新）不产生重复行
+    await saveDraft(draft(nextCheckDate: '2027-03-23'));
+    expect((await db.query('SELECT ID FROM CHILD_APPOINTMENT')).rows, hasLength(1));
+    final apptAfter = await db.query('SELECT APPT_DATE FROM CHILD_APPOINTMENT');
+    expect(apptAfter.rowsAsMaps.single['APPT_DATE'], '2027-03-23');
+
+    // 下次日期清空（改判异常走转诊）→ 预约删除、汇总保留且更新
+    final screeningId = (await service.listByChild(child1Id, hosp1Id)).single.id;
+    await saveDraft(
+      draft(
+        warning: '不会独坐',
+        checkResult: InitialScreeningService.checkResultAbnormal,
+        hasReferral: '1',
+        referralHospName: '市儿童医院',
+        nextCheckDate: null,
+      ),
+    );
+    expect((await db.query('SELECT ID FROM CHILD_APPOINTMENT')).rows, isEmpty);
+    final recordAfter = await db.query('SELECT CHECK_RESULT FROM CHILD_CHECK_RECORD WHERE DATA_SRC_ID = ?', [screeningId]);
+    expect(recordAfter.rows, hasLength(1));
+    expect(recordAfter.rowsAsMaps.single['CHECK_RESULT'], '异常');
   });
 }

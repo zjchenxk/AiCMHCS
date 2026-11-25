@@ -15,6 +15,10 @@ dependencies:
   crypto: ^3.0.0
   dart_frog: ^1.1.0
   ffi: ^2.1.0
+  # 生产依赖：初筛【获取DeepSeek AI建议】调用外部 API（见
+  # lib/services/ai_guidance_service.dart）；此前仅作为 tool/ 脚本的
+  # dev 依赖，2026-11-25 提升为正式依赖
+  http: ^1.0.0
   # PostgreSQL 网关（非信创医院可选发行档；纯 Dart 实现，无原生依赖）
   postgres: ^3.6.0
   # 业务主键生成（UUID v7：时间有序，可按字符串排序近似创建序）
@@ -26,5 +30,4 @@ dependencies:
 
 dev_dependencies:
   dart_frog_lint: ^0.1.0
-  http: ^1.0.0
   test: ^1.0.0

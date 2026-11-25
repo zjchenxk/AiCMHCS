@@ -334,41 +334,161 @@
 
 4. 布局重新调整，如下所示：
 
-   -------------------------    -------------------------     -------------------------
-   | 检查日期                |   | 实足年龄                |    | 纠正年龄                |
-   -------------------------    -------------------------     -------------------------
+   -------------------------    -----------------------------------     -------------------------
+   | 检查日期(下拉选择框)     |   | 实足年龄(只读文本框)                |    | 纠正年龄(只读文本框)      |
+   -------------------------    -----------------------------------     -------------------------
    
-   -------------------------    -------------------------     -------------------------
-   | 预警征象筛查            |    | 语言功能与社会交往能力询问 |    | 初筛结果                |
-   -------------------------    -------------------------     -------------------------
+   -------------------------    -----------------------------------     -------------------------
+   | 预警征象筛查(下拉选择框)  |   | 语言功能与社会交往能力询问(下拉选择框) |     | 初筛结果(下拉选择框)     |
+   -------------------------    -----------------------------------     -------------------------
 
-   ------------------------------------------------------------------------------------
-   | 指导建议                                                                       |...|
-   ------------------------------------------------------------------------------------
+   ----------------------------------------------------------------------------------------------
+   | 指导建议(多行文本输入框)                                                                       |
+   ----------------------------------------------------------------------------------------------
+   ----------------  ---------------------------
+   | 选择模板(按钮) |  | 获取DeepSeek AI建议(按钮) |
+   ----------------  ---------------------------
 
-   -------------------------    -------------------------     -------------------------
-   | 有无转诊               |    | 转诊医院                |    | 转诊科室                |
-   -------------------------    -------------------------     -------------------------
+   -------------------------    -----------------------------------     -------------------------
+   | 有无转诊(下拉选择框)     |    | 转诊医院(下拉选择框)               |     | 转诊科室(下拉选择框)     |
+   -------------------------    -----------------------------------     -------------------------
 
-   -------------------------    -------------------------     -------------------------
-   | 下次检查日期            |    | 检查医生                |    | 操作人员                |
-   -------------------------    -------------------------     -------------------------
+   -------------------------    -----------------------------------     -------------------------
+   | 下次检查日期(下拉选择框)  |    | 检查医生(下拉选择框)               |     | 操作人员(只读文本框)     |
+   -------------------------    -----------------------------------     -------------------------
 
-5. 【预警征象筛查】，改成下拉选择框，【未见异常】选项与预警征象选项互斥，并且预警征象允许多选，类似child_advanced_search_dialog.dart中的高危因素下拉选择框。
+5. 如果当前儿童不是早产儿，【纠正年龄】则为空，不要显示【不适用】。
 
-6. 【语言功能与社会交往能力询问】，改成下拉选择框，【未见异常】选项与【语言功能障碍或倒退】、【社会交往能力障碍或倒退】选项互斥，并且【语言功能障碍或倒退】和【社会交往能力障碍或倒退】选项允许多选。
+6. 【预警征象筛查】，改成下拉选择框，必选项，默认选中【未见异常】。注意：【未见异常】选项与预警征象选项互斥，并且预警征象允许多选，类似child_advanced_search_dialog.dart中的高危因素下拉选择框。
 
-7. 【初筛结果】下拉选择框默认选中【未见异常】选项。
+7. 【语言功能与社会交往能力询问】，改成下拉选择框，必选项，默认选中【未见异常】。同样注意：【未见异常】选项与【语言功能障碍或倒退】、【社会交往能力障碍或倒退】选项互斥，并且【语言功能障碍或倒退】和【社会交往能力障碍或倒退】选项允许多选。
 
-8. 增加【指导建议】输入框，支持多行和自由输入，同时在输入框最右侧添加【...】按钮，点击【...】可以打开指导建议自定义模板对话框，要求：
+8. 【初筛结果】下拉选择框，必选项，默认选中【未见异常】。
 
-   1. 孤独症初筛指导建议自定义模板表，名称为【ASD_INITIAL_SCREENING_GUIDANCE】，达梦数据库建表语句如下：
+9. 增加【指导建议】输入框，支持多行和自由输入，同时在输入框下方添加【选择模板】和【获取DeepSeek AI建议】按钮，要求如下：
+
+   9.1. 如果【初筛结果】为【未见异常】，则指导建议默认为【请定期带儿童接受心理行为发育评估】。
+
+   9.2. 点击【选择模板】按钮，可以打开指导建议自定义模板对话框，要求如下：
    
-	CREATE TABLE ASD_INITIAL_SCREENING_GUIDANCE(
+      9.2.1. 孤独症初筛指导建议自定义模板表，名称为【ASD_INITIAL_SCREENING_GUIDANCE】，达梦数据库建表语句如下：
+   
+		CREATE TABLE ASD_INITIAL_SCREENING_GUIDANCE(
+			ID CHAR(36) NOT NULL,
+			GUIDANCE VARCHAR(1000) NOT NULL,
+			GUIDANCE_TYPE VARCHAR(50) NOT NULL,
+			IS_PERSONAL CHAR(1) NOT NULL,
+			CREATOR_ID CHAR(36) NOT NULL,
+			CREATOR_NAME VARCHAR(30) NOT NULL,
+			DEPT_ID CHAR(36),
+			DEPT_NAME VARCHAR(50),
+			CAMPUS_ID CHAR(36),
+			CAMPUS_NAME VARCHAR(50),
+			HOSP_ID CHAR(36) NOT NULL,
+			HOSP_NAME VARCHAR(100) NOT NULL,
+			CREATE_TIME TIMESTAMP NOT NULL,
+			UPDATE_TIME TIMESTAMP,
+			PRIMARY KEY (ID)
+		);
+		COMMENT ON TABLE ASD_INITIAL_SCREENING_GUIDANCE IS '孤独症初筛指导建议表';
+		COMMENT ON COLUMN ASD_INITIAL_SCREENING_GUIDANCE.ID IS '主键（UUID v7）';
+		COMMENT ON COLUMN ASD_INITIAL_SCREENING_GUIDANCE.GUIDANCE IS '指导建议';
+		COMMENT ON COLUMN ASD_INITIAL_SCREENING_GUIDANCE.GUIDANCE_TYPE IS '指导建议类别';
+		COMMENT ON COLUMN ASD_INITIAL_SCREENING_GUIDANCE.IS_PERSONAL IS '是否个人模板（0-否，1-是）';
+		COMMENT ON COLUMN ASD_INITIAL_SCREENING_GUIDANCE.CREATOR_ID IS '创建人ID（UUID v7）';
+		COMMENT ON COLUMN ASD_INITIAL_SCREENING_GUIDANCE.CREATOR_NAME IS '创建人姓名';
+		COMMENT ON COLUMN ASD_INITIAL_SCREENING_GUIDANCE.DEPT_ID IS '科室ID（UUID v7）';
+		COMMENT ON COLUMN ASD_INITIAL_SCREENING_GUIDANCE.DEPT_NAME IS '科室名称';
+		COMMENT ON COLUMN ASD_INITIAL_SCREENING_GUIDANCE.CAMPUS_ID IS '院区ID（UUID v7）';
+		COMMENT ON COLUMN ASD_INITIAL_SCREENING_GUIDANCE.CAMPUS_NAME IS '院区名称';
+		COMMENT ON COLUMN ASD_INITIAL_SCREENING_GUIDANCE.HOSP_ID IS '医院ID（UUID v7）';
+		COMMENT ON COLUMN ASD_INITIAL_SCREENING_GUIDANCE.HOSP_NAME IS '医院名称';
+		COMMENT ON COLUMN ASD_INITIAL_SCREENING_GUIDANCE.CREATE_TIME IS '创建时间';
+		COMMENT ON COLUMN ASD_INITIAL_SCREENING_GUIDANCE.UPDATE_TIME IS '更新时间';   
+
+      9.2.2. 指导建议自定义模板对话框，顶部显示一个指导建议搜索框，中间显示指导建议列表，底部显示【新增】、【修改】、【删除】、【确定】和【取消】按钮，要求如下：
+   
+         9.2.2.1. 指导建议列表每条记录显示字段【GUIDANCE】的内容（最多显示两行），内容下方显示字段【GUIDANCE_TYPE】和【CREATOR_NAME】。如果字段【IS_PERSONAL】值为【0】，即公共模板，用醒目字体颜色显示。
+   
+         9.2.2.2. 指导建议列表支持上下滚动。
+      
+         9.2.2.3. 指导建议列表支持双击某条记录后，关闭对话框，将双击的指导建议内容显示到初筛记录表的【指导建议】文本框中。
+      
+         9.2.2.4. 指导建议列表可以多选，然后点击【确定】按钮，关闭对话框，将所有选中记录的指导建议合并，并用换行符分隔，最后显示到初筛记录表的【指导建议】文本框中。
+      
+         9.2.2.5. 点击【新增】按钮，弹出指导建议模板新增对话框，在该对话框中输入【指导建议类别】和【指导建议】，以及选择【是否个人模板】（注意：是否个人模板默认为【是】），点击【确定】按钮，实时保存到数据库表中，并关闭对话框，返回并刷新指导建议列表。
+      
+         9.2.2.6. 点击【修改】按钮，弹出指导建议模板新增对话框，对指导建议列表中选中的指导建议（如果选中多条，默认为第一条）进行修改，点击【确定】按钮，实时保存到数据库表中，并关闭对话框，返回并刷新指导建议列表。注意：只能修改本人录入的指导建议，如果是他人录入的指导建议，则提示【不能修改他人的指导建议】。
+         
+         9.2.2.7. 点击【删除】按钮，可以删除指导建议列表中选中的指导建议（如果选中多条，默认为第一条）。同样，只能删除本人录入的指导建议，如果他人录入的指导建议，则提示【不能删除他人的指导建议】。
+         
+   9.3. 点击【获取DeepSeek AI建议】按钮，根据当前年龄段（如3月龄，6月龄，8月龄等），结合预警征象筛查结果、语言功能与社会交往能力询问结果，调用DeepSeek API获取健康宣教和干预指导，字数控制在200以内。举例：某18个月男童，预警征象筛查【与人无目光交流】，语言功能与社会交往能力询问【社会交往能力障碍或倒退】，则提示词可以为【男童，18月龄，今天在基层医疗机构进行孤独症初筛时发现：与人无目光交流、社会交往能力障碍或倒退，请站在基层医疗机构角度，向儿童家长提供相关健康宣教和干预指导，字数控制在200字以内】。DeepSeek API Key为【sk-8bd3476cf4614023b3fe406378a4feb7】，可通过配置文件提供。
+
+10. 增加【下次检查日期】下拉选择框，要求如下：
+
+   10.1. 如果【初筛结果】为【异常】，则清空下次检查日期，如果【初筛结果】为【未见异常】，则自动计算下次检查日期。比如儿童出生日期是2026-03-22，今天实足年龄是8个月3天，今天初筛年龄段是8月龄，下次初筛年龄段是12月龄，则下次检查日期为：出生日期(2026-03-22) + 初筛年龄段(12月龄) = 2027-03-22。
+   
+   10.2. 如果自动计算出来的下次检查日期为周末（星期六或星期天），则跳过周末，顺延到工作日（周一～周五）。
+   
+   10.3. 如果自动计算出来的下次检查日期为法定节假日，则同样跳过法定节假日，顺延到工作日。法定节假日数据库表为【BASE_HOLIDAY】，达梦数据库建表语句如下：
+
+	CREATE TABLE BASE_HOLIDAY(
+		ID BIGINT NOT NULL IDENTITY(1,1),
+		START_DATE DATE NOT NULL,
+		END_DATE DATE NOT NULL,
+		HOLIDAY_TYPE TINYINT NOT NULL,
+		CREATOR_ID CHAR(36) NOT NULL,
+		CREATOR_NAME VARCHAR(30) NOT NULL,
+		HOSP_ID CHAR(36) NOT NULL,
+		HOSP_NAME VARCHAR(100) NOT NULL,
+		CREATE_TIME TIMESTAMP NOT NULL,
+		UPDATE_TIME TIMESTAMP,
+		PRIMARY KEY (ID)
+	);
+	COMMENT ON TABLE BASE_HOLIDAY IS '国家法定节假日表';
+	COMMENT ON COLUMN BASE_HOLIDAY.ID IS '主键';
+	COMMENT ON COLUMN BASE_HOLIDAY.START_DATE IS '起始日期';
+	COMMENT ON COLUMN BASE_HOLIDAY.END_DATE IS '截止日期';
+	COMMENT ON COLUMN BASE_HOLIDAY.HOLIDAY_TYPE IS '节假日类型（1-元旦，2-春节，3-清明节，4-劳动节，5-端午节，6-中秋节，7-国庆节，8-其它）';
+	COMMENT ON COLUMN BASE_HOLIDAY.CREATOR_ID IS '创建人ID（UUID v7）';
+	COMMENT ON COLUMN BASE_HOLIDAY.CREATOR_NAME IS '创建人姓名';
+	COMMENT ON COLUMN BASE_HOLIDAY.HOSP_ID IS '医院ID（UUID v7）';
+	COMMENT ON COLUMN BASE_HOLIDAY.HOSP_NAME IS '医院名称';
+	COMMENT ON COLUMN BASE_HOLIDAY.CREATE_TIME IS '创建时间';
+	COMMENT ON COLUMN BASE_HOLIDAY.UPDATE_TIME IS '更新时间';
+
+   10.4. 如果是手动选择的下次检查日期，则不受上述周末和法定节假日限制。
+
+11. 如果当前登录用户本身就是医生，则【检查医生】默认为当前登录用户, 否则为空。
+
+12. 点击【保存】按钮时，应检查以下数据：
+
+   12.1. 如果【预警征象筛查】结果为【未见异常】，并且【语言功能与社会交往能力询问】结果也是【未见异常】，则【初筛结果】必须为【未见异常】，否则应提示【初筛结果应为未见异常，请检查确认】。
+   
+   12.2. 如果【预警征象筛查】结果不是空和【未见异常】，或者【语言功能与社会交往能力询问】结果不是空和【未见异常】，则【初筛结果】必须为【异常】，否则应提示【初筛结果应为异常，请检查确认】。
+   
+   12.3. 如果【初筛结果】为【异常】，则【有无转诊】必须为【有】，否则应提示【初筛阳性，必须转诊到县级妇幼保健机构进行复筛】。
+   
+   12.4. 如果【有无转诊】为【有】，但【转诊医院】为空，则应提示【转诊医院不能为空】。
+   
+   12.5. 【检查医生】不能为空。
+   
+13. 在数据库初筛记录表【ASD_INITIAL_SCREENING】保存成功后，还要进行以下数据保存：
+
+   13.1. 如果【有无转诊】为【有】，即存在转诊，应同步向数据库转诊记录表【CHILD_REFERRAL】中新增或修改转诊记录。转诊记录表【CHILD_REFERRAL】字段名称做了修改，同时添加了字段数据来源名称【DATA_SRC_NAME】和数据来源ID【DATA_SRC_ID】，便于数据更新和日后追溯。字段【DATA_SRC_NAME】默认为【ASD_INITIAL_SCREENING】，字段【DATA_SRC_ID】默认为初筛记录ID。最新达梦数据库建表语句如下：
+   
+	CREATE TABLE CHILD_REFERRAL(
 		ID CHAR(36) NOT NULL,
-		GUIDANCE VARCHAR(1000) NOT NULL,
-		GUIDANCE_TYPE VARCHAR(50),
-		IS_PERSONAL CHAR(1) NOT NULL,
+		CHILD_ID CHAR(36) NOT NULL,
+		REFL_DATE DATE NOT NULL,
+		REFL_TYPE TINYINT NOT NULL,
+		REFL_REASON VARCHAR(200) NOT NULL,
+		REFL_HOSP_NAME VARCHAR(100) NOT NULL,
+		REFL_DEPT_NAME VARCHAR(50),
+		CONSULT_DATE DATE,
+		CONSULT_DESC VARCHAR(2000),
+		DATA_SRC_NAME VARCHAR(50) NOT NULL,
+		DATA_SRC_ID CHAR(36) NOT NULL,
 		CREATOR_ID CHAR(36) NOT NULL,
 		CREATOR_NAME VARCHAR(30) NOT NULL,
 		DEPT_ID CHAR(36),
@@ -381,21 +501,162 @@
 		UPDATE_TIME TIMESTAMP,
 		PRIMARY KEY (ID)
 	);
-	COMMENT ON TABLE ASD_INITIAL_SCREENING_GUIDANCE IS '孤独症初筛指导建议表';
-	COMMENT ON COLUMN ASD_INITIAL_SCREENING_GUIDANCE.ID IS '主键（UUID v7）';
-	COMMENT ON COLUMN ASD_INITIAL_SCREENING_GUIDANCE.GUIDANCE IS '指导建议';
-	COMMENT ON COLUMN ASD_INITIAL_SCREENING_GUIDANCE.GUIDANCE_TYPE IS '指导建议类别';
-	COMMENT ON COLUMN ASD_INITIAL_SCREENING_GUIDANCE.IS_PERSONAL IS '是否个人模板（0-否，1-是）';
-	COMMENT ON COLUMN ASD_INITIAL_SCREENING_GUIDANCE.CREATOR_ID IS '创建人ID（UUID v7）';
-	COMMENT ON COLUMN ASD_INITIAL_SCREENING_GUIDANCE.CREATOR_NAME IS '创建人姓名';
-	COMMENT ON COLUMN ASD_INITIAL_SCREENING_GUIDANCE.DEPT_ID IS '科室ID（UUID v7）';
-	COMMENT ON COLUMN ASD_INITIAL_SCREENING_GUIDANCE.DEPT_NAME IS '科室名称';
-	COMMENT ON COLUMN ASD_INITIAL_SCREENING_GUIDANCE.CAMPUS_ID IS '院区ID（UUID v7）';
-	COMMENT ON COLUMN ASD_INITIAL_SCREENING_GUIDANCE.CAMPUS_NAME IS '院区名称';
-	COMMENT ON COLUMN ASD_INITIAL_SCREENING_GUIDANCE.HOSP_ID IS '医院ID（UUID v7）';
-	COMMENT ON COLUMN ASD_INITIAL_SCREENING_GUIDANCE.HOSP_NAME IS '医院名称';
-	COMMENT ON COLUMN ASD_INITIAL_SCREENING_GUIDANCE.CREATE_TIME IS '创建时间';
-	COMMENT ON COLUMN ASD_INITIAL_SCREENING_GUIDANCE.UPDATE_TIME IS '更新时间';   
+	COMMENT ON TABLE CHILD_REFERRAL IS '儿童转诊表';
+	COMMENT ON COLUMN CHILD_REFERRAL.ID IS '主键（UUID v7）';
+	COMMENT ON COLUMN CHILD_REFERRAL.CHILD_ID IS '儿童ID（UUID v7）';
+	COMMENT ON COLUMN CHILD_REFERRAL.REFL_DATE IS '转诊日期';
+	COMMENT ON COLUMN CHILD_REFERRAL.REFL_TYPE IS '转诊类别（1-初筛转诊，2-复筛转诊，3-诊断转诊，4-干预康复转诊）';
+	COMMENT ON COLUMN CHILD_REFERRAL.REFL_REASON IS '转诊原因';
+	COMMENT ON COLUMN CHILD_REFERRAL.REFL_HOSP_NAME IS '转诊医院名称';
+	COMMENT ON COLUMN CHILD_REFERRAL.REFL_DEPT_NAME IS '转诊科室名称';
+	COMMENT ON COLUMN CHILD_REFERRAL.CONSULT_DATE IS '接诊日期';
+	COMMENT ON COLUMN CHILD_REFERRAL.CONSULT_DESC IS '接诊情况';
+	COMMENT ON COLUMN CHILD_REFERRAL.DATA_SRC_NAME IS '数据来源名称';
+	COMMENT ON COLUMN CHILD_REFERRAL.DATA_SRC_ID IS '数据来源ID（UUID v7）';
+	COMMENT ON COLUMN CHILD_REFERRAL.CREATOR_ID IS '创建人ID（UUID v7）';
+	COMMENT ON COLUMN CHILD_REFERRAL.CREATOR_NAME IS '创建人姓名';
+	COMMENT ON COLUMN CHILD_REFERRAL.DEPT_ID IS '科室ID（UUID v7）';
+	COMMENT ON COLUMN CHILD_REFERRAL.DEPT_NAME IS '科室名称';
+	COMMENT ON COLUMN CHILD_REFERRAL.CAMPUS_ID IS '院区ID（UUID v7）';
+	COMMENT ON COLUMN CHILD_REFERRAL.CAMPUS_NAME IS '院区名称';
+	COMMENT ON COLUMN CHILD_REFERRAL.HOSP_ID IS '医院ID（UUID v7）';
+	COMMENT ON COLUMN CHILD_REFERRAL.HOSP_NAME IS '医院名称';
+	COMMENT ON COLUMN CHILD_REFERRAL.CREATE_TIME IS '创建时间';
+	COMMENT ON COLUMN CHILD_REFERRAL.UPDATE_TIME IS '更新时间';   
 
-   2. 
+   13.2. 如果【下次检查日期】不为空，应同步向数据库预约记录表【CHILD_APPOINTMENT】中新增或修改预约记录，要求如下：
    
+      13.2.1. 预约记录表【CHILD_APPOINTMENT】，达梦数据库建表语句如下：
+
+		CREATE TABLE CHILD_APPOINTMENT(
+			ID CHAR(36) NOT NULL,
+			CHILD_ID CHAR(36) NOT NULL,
+			APPT_DATE DATE NOT NULL,
+			APPT_CHECK_TYPE VARCHAR(100) NOT NULL,
+			APPT_DOCTOR_ID CHAR(36),
+			APPT_DOCTOR_NAME VARCHAR(30),
+			APPT_DEPT_ID CHAR(36),
+			APPT_DEPT_NAME VARCHAR(50),
+			APPT_CAMPUS_ID CHAR(36),
+			APPT_CAMPUS_NAME VARCHAR(50),
+			DATA_SRC_NAME VARCHAR(50) NOT NULL,
+			DATA_SRC_ID CHAR(36) NOT NULL,
+			CREATOR_ID CHAR(36) NOT NULL,
+			CREATOR_NAME VARCHAR(30) NOT NULL,
+			DEPT_ID CHAR(36),
+			DEPT_NAME VARCHAR(50),
+			CAMPUS_ID CHAR(36),
+			CAMPUS_NAME VARCHAR(50),
+			HOSP_ID CHAR(36) NOT NULL,
+			HOSP_NAME VARCHAR(100) NOT NULL,
+			CREATE_TIME TIMESTAMP NOT NULL,
+			UPDATE_TIME TIMESTAMP,
+			PRIMARY KEY (ID)
+		);
+		COMMENT ON TABLE CHILD_APPOINTMENT IS '儿童预约表';
+		COMMENT ON COLUMN CHILD_APPOINTMENT.ID IS '主键（UUID v7）';
+		COMMENT ON COLUMN CHILD_APPOINTMENT.CHILD_ID IS '儿童ID（UUID v7）';
+		COMMENT ON COLUMN CHILD_APPOINTMENT.APPT_DATE IS '预约日期';
+		COMMENT ON COLUMN CHILD_APPOINTMENT.APPT_CHECK_TYPE IS '预约检查类型';
+		COMMENT ON COLUMN CHILD_APPOINTMENT.APPT_DOCTOR_ID IS '预约医生ID（UUID v7）';
+		COMMENT ON COLUMN CHILD_APPOINTMENT.APPT_DOCTOR_NAME IS '预约医生姓名';
+		COMMENT ON COLUMN CHILD_APPOINTMENT.APPT_DEPT_ID IS '预约科室ID（UUID v7）';
+		COMMENT ON COLUMN CHILD_APPOINTMENT.APPT_DEPT_NAME IS '预约科室名称';
+		COMMENT ON COLUMN CHILD_APPOINTMENT.APPT_CAMPUS_ID IS '预约院区ID（UUID v7）';
+		COMMENT ON COLUMN CHILD_APPOINTMENT.APPT_CAMPUS_NAME IS '预约院区名称';
+		COMMENT ON COLUMN CHILD_APPOINTMENT.DATA_SRC_NAME IS '数据来源名称';
+		COMMENT ON COLUMN CHILD_APPOINTMENT.DATA_SRC_ID IS '数据来源ID（UUID v7）';
+		COMMENT ON COLUMN CHILD_APPOINTMENT.CREATOR_ID IS '创建人ID（UUID v7）';
+		COMMENT ON COLUMN CHILD_APPOINTMENT.CREATOR_NAME IS '创建人姓名';
+		COMMENT ON COLUMN CHILD_APPOINTMENT.DEPT_ID IS '科室ID（UUID v7）';
+		COMMENT ON COLUMN CHILD_APPOINTMENT.DEPT_NAME IS '科室名称';
+		COMMENT ON COLUMN CHILD_APPOINTMENT.CAMPUS_ID IS '院区ID（UUID v7）';
+		COMMENT ON COLUMN CHILD_APPOINTMENT.CAMPUS_NAME IS '院区名称';
+		COMMENT ON COLUMN CHILD_APPOINTMENT.HOSP_ID IS '医院ID（UUID v7）';
+		COMMENT ON COLUMN CHILD_APPOINTMENT.HOSP_NAME IS '医院名称';
+		COMMENT ON COLUMN CHILD_APPOINTMENT.CREATE_TIME IS '创建时间';
+		COMMENT ON COLUMN CHILD_APPOINTMENT.UPDATE_TIME IS '更新时间';
+
+      13.2.2. 字段预约日期【APPT_DATE】，默认为初筛记录表的下次检查日期【NEXT_CHECK_DATE】。
+      
+      13.2.3. 字段预约检查类型【APPT_CHECK_TYPE】，默认为【孤独症初筛】。
+      
+      13.2.4. 字段预约医生ID【APPT_DOCTOR_ID】和预约医生姓名【APPT_DOCTOR_NAME】，默认为初筛记录表的字段检查医生ID【DOCTOR_ID】和检查医生姓名【DOCTOR_NAME】。
+      
+      13.2.5. 字段预约科室ID【APPT_DEPT_ID】、预约科室名称【APPT_DEPT_NAME】和预约院区ID【APPT_CAMPUS_ID】、预约院区名称【APPT_CAMPUS_NAME】，默认为空。
+      
+      13.2.6. 字段数据来源名称【DATA_SRC_NAME】默认为【ASD_INITIAL_SCREENING】，字段数据来源ID【DATA_SRC_ID】默认为初筛记录ID，便于数据更新和日后追溯。
+      
+   13.3. 同步向数据库检查记录汇总表【CHILD_CHECK_RECORD】中新增或修改检查记录，要求如下：
+   
+      13.3.1. 检查记录汇总表【CHILD_CHECK_RECORD】，达梦数据库建表语句如下：
+      
+		CREATE TABLE CHILD_CHECK_RECORD(
+			ID CHAR(36) NOT NULL,
+			CHILD_ID CHAR(36) NOT NULL,
+			CHECK_DATE DATE NOT NULL,
+			AGE_YEAR TINYINT NOT NULL,
+			AGE_MONTH TINYINT NOT NULL,
+			AGE_DAY TINYINT NOT NULL,
+			CHECK_TYPE VARCHAR(100) NOT NULL,
+			CHECK_FINDINGS VARCHAR(1000),
+			CHECK_RESULT VARCHAR(100),
+			DATA_SRC_NAME VARCHAR(50) NOT NULL,
+			DATA_SRC_ID CHAR(36) NOT NULL,
+			CREATOR_ID CHAR(36) NOT NULL,
+			CREATOR_NAME VARCHAR(30) NOT NULL,
+			DEPT_ID CHAR(36),
+			DEPT_NAME VARCHAR(50),
+			CAMPUS_ID CHAR(36),
+			CAMPUS_NAME VARCHAR(50),
+			HOSP_ID CHAR(36) NOT NULL,
+			HOSP_NAME VARCHAR(100) NOT NULL,
+			CREATE_TIME TIMESTAMP NOT NULL,
+			UPDATE_TIME TIMESTAMP,
+			PRIMARY KEY (ID)
+		);
+		COMMENT ON TABLE CHILD_CHECK_RECORD IS '儿童检查记录汇总表';
+		COMMENT ON COLUMN CHILD_CHECK_RECORD.ID IS '主键（UUID v7）';
+		COMMENT ON COLUMN CHILD_CHECK_RECORD.CHILD_ID IS '儿童ID（UUID v7）';
+		COMMENT ON COLUMN CHILD_CHECK_RECORD.CHECK_DATE IS '检查日期';
+		COMMENT ON COLUMN CHILD_CHECK_RECORD.AGE_YEAR IS '检查年龄-岁';
+		COMMENT ON COLUMN CHILD_CHECK_RECORD.AGE_MONTH IS '检查年龄-月';
+		COMMENT ON COLUMN CHILD_CHECK_RECORD.AGE_DAY IS '检查年龄-天';
+		COMMENT ON COLUMN CHILD_CHECK_RECORD.CHECK_TYPE IS '检查类型';
+		COMMENT ON COLUMN CHILD_CHECK_RECORD.CHECK_FINDINGS IS '检查所见';
+		COMMENT ON COLUMN CHILD_CHECK_RECORD.CHECK_RESULT IS '检查结果';
+		COMMENT ON COLUMN CHILD_CHECK_RECORD.DATA_SRC_NAME IS '数据来源名称';
+		COMMENT ON COLUMN CHILD_CHECK_RECORD.DATA_SRC_ID IS '数据来源ID（UUID v7）';
+		COMMENT ON COLUMN CHILD_CHECK_RECORD.CREATOR_ID IS '创建人ID（UUID v7）';
+		COMMENT ON COLUMN CHILD_CHECK_RECORD.CREATOR_NAME IS '创建人姓名';
+		COMMENT ON COLUMN CHILD_CHECK_RECORD.DEPT_ID IS '科室ID（UUID v7）';
+		COMMENT ON COLUMN CHILD_CHECK_RECORD.DEPT_NAME IS '科室名称';
+		COMMENT ON COLUMN CHILD_CHECK_RECORD.CAMPUS_ID IS '院区ID（UUID v7）';
+		COMMENT ON COLUMN CHILD_CHECK_RECORD.CAMPUS_NAME IS '院区名称';
+		COMMENT ON COLUMN CHILD_CHECK_RECORD.HOSP_ID IS '医院ID（UUID v7）';
+		COMMENT ON COLUMN CHILD_CHECK_RECORD.HOSP_NAME IS '医院名称';
+		COMMENT ON COLUMN CHILD_CHECK_RECORD.CREATE_TIME IS '创建时间';
+		COMMENT ON COLUMN CHILD_CHECK_RECORD.UPDATE_TIME IS '更新时间';
+
+      13.3.2. 字段检查日期【CHECK_DATE】，默认为初筛记录表的检查日期【CHECK_DATE】。
+      
+      13.3.3. 字段检查年龄(岁)【AGE_YEAR】、检查年龄(月)【AGE_MONTH】、检查年龄(天)【AGE_DAY】，默认为初筛记录表的实足年龄(岁)【AGE_YEAR】、实足年龄(月)【AGE_MONTH】、实足年龄(天)【AGE_DAY】。
+      
+      13.3.4. 字段检查类型【CHECK_TYPE】，默认为【孤独症初筛】。
+      
+      13.3.5. 字段检查所见【CHECK_FINDINGS】，默认为初筛记录表的字段预警征象筛查结果【WARNING_SIGN_RESULT】和字段语言功能和社会交往能力询问结果【LANGUAGE_SOCIAL_COMMUNICATION_RESULT】值的组合。如：预警征象筛查：XXX，语言功能和社会交往能力询问：XXX。
+      
+      13.3.6. 字段检查结果【CHECK_RESULT】，默认为初筛记录表的字段初筛结果【CHECK_RESULT】。
+      
+      13.3.7. 字段数据来源名称【DATA_SRC_NAME】默认为【ASD_INITIAL_SCREENING】，字段数据来源ID【DATA_SRC_ID】默认为初筛记录ID，便于数据更新和日后追溯。
+      
+      
+
+
+
+测试发现以下问题：
+1、【预警征象筛查】选择非空且不是【未见异常】时，或者【语言功能与社会交往能力询问】选择非空且不是【未见异常】时，应自动设置【初筛结果】为【异常】。
+2、【预警征象筛查】选择【未见异常】，并且【语言功能与社会交往能力询问】选择【未见异常】时，应自动设置【初筛结果】为【未见异常】。
+3、【初筛结果】选择【未见异常】时，应自动设置【指导建议】为【请定期带儿童接受心理行为发育评估】。【初筛结果】选择【异常】时，应自动设置【指导建议】为空。
+4、【初筛结果】选择【未见异常】时，应自动设置【有无转诊】为【无】。【初筛结果】选择【异常】时，应自动设置【有无转诊】为【有】。
+

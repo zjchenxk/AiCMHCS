@@ -618,10 +618,12 @@ class ChildService {
     await _db.execute('DELETE FROM CHILD_EXT_INFO WHERE CHILD_ID = ?', [idValue]);
     await _db.execute('DELETE FROM CHILD_PHOTO WHERE CHILD_ID = ?', [idValue]);
     await _db.execute('DELETE FROM CHILD_HIGH_RISK_FACTOR WHERE CHILD_ID = ?', [idValue]);
-    // v25/v26 新增的儿童子表随档案级联清理（防孤儿数据；转诊记录目前
-    // 仅初筛联动自动写入，无独立入口）
+    // v25~v31 新增的儿童子表随档案级联清理（防孤儿数据；初筛/转诊/
+    // 预约/检查汇总目前均无独立管理入口）
     await _db.execute('DELETE FROM ASD_INITIAL_SCREENING WHERE CHILD_ID = ?', [idValue]);
     await _db.execute('DELETE FROM CHILD_REFERRAL WHERE CHILD_ID = ?', [idValue]);
+    await _db.execute('DELETE FROM CHILD_APPOINTMENT WHERE CHILD_ID = ?', [idValue]);
+    await _db.execute('DELETE FROM CHILD_CHECK_RECORD WHERE CHILD_ID = ?', [idValue]);
     return _db.execute('DELETE FROM CHILD_INFO WHERE ID = ? AND HOSP_ID = ?', [idValue, scope]);
   }
 

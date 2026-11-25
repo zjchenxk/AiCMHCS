@@ -61,17 +61,28 @@ class InitialScreeningService {
   /// 达梦把空串按 NULL 处理，不可用空串占位）。
   static const String noReferralText = '无';
 
-  /// 儿童转诊类别：初筛转诊（CHILD_REFERRAL.REFERRAL_TYPE）。
+  /// 儿童转诊类别：初筛转诊（CHILD_REFERRAL.REFL_TYPE）。
   static const String referralTypeInitial = '1';
 
-  /// 初筛转诊默认转诊原因（CHILD_REFERRAL.REFERRAL_REASON）。
+  /// 初筛转诊默认转诊原因（CHILD_REFERRAL.REFL_REASON）。
   static const String initialReferralReason = '孤独症初筛异常';
+
+  /// 联动写入的数据来源名称（CHILD_REFERRAL/CHILD_APPOINTMENT/
+  /// CHILD_CHECK_RECORD.DATA_SRC_NAME，来源表名）。
+  static const String dataSrcNameInitial = 'ASD_INITIAL_SCREENING';
+
+  /// 初筛联动的预约检查类型（CHILD_APPOINTMENT.APPT_CHECK_TYPE）。
+  static const String apptCheckTypeInitial = '孤独症初筛';
+
+  /// 初筛联动的检查类型（CHILD_CHECK_RECORD.CHECK_TYPE）。
+  static const String checkTypeInitial = '孤独症初筛';
 
   /// 各字段长度上限（与表列宽对齐；WARNING_SIGN_RESULT/LANGUAGE_... 为
   /// 中文条目名称顿号连接，达梦 VARCHAR 按字节计，按 UTF-8 字节数校验）。
   static const int _warningSignMaxBytes = 200;
   static const int _languageSocialMaxBytes = 100;
   static const int _checkResultMaxLength = 20;
+  static const int _guidanceMaxBytes = 1000;
   static const int _referralHospMaxLength = 100;
   static const int _referralDeptMaxLength = 50;
   static const int _doctorNameMaxLength = 30;
@@ -92,8 +103,9 @@ class InitialScreeningService {
       'SELECT ID, CHILD_ID, CHECK_DATE, AGE_YEAR, AGE_MONTH, AGE_DAY, '
       'CORRECTED_AGE_YEAR, CORRECTED_AGE_MONTH, CORRECTED_AGE_DAY, '
       'CHECK_MONTH, WARNING_SIGN_RESULT, LANGUAGE_SOCIAL_COMMUNICATION_RESULT, '
-      'CHECK_RESULT, HAS_REFERRAL, REFERRAL_HOSP_ID, REFERRAL_HOSP_NAME, '
-      'REFERRAL_DEPT_ID, REFERRAL_DEPT_NAME, DOCTOR_ID, DOCTOR_NAME, '
+      'CHECK_RESULT, GUIDANCE, HAS_REFERRAL, REFERRAL_HOSP_ID, '
+      'REFERRAL_HOSP_NAME, REFERRAL_DEPT_ID, REFERRAL_DEPT_NAME, '
+      'NEXT_CHECK_DATE, DOCTOR_ID, DOCTOR_NAME, '
       'CREATOR_ID, CREATOR_NAME, DEPT_ID, DEPT_NAME, CAMPUS_ID, CAMPUS_NAME, '
       'HOSP_ID, HOSP_NAME, CREATE_TIME, UPDATE_TIME '
       'FROM ASD_INITIAL_SCREENING WHERE CHILD_ID = ? AND HOSP_ID = ? '
@@ -167,11 +179,6 @@ class InitialScreeningService {
     await _requireChild(childIdValue, scope);
 
     final doctor = await _requireDoctor(record.doctorId, record.doctorName, scope, deptId?.trim() ?? '');
-    final hasReferral = _optionalFlag(record.hasReferral);
-    final referralHospName = hasReferral == '1' ? _required(record.referralHospName, '转诊医院名称', _referralHospMaxLength) : noReferralText;
-    final referralDeptName = hasReferral == '1' ? _optional(record.referralDeptName, '转诊科室名称', _referralDeptMaxLength) : null;
-    final referralHospId = hasReferral == '1' ? _optionalId(record.referralHospId) : null;
-    final referralDeptId = hasReferral == '1' ? _optionalId(record.referralDeptId) : null;
 
     final warning = _requiredEnc(record.warningSignResult, '预警征象筛查结果', _warningSignMaxBytes);
     final languageSocial = _requiredEnc(
@@ -183,7 +190,39 @@ class InitialScreeningService {
     if (checkResult.isEmpty || checkResult.length > _checkResultMaxLength) {
       throw const AsdException(400, 40002, '初筛结果不能为空且不能超过 $_checkResultMaxLength 个字符');
     }
+
+    // 保存校验（需求 12.1~12.4：初筛结果与两项询问结果匹配、异常必转诊、
+    // 转诊医院非空；12.5 检查医生非空由上方 _requireDoctor 兜底）
+    final warningNormal = warning == checkResultNormal;
+    final languageNormal = languageSocial == checkResultNormal;
+    if (warningNormal && languageNormal && checkResult != checkResultNormal) {
+      throw const AsdException(400, 40001, '初筛结果应为未见异常，请检查确认');
+    }
+    if ((!warningNormal || !languageNormal) && checkResult != checkResultAbnormal) {
+      throw const AsdException(400, 40001, '初筛结果应为异常，请检查确认');
+    }
+    final hasReferral = _optionalFlag(record.hasReferral);
+    if (checkResult == checkResultAbnormal && hasReferral != '1') {
+      throw const AsdException(400, 40001, '初筛阳性，必须转诊到县级妇幼保健机构进行复筛');
+    }
+    final referralHospInput = record.referralHospName.trim();
+    if (hasReferral == '1' && referralHospInput.isEmpty) {
+      throw const AsdException(400, 40001, '转诊医院不能为空');
+    }
+    final referralHospName = hasReferral == '1' ? _optional(referralHospInput, '转诊医院名称', _referralHospMaxLength)! : noReferralText;
+    final referralDeptName = hasReferral == '1' ? _optional(record.referralDeptName, '转诊科室名称', _referralDeptMaxLength) : null;
+    final referralHospId = hasReferral == '1' ? _optionalId(record.referralHospId) : null;
+    final referralDeptId = hasReferral == '1' ? _optionalId(record.referralDeptId) : null;
+
+    final guidance = _optionalEnc(record.guidance, '指导建议', _guidanceMaxBytes);
+    final nextCheckDate = _optionalDate(record.nextCheckDate, '下次检查日期');
     final checkDate = _requiredDate(record.checkDate);
+    final ageYear = _agePart(record.ageYear, '实足年龄-岁');
+    final ageMonth = _agePart(record.ageMonth, '实足年龄-月');
+    final ageDay = _agePart(record.ageDay, '实足年龄-天');
+    final correctedYear = _optionalAgePart(record.correctedAgeYear, '纠正年龄-岁');
+    final correctedMonth = _optionalAgePart(record.correctedAgeMonth, '纠正年龄-月');
+    final correctedDay = _optionalAgePart(record.correctedAgeDay, '纠正年龄-天');
 
     // 会话归属上下文（新增初筛/转诊写入用；修改初筛沿用记录原归属）
     final sessionScope = (
@@ -208,26 +247,28 @@ class InitialScreeningService {
         'AGE_MONTH = ?, AGE_DAY = ?, CORRECTED_AGE_YEAR = ?, '
         'CORRECTED_AGE_MONTH = ?, CORRECTED_AGE_DAY = ?, '
         'WARNING_SIGN_RESULT = ?, LANGUAGE_SOCIAL_COMMUNICATION_RESULT = ?, '
-        'CHECK_RESULT = ?, HAS_REFERRAL = ?, REFERRAL_HOSP_ID = ?, '
+        'CHECK_RESULT = ?, GUIDANCE = ?, HAS_REFERRAL = ?, REFERRAL_HOSP_ID = ?, '
         'REFERRAL_HOSP_NAME = ?, REFERRAL_DEPT_ID = ?, REFERRAL_DEPT_NAME = ?, '
-        'DOCTOR_ID = ?, DOCTOR_NAME = ?, UPDATE_TIME = ? '
+        'NEXT_CHECK_DATE = ?, DOCTOR_ID = ?, DOCTOR_NAME = ?, UPDATE_TIME = ? '
         'WHERE ID = ? AND HOSP_ID = ?',
         [
           checkDate,
-          _agePart(record.ageYear, '实足年龄-岁'),
-          _agePart(record.ageMonth, '实足年龄-月'),
-          _agePart(record.ageDay, '实足年龄-天'),
-          _optionalAgePart(record.correctedAgeYear, '纠正年龄-岁'),
-          _optionalAgePart(record.correctedAgeMonth, '纠正年龄-月'),
-          _optionalAgePart(record.correctedAgeDay, '纠正年龄-天'),
+          ageYear,
+          ageMonth,
+          ageDay,
+          correctedYear,
+          correctedMonth,
+          correctedDay,
           warning,
           languageSocial,
           checkResult,
+          guidance,
           hasReferral,
           referralHospId,
           referralHospName,
           referralDeptId,
           referralDeptName,
+          nextCheckDate,
           doctor.id,
           doctor.name,
           formatTimestamp(DateTime.now()),
@@ -235,12 +276,22 @@ class InitialScreeningService {
           scope,
         ],
       );
-      await _upsertReferralIfNeeded(
+      await _syncDerivedTables(
+        screeningId: id,
         hasReferral: hasReferral,
         childId: childIdValue,
-        referralDate: checkDate,
+        checkDate: checkDate,
+        ageYear: ageYear,
+        ageMonth: ageMonth,
+        ageDay: ageDay,
+        warning: warning,
+        languageSocial: languageSocial,
+        checkResult: checkResult,
         referralHospName: referralHospName,
         referralDeptName: referralDeptName,
+        nextCheckDate: nextCheckDate,
+        doctorId: doctor.id,
+        doctorName: doctor.name,
         operatorId: operatorId,
         operatorName: operatorName,
         scope: sessionScope,
@@ -253,31 +304,33 @@ class InitialScreeningService {
       'INSERT INTO ASD_INITIAL_SCREENING (ID, CHILD_ID, CHECK_DATE, '
       'AGE_YEAR, AGE_MONTH, AGE_DAY, CORRECTED_AGE_YEAR, CORRECTED_AGE_MONTH, '
       'CORRECTED_AGE_DAY, CHECK_MONTH, WARNING_SIGN_RESULT, '
-      'LANGUAGE_SOCIAL_COMMUNICATION_RESULT, CHECK_RESULT, HAS_REFERRAL, '
-      'REFERRAL_HOSP_ID, REFERRAL_HOSP_NAME, REFERRAL_DEPT_ID, '
-      'REFERRAL_DEPT_NAME, DOCTOR_ID, DOCTOR_NAME, CREATOR_ID, CREATOR_NAME, '
-      'DEPT_ID, DEPT_NAME, CAMPUS_ID, CAMPUS_NAME, HOSP_ID, HOSP_NAME, '
-      'CREATE_TIME) '
-      'VALUES (${List.filled(29, '?').join(', ')})',
+      'LANGUAGE_SOCIAL_COMMUNICATION_RESULT, CHECK_RESULT, GUIDANCE, '
+      'HAS_REFERRAL, REFERRAL_HOSP_ID, REFERRAL_HOSP_NAME, REFERRAL_DEPT_ID, '
+      'REFERRAL_DEPT_NAME, NEXT_CHECK_DATE, DOCTOR_ID, DOCTOR_NAME, '
+      'CREATOR_ID, CREATOR_NAME, DEPT_ID, DEPT_NAME, CAMPUS_ID, CAMPUS_NAME, '
+      'HOSP_ID, HOSP_NAME, CREATE_TIME) '
+      'VALUES (${List.filled(31, '?').join(', ')})',
       [
         newId,
         childIdValue,
         checkDate,
-        _agePart(record.ageYear, '实足年龄-岁'),
-        _agePart(record.ageMonth, '实足年龄-月'),
-        _agePart(record.ageDay, '实足年龄-天'),
-        _optionalAgePart(record.correctedAgeYear, '纠正年龄-岁'),
-        _optionalAgePart(record.correctedAgeMonth, '纠正年龄-月'),
-        _optionalAgePart(record.correctedAgeDay, '纠正年龄-天'),
+        ageYear,
+        ageMonth,
+        ageDay,
+        correctedYear,
+        correctedMonth,
+        correctedDay,
         month,
         warning,
         languageSocial,
         checkResult,
+        guidance,
         hasReferral,
         referralHospId,
         referralHospName,
         referralDeptId,
         referralDeptName,
+        nextCheckDate,
         doctor.id,
         doctor.name,
         _required(operatorId, '创建人ID', 36),
@@ -291,12 +344,22 @@ class InitialScreeningService {
         formatTimestamp(DateTime.now()),
       ],
     );
-    await _upsertReferralIfNeeded(
+    await _syncDerivedTables(
+      screeningId: newId,
       hasReferral: hasReferral,
       childId: childIdValue,
-      referralDate: checkDate,
+      checkDate: checkDate,
+      ageYear: ageYear,
+      ageMonth: ageMonth,
+      ageDay: ageDay,
+      warning: warning,
+      languageSocial: languageSocial,
+      checkResult: checkResult,
       referralHospName: referralHospName,
       referralDeptName: referralDeptName,
+      nextCheckDate: nextCheckDate,
+      doctorId: doctor.id,
+      doctorName: doctor.name,
       operatorId: operatorId,
       operatorName: operatorName,
       scope: sessionScope,
@@ -313,18 +376,84 @@ class InitialScreeningService {
     return _db.execute('DELETE FROM ASD_INITIAL_SCREENING WHERE ID = ? AND HOSP_ID = ?', [idValue, hospId.trim()]);
   }
 
+  /// 初筛保存后的联动同步（转诊/预约/检查汇总三表，需求 13.1~13.3）。
+  ///
+  /// 三表均带 DATA_SRC_NAME/DATA_SRC_ID 溯源列，同一初筛记录的同步写入
+  /// 按「CHILD_ID + DATA_SRC_NAME + DATA_SRC_ID + HOSP_ID」查重后走
+  /// INSERT/UPDATE（更新与追溯锚点）。无转诊的保存不回溯删除已生成的
+  /// 转诊（历史转诊不因改判丢失）；下次检查日期为空（初筛异常或已到
+  /// 6 岁末段）时删除本来源的预约记录——过期预约与本次保存状态不符，
+  /// 留着会误导复诊安排。
+  Future<void> _syncDerivedTables({
+    required String screeningId,
+    required String hasReferral,
+    required String childId,
+    required String checkDate,
+    required int ageYear,
+    required int ageMonth,
+    required int ageDay,
+    required String warning,
+    required String languageSocial,
+    required String checkResult,
+    required String referralHospName,
+    required String? referralDeptName,
+    required String? nextCheckDate,
+    required String doctorId,
+    required String doctorName,
+    required String operatorId,
+    required String operatorName,
+    required ({String hospId, String hospName, String? deptId, String? deptName, String? campusId, String? campusName}) scope,
+  }) async {
+    await _upsertReferralIfNeeded(
+      hasReferral: hasReferral,
+      childId: childId,
+      screeningId: screeningId,
+      referralDate: checkDate,
+      referralHospName: referralHospName,
+      referralDeptName: referralDeptName,
+      operatorId: operatorId,
+      operatorName: operatorName,
+      scope: scope,
+    );
+    await _syncAppointment(
+      childId: childId,
+      screeningId: screeningId,
+      apptDate: nextCheckDate,
+      doctorId: doctorId,
+      doctorName: doctorName,
+      operatorId: operatorId,
+      operatorName: operatorName,
+      scope: scope,
+    );
+    await _syncCheckRecord(
+      childId: childId,
+      screeningId: screeningId,
+      checkDate: checkDate,
+      ageYear: ageYear,
+      ageMonth: ageMonth,
+      ageDay: ageDay,
+      warning: warning,
+      languageSocial: languageSocial,
+      checkResult: checkResult,
+      operatorId: operatorId,
+      operatorName: operatorName,
+      scope: scope,
+    );
+  }
+
   /// 初筛转诊联动：保存的初筛记录存在转诊（HAS_REFERRAL='1'）时自动写
-  /// 入儿童转诊表 CHILD_REFERRAL——转诊类别固定初筛转诊（TYPE=1）、
+  /// 入儿童转诊表 CHILD_REFERRAL——转诊类别固定初筛转诊（REFL_TYPE=1）、
   /// 转诊原因默认「孤独症初筛异常」、转诊日期=初筛检查日期、接诊日期/
-  /// 接诊情况留空（后续复诊环节补录）。同一儿童同一天的初筛转诊至多
-  /// 一条：按「CHILD_ID + REFERRAL_TYPE=1 + REFERRAL_DATE + HOSP_ID」
-  /// 查重（日期+类别需求口径之外再加儿童与本院限定，防跨儿童/跨院误
-  /// 并），命中即更新转诊医院/科室与原因（沿用原创建人与归属），否则
-  /// 新增（创建人与科室/院区/医院归属取自本次会话）。无转诊的保存不
-  /// 回溯删除已生成的转诊记录（历史转诊不因后续改判而丢失）。
+  /// 接诊情况留空（后续复诊环节补录）。同一初筛记录至多一条转诊：按
+  /// 「CHILD_ID + REFL_TYPE=1 + DATA_SRC_NAME + DATA_SRC_ID + HOSP_ID」
+  /// 查重（数据来源即初筛记录 ID，改判检查日期时更新原行而非另起新行），
+  /// 命中即更新转诊医院/科室与原因（沿用原创建人与归属），否则新增
+  /// （创建人与科室/院区/医院归属取自本次会话）。无转诊的保存不回溯
+  /// 删除已生成的转诊记录。
   Future<void> _upsertReferralIfNeeded({
     required String hasReferral,
     required String childId,
+    required String screeningId,
     required String referralDate,
     required String referralHospName,
     required String? referralDeptName,
@@ -337,18 +466,20 @@ class InitialScreeningService {
     }
     final existing = await _db.query(
       'SELECT ID FROM CHILD_REFERRAL '
-      'WHERE CHILD_ID = ? AND REFERRAL_TYPE = ? AND REFERRAL_DATE = ? AND HOSP_ID = ?',
-      [childId, referralTypeInitial, referralDate, scope.hospId],
+      'WHERE CHILD_ID = ? AND REFL_TYPE = ? AND DATA_SRC_NAME = ? AND '
+      'DATA_SRC_ID = ? AND HOSP_ID = ?',
+      [childId, referralTypeInitial, dataSrcNameInitial, screeningId, scope.hospId],
     );
     if (existing.rows.isNotEmpty) {
       await _db.execute(
-        'UPDATE CHILD_REFERRAL SET REFERRAL_REASON = ?, REFERRAL_HOSP_NAME = ?, '
-        'REFERRAL_DEPT_NAME = ?, UPDATE_TIME = ? '
+        'UPDATE CHILD_REFERRAL SET REFL_REASON = ?, REFL_HOSP_NAME = ?, '
+        'REFL_DEPT_NAME = ?, REFL_DATE = ?, UPDATE_TIME = ? '
         'WHERE ID = ? AND HOSP_ID = ?',
         [
           initialReferralReason,
           referralHospName,
           referralDeptName,
+          referralDate,
           formatTimestamp(DateTime.now()),
           existing.rowsAsMaps.first['ID'] ?? '',
           scope.hospId,
@@ -357,12 +488,12 @@ class InitialScreeningService {
       return;
     }
     await _db.execute(
-      'INSERT INTO CHILD_REFERRAL (ID, CHILD_ID, REFERRAL_DATE, REFERRAL_TYPE, '
-      'REFERRAL_REASON, REFERRAL_HOSP_NAME, REFERRAL_DEPT_NAME, '
-      'CONSULTATION_DATE, CONSULTATION_DESC, CREATOR_ID, CREATOR_NAME, '
+      'INSERT INTO CHILD_REFERRAL (ID, CHILD_ID, REFL_DATE, REFL_TYPE, '
+      'REFL_REASON, REFL_HOSP_NAME, REFL_DEPT_NAME, CONSULT_DATE, '
+      'CONSULT_DESC, DATA_SRC_NAME, DATA_SRC_ID, CREATOR_ID, CREATOR_NAME, '
       'DEPT_ID, DEPT_NAME, CAMPUS_ID, CAMPUS_NAME, HOSP_ID, HOSP_NAME, '
       'CREATE_TIME) '
-      'VALUES (${List.filled(18, '?').join(', ')})',
+      'VALUES (${List.filled(20, '?').join(', ')})',
       [
         newUuid(),
         childId,
@@ -373,6 +504,161 @@ class InitialScreeningService {
         referralDeptName,
         null,
         null,
+        dataSrcNameInitial,
+        screeningId,
+        _required(operatorId, '创建人ID', 36),
+        _required(operatorName, '创建人姓名', _doctorNameMaxLength),
+        scope.deptId,
+        scope.deptName,
+        scope.campusId,
+        scope.campusName,
+        scope.hospId,
+        scope.hospName,
+        formatTimestamp(DateTime.now()),
+      ],
+    );
+  }
+
+  /// 初筛预约联动：下次检查日期非空时同步 CHILD_APPOINTMENT——预约日期
+  /// =NEXT_CHECK_DATE、预约检查类型=「孤独症初筛」、预约医生=初筛检查
+  /// 医生、预约科室/院区留空；下次检查日期为空（初筛异常或 6 岁末段）
+  /// 时删除本来源的预约记录（过期预约与本次保存状态不符）。
+  Future<void> _syncAppointment({
+    required String childId,
+    required String screeningId,
+    required String? apptDate,
+    required String doctorId,
+    required String doctorName,
+    required String operatorId,
+    required String operatorName,
+    required ({String hospId, String hospName, String? deptId, String? deptName, String? campusId, String? campusName}) scope,
+  }) async {
+    final keyParams = [childId, dataSrcNameInitial, screeningId, scope.hospId];
+    if (apptDate == null) {
+      await _db.execute(
+        'DELETE FROM CHILD_APPOINTMENT WHERE CHILD_ID = ? AND DATA_SRC_NAME = ? '
+        'AND DATA_SRC_ID = ? AND HOSP_ID = ?',
+        keyParams,
+      );
+      return;
+    }
+    final existing = await _db.query(
+      'SELECT ID FROM CHILD_APPOINTMENT WHERE CHILD_ID = ? AND DATA_SRC_NAME = ? '
+      'AND DATA_SRC_ID = ? AND HOSP_ID = ?',
+      keyParams,
+    );
+    if (existing.rows.isNotEmpty) {
+      await _db.execute(
+        'UPDATE CHILD_APPOINTMENT SET APPT_DATE = ?, APPT_CHECK_TYPE = ?, '
+        'APPT_DOCTOR_ID = ?, APPT_DOCTOR_NAME = ?, UPDATE_TIME = ? '
+        'WHERE ID = ? AND HOSP_ID = ?',
+        [
+          apptDate,
+          apptCheckTypeInitial,
+          doctorId,
+          doctorName,
+          formatTimestamp(DateTime.now()),
+          existing.rowsAsMaps.first['ID'] ?? '',
+          scope.hospId,
+        ],
+      );
+      return;
+    }
+    await _db.execute(
+      'INSERT INTO CHILD_APPOINTMENT (ID, CHILD_ID, APPT_DATE, '
+      'APPT_CHECK_TYPE, APPT_DOCTOR_ID, APPT_DOCTOR_NAME, APPT_DEPT_ID, '
+      'APPT_DEPT_NAME, APPT_CAMPUS_ID, APPT_CAMPUS_NAME, DATA_SRC_NAME, '
+      'DATA_SRC_ID, CREATOR_ID, CREATOR_NAME, DEPT_ID, DEPT_NAME, CAMPUS_ID, '
+      'CAMPUS_NAME, HOSP_ID, HOSP_NAME, CREATE_TIME) '
+      'VALUES (${List.filled(21, '?').join(', ')})',
+      [
+        newUuid(),
+        childId,
+        apptDate,
+        apptCheckTypeInitial,
+        doctorId,
+        doctorName,
+        null,
+        null,
+        null,
+        null,
+        dataSrcNameInitial,
+        screeningId,
+        _required(operatorId, '创建人ID', 36),
+        _required(operatorName, '创建人姓名', _doctorNameMaxLength),
+        scope.deptId,
+        scope.deptName,
+        scope.campusId,
+        scope.campusName,
+        scope.hospId,
+        scope.hospName,
+        formatTimestamp(DateTime.now()),
+      ],
+    );
+  }
+
+  /// 初筛检查汇总联动：CHILD_CHECK_RECORD 按同一来源键查重后同步——
+  /// 检查日期/实足年龄三段取初筛记录值、检查类型=「孤独症初筛」、
+  /// 检查所见=「预警征象筛查：X，语言功能和社会交往能力询问：Y」、
+  /// 检查结果=初筛结果。
+  Future<void> _syncCheckRecord({
+    required String childId,
+    required String screeningId,
+    required String checkDate,
+    required int ageYear,
+    required int ageMonth,
+    required int ageDay,
+    required String warning,
+    required String languageSocial,
+    required String checkResult,
+    required String operatorId,
+    required String operatorName,
+    required ({String hospId, String hospName, String? deptId, String? deptName, String? campusId, String? campusName}) scope,
+  }) async {
+    final findings = '预警征象筛查：$warning，语言功能和社会交往能力询问：$languageSocial';
+    final keyParams = [childId, dataSrcNameInitial, screeningId, scope.hospId];
+    final existing = await _db.query(
+      'SELECT ID FROM CHILD_CHECK_RECORD WHERE CHILD_ID = ? AND DATA_SRC_NAME = ? '
+      'AND DATA_SRC_ID = ? AND HOSP_ID = ?',
+      keyParams,
+    );
+    if (existing.rows.isNotEmpty) {
+      await _db.execute(
+        'UPDATE CHILD_CHECK_RECORD SET CHECK_DATE = ?, AGE_YEAR = ?, '
+        'AGE_MONTH = ?, AGE_DAY = ?, CHECK_FINDINGS = ?, CHECK_RESULT = ?, '
+        'UPDATE_TIME = ? WHERE ID = ? AND HOSP_ID = ?',
+        [
+          checkDate,
+          ageYear,
+          ageMonth,
+          ageDay,
+          findings,
+          checkResult,
+          formatTimestamp(DateTime.now()),
+          existing.rowsAsMaps.first['ID'] ?? '',
+          scope.hospId,
+        ],
+      );
+      return;
+    }
+    await _db.execute(
+      'INSERT INTO CHILD_CHECK_RECORD (ID, CHILD_ID, CHECK_DATE, AGE_YEAR, '
+      'AGE_MONTH, AGE_DAY, CHECK_TYPE, CHECK_FINDINGS, CHECK_RESULT, '
+      'DATA_SRC_NAME, DATA_SRC_ID, CREATOR_ID, CREATOR_NAME, DEPT_ID, '
+      'DEPT_NAME, CAMPUS_ID, CAMPUS_NAME, HOSP_ID, HOSP_NAME, CREATE_TIME) '
+      'VALUES (${List.filled(20, '?').join(', ')})',
+      [
+        newUuid(),
+        childId,
+        checkDate,
+        ageYear,
+        ageMonth,
+        ageDay,
+        checkTypeInitial,
+        findings,
+        checkResult,
+        dataSrcNameInitial,
+        screeningId,
         _required(operatorId, '创建人ID', 36),
         _required(operatorName, '创建人姓名', _doctorNameMaxLength),
         scope.deptId,
@@ -394,8 +680,9 @@ class InitialScreeningService {
       'SELECT ID, CHILD_ID, CHECK_DATE, AGE_YEAR, AGE_MONTH, AGE_DAY, '
       'CORRECTED_AGE_YEAR, CORRECTED_AGE_MONTH, CORRECTED_AGE_DAY, '
       'CHECK_MONTH, WARNING_SIGN_RESULT, LANGUAGE_SOCIAL_COMMUNICATION_RESULT, '
-      'CHECK_RESULT, HAS_REFERRAL, REFERRAL_HOSP_ID, REFERRAL_HOSP_NAME, '
-      'REFERRAL_DEPT_ID, REFERRAL_DEPT_NAME, DOCTOR_ID, DOCTOR_NAME, '
+      'CHECK_RESULT, GUIDANCE, HAS_REFERRAL, REFERRAL_HOSP_ID, '
+      'REFERRAL_HOSP_NAME, REFERRAL_DEPT_ID, REFERRAL_DEPT_NAME, '
+      'NEXT_CHECK_DATE, DOCTOR_ID, DOCTOR_NAME, '
       'CREATOR_ID, CREATOR_NAME, DEPT_ID, DEPT_NAME, CAMPUS_ID, CAMPUS_NAME, '
       'HOSP_ID, HOSP_NAME, CREATE_TIME, UPDATE_TIME '
       'FROM ASD_INITIAL_SCREENING WHERE ID = ? AND HOSP_ID = ?',
@@ -451,11 +738,13 @@ class InitialScreeningService {
     warningSignResult: row['WARNING_SIGN_RESULT'] ?? '',
     languageSocialCommunicationResult: row['LANGUAGE_SOCIAL_COMMUNICATION_RESULT'] ?? '',
     checkResult: row['CHECK_RESULT'] ?? '',
+    guidance: row['GUIDANCE'],
     hasReferral: row['HAS_REFERRAL'] ?? '0',
     referralHospId: row['REFERRAL_HOSP_ID'],
     referralHospName: row['REFERRAL_HOSP_NAME'] ?? '',
     referralDeptId: row['REFERRAL_DEPT_ID'],
     referralDeptName: row['REFERRAL_DEPT_NAME'],
+    nextCheckDate: row['NEXT_CHECK_DATE'],
     doctorId: row['DOCTOR_ID'] ?? '',
     doctorName: row['DOCTOR_NAME'] ?? '',
     creatorId: row['CREATOR_ID'] ?? '',
@@ -495,6 +784,16 @@ class InitialScreeningService {
     if (v.isEmpty) return null;
     if (v.length > maxLength) {
       throw AsdException(400, 40002, '$label不能超过 $maxLength 个字符');
+    }
+    return v;
+  }
+
+  /// 可空文本校验（按 UTF-8 字节数校验，空值归一为 null）。
+  String? _optionalEnc(String? value, String label, int maxBytes) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) return null;
+    if (utf8.encode(v).length > maxBytes) {
+      throw AsdException(400, 40002, '$label超出长度限制（$maxBytes 字节）');
     }
     return v;
   }
@@ -545,6 +844,16 @@ class InitialScreeningService {
     final ok = RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(v) && DateTime.tryParse(v) != null;
     if (!ok) {
       throw AsdException(400, 40002, '检查日期格式应为 yyyy-MM-dd：$value');
+    }
+    return v;
+  }
+
+  /// 可空日期校验：空值归一为 null，非空时须为可解析的 yyyy-MM-dd。
+  String? _optionalDate(String? value, String label) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) return null;
+    if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(v) || DateTime.tryParse(v) == null) {
+      throw AsdException(400, 40002, '$label格式应为 yyyy-MM-dd：$value');
     }
     return v;
   }

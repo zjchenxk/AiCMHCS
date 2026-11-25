@@ -14,6 +14,9 @@ final class AppConfig {
     this.fieldMasterKey,
     this.fieldKeyFile = 'data/aicmhcs.field.key',
     this.dbSsl = 'disable',
+    this.deepseekApiKey,
+    this.deepseekBaseUrl = 'https://api.deepseek.com',
+    this.deepseekModel = 'deepseek-chat',
   });
 
   /// 数据库驱动：`dm`（达梦，网络版默认）/ `sqlite`（单机版）/
@@ -48,6 +51,17 @@ final class AppConfig {
   /// 不存在时首启自动生成——单机版交付没有配置环节，密钥随安装目录落盘。
   final String fieldKeyFile;
 
+  /// DeepSeek API Key（初筛【获取DeepSeek AI建议】用）。为 null 表示未
+  /// 配置，接口返回明确的未配置提示；生产环境应经环境变量注入，勿落
+  /// 版本库。开发机默认值对准本项目演示 Key。
+  final String? deepseekApiKey;
+
+  /// DeepSeek API 基础地址（可指内网代理/自建网关）。
+  final String deepseekBaseUrl;
+
+  /// DeepSeek 模型名。
+  final String deepseekModel;
+
   static AppConfig fromEnv() {
     final driver = Platform.environment['AICMHCS_DB_DRIVER'] ?? 'dm';
     // 连接参数环境变量三驱动共用；未配置时按驱动给各自惯例默认值
@@ -73,6 +87,10 @@ final class AppConfig {
       dmHome: Platform.environment['DM_HOME'],
       fieldMasterKey: Platform.environment['AICMHCS_FIELD_MASTER_KEY'],
       fieldKeyFile: Platform.environment['AICMHCS_FIELD_KEY_FILE'] ?? 'data/aicmhcs.field.key',
+      // 开发机默认对准项目演示 Key；生产环境必须以环境变量注入
+      deepseekApiKey: Platform.environment['AICMHCS_DEEPSEEK_API_KEY'] ?? 'sk-8bd3476cf4614023b3fe406378a4feb7',
+      deepseekBaseUrl: Platform.environment['AICMHCS_DEEPSEEK_BASE_URL'] ?? 'https://api.deepseek.com',
+      deepseekModel: Platform.environment['AICMHCS_DEEPSEEK_MODEL'] ?? 'deepseek-chat',
     );
   }
 }

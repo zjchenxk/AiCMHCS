@@ -7,8 +7,11 @@
 /// warningSignResult 为预警征象条目名称集合（未见异常或若干条目名，
 /// 顿号连接）；languageSocialCommunicationResult 为语言功能和社会交往
 /// 能力询问结果（未见异常，或「语言功能障碍或倒退」「社会交往能力
-/// 障碍或倒退」的顿号连接组合）；checkResult 由前两者自动推导（均未见
-/// 异常→未见异常，否则异常）。hasReferral='0' 时 referralHospName
+/// 障碍或倒退」的顿号连接组合）；checkResult 与前两者的匹配关系由保
+/// 存时校验兜底（均未见异常必须为未见异常，任一存在异常项必须为异常）。
+/// guidance 指导建议与 nextCheckDate 下次检查日期均可空（后者仅初筛
+/// 未见异常时由客户端按出生日期推下一年龄段自动计算，周末/法定节假日
+/// 顺延到工作日；异常时清空）。hasReferral='0' 时 referralHospName
 /// 统一存「无」（列 NOT NULL，达梦空串作 NULL 不可用）、科室名称为空。
 class InitialScreening {
   /// 构造函数：注入孤独症初筛记录各字段。
@@ -22,6 +25,7 @@ class InitialScreening {
     required this.warningSignResult,
     required this.languageSocialCommunicationResult,
     required this.checkResult,
+    this.guidance,
     required this.hasReferral,
     required this.referralHospName,
     required this.doctorId,
@@ -37,6 +41,7 @@ class InitialScreening {
     this.referralHospId,
     this.referralDeptId,
     this.referralDeptName,
+    this.nextCheckDate,
     this.deptId,
     this.deptName,
     this.campusId,
@@ -85,6 +90,9 @@ class InitialScreening {
   /// 初筛结果（未见异常/异常）。
   final String checkResult;
 
+  /// 指导建议（可空多行文本；自由输入/模板选入/AI 生成）。
+  final String? guidance;
+
   /// 有无转诊（0-无/1-有）。
   final String hasReferral;
 
@@ -99,6 +107,9 @@ class InitialScreening {
 
   /// 转诊科室名称（可空）。
   final String? referralDeptName;
+
+  /// 下次检查日期（yyyy-MM-dd，可空）。
+  final String? nextCheckDate;
 
   /// 检查医生 ID。
   final String doctorId;
@@ -151,11 +162,13 @@ class InitialScreening {
       warningSignResult: json['warningSignResult'] as String? ?? '',
       languageSocialCommunicationResult: json['languageSocialCommunicationResult'] as String? ?? '',
       checkResult: json['checkResult'] as String? ?? '',
+      guidance: json['guidance'] as String?,
       hasReferral: json['hasReferral'] as String? ?? '0',
       referralHospId: json['referralHospId'] as String?,
       referralHospName: json['referralHospName'] as String? ?? '',
       referralDeptId: json['referralDeptId'] as String?,
       referralDeptName: json['referralDeptName'] as String?,
+      nextCheckDate: json['nextCheckDate'] as String?,
       doctorId: json['doctorId'] as String? ?? '',
       doctorName: json['doctorName'] as String? ?? '',
       creatorId: json['creatorId'] as String? ?? '',
@@ -186,11 +199,13 @@ class InitialScreening {
       'warningSignResult': warningSignResult,
       'languageSocialCommunicationResult': languageSocialCommunicationResult,
       'checkResult': checkResult,
+      'guidance': guidance,
       'hasReferral': hasReferral,
       'referralHospId': referralHospId,
       'referralHospName': referralHospName,
       'referralDeptId': referralDeptId,
       'referralDeptName': referralDeptName,
+      'nextCheckDate': nextCheckDate,
       'doctorId': doctorId,
       'doctorName': doctorName,
       'creatorId': creatorId,
