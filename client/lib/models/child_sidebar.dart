@@ -60,7 +60,7 @@ class HighRiskFactor {
   final String remark;
 }
 
-/// 单条检查记录（历次检查时间轴项）。
+/// 单条检查记录（历次检查时间轴项，来源 CHILD_CHECK_RECORD）。
 class ChildExamRecord {
   /// 构造函数：注入检查日期、检查名称与检查结果。
   const ChildExamRecord({
@@ -69,13 +69,13 @@ class ChildExamRecord {
     required this.result,
   });
 
-  /// 检查日期。
-  final DateTime date;
+  /// 检查日期（CHECK_DATE，yyyy-MM-dd）。
+  final String date;
 
-  /// 检查名称（如「发育筛查（ASQ-3）」）。
+  /// 检查名称（CHECK_TYPE，如「孤独症初筛」）。
   final String name;
 
-  /// 检查结果。
+  /// 检查结果（CHECK_RESULT；空串表示未填写，界面不显示结果行）。
   final String result;
 }
 
@@ -95,6 +95,7 @@ class ChildSidebarData {
     required this.gender,
     required this.ageText,
     required this.correctedAgeText,
+    required this.birthDateText,
     required this.avatarBase64,
     required this.gravidityParity,
     required this.gestationalAge,
@@ -106,7 +107,8 @@ class ChildSidebarData {
     required this.factorsLoaded,
     required this.factorsLoadFailed,
     required this.exams,
-    required this.examIsMock,
+    required this.examsLoaded,
+    required this.examsLoadFailed,
   });
 
   /// 姓名。
@@ -121,6 +123,9 @@ class ChildSidebarData {
   /// 早产儿矫正年龄（岁/月/天；非早产、未到预产期或已超出矫正窗口
   /// 为 null，界面不展示）。
   final String? correctedAgeText;
+
+  /// 出生日期（yyyy-MM-dd；缺失时为 null，界面不展示）。
+  final String? birthDateText;
 
   /// 头像 base64（CHILD_PHOTO.AVATAR_IMAGE，无记录时为 null）。
   final String? avatarBase64;
@@ -153,11 +158,15 @@ class ChildSidebarData {
   /// 高危因素加载是否失败（失败时界面提供重试）。
   final bool factorsLoadFailed;
 
-  /// 历次检查记录（新→旧）。
+  /// 历次检查记录（新→旧，来源 CHILD_CHECK_RECORD）。
   final List<ChildExamRecord> exams;
 
-  /// 检查记录是否为演示数据。
-  final bool examIsMock;
+  /// 检查记录是否已从 CHILD_CHECK_RECORD 加载完成（false 时界面显示
+  /// 加载状态，避免把「未加载」误显示为「暂无检查记录」）。
+  final bool examsLoaded;
+
+  /// 检查记录加载是否失败（失败时界面提供重试）。
+  final bool examsLoadFailed;
 
   /// 五色分级中需要高亮的项（综合分级 + 紫色叠加）。
   Set<HighRiskLevel> get activeLevels => {
@@ -165,15 +174,18 @@ class ChildSidebarData {
     if (purpleOverlay) HighRiskLevel.purple,
   };
 
-  /// 由当前儿童基础档案 + 扩展档案（可空）+ 头像 + 已保存高危因素构建
-  /// 侧边栏数据。
-  ///param child: 当前儿童上下文（姓名/性别/年龄/电话）
+  /// 由当前儿童基础档案 + 扩展档案（可空）+ 头像 + 已保存高危因素 +
+  /// 已汇总检查记录构建侧边栏数据。
+  ///param child: 当前儿童上下文（姓名/性别/年龄/电话/出生日期）
   ///param ext: 儿童扩展档案（可空；用于 G/P、出生孕周/体重与矫正年龄）
   ///param avatarBase64: 最近一次拍照头像（无记录传 null）
   ///param highRiskFactors: CHILD_HIGH_RISK_FACTOR 已保存记录（可为空）
   ///param factorsLoaded: 高危因素是否加载完成（成功后置 true）
   ///param factorsLoadFailed: 高危因素加载是否失败（失败时界面提供重试）
-  ///param now: 业务当前时间（全局时间服务口径，检查时间轴据此生成）
+  ///param checkRecords: CHILD_CHECK_RECORD 检查记录（可为空）
+  ///param checkRecordsLoaded: 检查记录是否加载完成（成功后置 true）
+  ///param checkRecordsLoadFailed: 检查记录加载是否失败（失败时界面提供重试）
+  ///param now: 业务当前时间（全局时间服务口径，年龄计算用）
   factory ChildSidebarData.build({
     required CurrentChild child,
     required ChildExtInfo? ext,
@@ -181,10 +193,23 @@ class ChildSidebarData {
     required List<ChildHighRiskFactor> highRiskFactors,
     required bool factorsLoaded,
     required bool factorsLoadFailed,
+    required List<ChildCheckRecord> checkRecords,
+    required bool checkRecordsLoaded,
+    required bool checkRecordsLoadFailed,
     required DateTime now,
   }) {
     final risk = _classifyRisk(highRiskFactors);
     final ageText = AgeUtil.formatAgeYmd(child.birthDate, now);
+    // 检查记录 → 时间轴展示项（日期/类型/结果取自 CHECK_DATE/CHECK_TYPE/
+    // CHECK_RESULT；顺序沿用服务端 CHECK_DATE DESC, ID DESC）
+    final exams = [
+      for (final record in checkRecords)
+        ChildExamRecord(
+          date: record.checkDate.trim(),
+          name: _blankToNull(record.checkType) ?? '检查记录',
+          result: _blankToNull(record.checkResult) ?? '',
+        ),
+    ];
     return ChildSidebarData(
       name: child.name,
       gender: child.gender,
@@ -196,6 +221,7 @@ class ChildSidebarData {
         gestationalWeek: ext?.gestationalWeek,
         gestationalDay: ext?.gestationalDay,
       ),
+      birthDateText: _formatDate(child.birthDate),
       avatarBase64: _blankToNull(avatarBase64),
       gravidityParity: _formatGravidityParity(ext),
       gestationalAge: _formatGestationalAge(ext) ?? _blankToNull(child.gestationalWeek),
@@ -206,8 +232,9 @@ class ChildSidebarData {
       factors: risk.factors,
       factorsLoaded: factorsLoaded,
       factorsLoadFailed: factorsLoadFailed,
-      exams: _mockExams(now),
-      examIsMock: true,
+      exams: exams,
+      examsLoaded: checkRecordsLoaded,
+      examsLoadFailed: checkRecordsLoadFailed,
     );
   }
 
@@ -267,35 +294,13 @@ class ChildSidebarData {
   /// 因素列表排序权重（未设置颜色排在已知五色之后）。
   static int _severityOfColor(String? color) => _levelOfColor(color)?.severityOrder ?? 5;
 
-  /// 演示检查记录（新→旧，日期基于业务当前时间倒推）。
-  static List<ChildExamRecord> _mockExams(DateTime now) {
-    return [
-      ChildExamRecord(
-        date: now.subtract(const Duration(days: 3)),
-        name: '新生儿行为神经测定（NBNA）',
-        result: '38 分（满分 40 分），属正常范围',
-      ),
-      ChildExamRecord(
-        date: now.subtract(const Duration(days: 16)),
-        name: '听力筛查（DPOAE）',
-        result: '双耳通过，建议 1 岁复查',
-      ),
-      ChildExamRecord(
-        date: now.subtract(const Duration(days: 45)),
-        name: '体格生长评估',
-        result: '体重 4.8 kg（P45），身长 56.2 cm（P50），头围 38.5 cm（P55）',
-      ),
-      ChildExamRecord(
-        date: now.subtract(const Duration(days: 92)),
-        name: '发育筛查（ASQ-3）',
-        result: '沟通、粗大动作、精细动作、解决问题、个人-社会各能区均正常',
-      ),
-      ChildExamRecord(
-        date: now.subtract(const Duration(days: 150)),
-        name: '心脏彩超',
-        result: '卵圆孔未闭（约 2.5 mm），建议 6 月龄复查',
-      ),
-    ];
+  /// 出生日期格式化（yyyy-MM-dd；缺失返回 null）。
+  static String? _formatDate(DateTime date) {
+    if (date.millisecondsSinceEpoch <= 0) return null;
+    final year = date.year.toString().padLeft(4, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '$year-$month-$day';
   }
 
   /// 孕次/产次格式化（如「G2 P1」；均未填写返回 null）。

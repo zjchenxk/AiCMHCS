@@ -191,9 +191,16 @@ class _ChildInfoSidebarState extends State<ChildInfoSidebar> {
                     ..._buildFactorTiles(theme, data),
                   ],
                   const SizedBox(height: 18),
-                  _buildSectionTitle(theme, '历次检查', demo: data.examIsMock),
+                  _buildSectionTitle(theme, '历次检查'),
                   const SizedBox(height: 10),
-                  _buildTimeline(theme, data),
+                  if (data.examsLoaded)
+                    _buildTimeline(theme, data)
+                  else
+                    _buildStatusBox(
+                      theme,
+                      data.examsLoadFailed ? '检查记录加载失败' : '正在加载检查记录…',
+                      onRetry: data.examsLoadFailed ? mainViewModel.refreshChildSidebar : null,
+                    ),
                 ],
               ),
             ),
@@ -348,38 +355,47 @@ class _ChildInfoSidebarState extends State<ChildInfoSidebar> {
       children: [
         _buildSectionTitle(theme, '高危五色分级'),
         const SizedBox(height: 8),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.30),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                failed ? '高危因素加载失败' : '正在加载高危因素…',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: failed ? 0.75 : 0.55),
-                ),
-              ),
-              if (failed) ...[
-                const SizedBox(height: 2),
-                TextButton(
-                  onPressed: mainViewModel.refreshChildSidebar,
-                  style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(0, 28),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: const Text('重试'),
-                ),
-              ],
-            ],
-          ),
+        _buildStatusBox(
+          theme,
+          failed ? '高危因素加载失败' : '正在加载高危因素…',
+          onRetry: failed ? mainViewModel.refreshChildSidebar : null,
         ),
       ],
+    );
+  }
+
+  /// 数据未就绪/加载失败时的状态块（可选重试按钮）。
+  Widget _buildStatusBox(ThemeData theme, String message, {VoidCallback? onRetry}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.30),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            message,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+            ),
+          ),
+          if (onRetry != null) ...[
+            const SizedBox(height: 2),
+            TextButton(
+              onPressed: onRetry,
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(0, 28),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text('重试'),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -477,9 +493,10 @@ class _ChildInfoSidebarState extends State<ChildInfoSidebar> {
     return '$base，叠加紫色（传染病管理）';
   }
 
-  /// G/P、出生孕周、出生体重、联系电话（无值项不显示）。
+  /// 出生日期、G/P、出生孕周、出生体重、联系电话（无值项不显示）。
   Widget _buildBasicMetrics(ThemeData theme, ChildSidebarData data) {
     final rows = <(String, String?)>[
+      ('出生日期', data.birthDateText),
       ('孕次产次', data.gravidityParity),
       ('出生孕周', data.gestationalAge),
       ('出生体重', data.birthWeight),
@@ -531,8 +548,8 @@ class _ChildInfoSidebarState extends State<ChildInfoSidebar> {
     );
   }
 
-  /// 分组标题（左侧主题色竖条 + 演示数据角标）。
-  Widget _buildSectionTitle(ThemeData theme, String title, {bool demo = false}) {
+  /// 分组标题（左侧主题色竖条）。
+  Widget _buildSectionTitle(ThemeData theme, String title) {
     return Row(
       children: [
         Container(
@@ -545,20 +562,6 @@ class _ChildInfoSidebarState extends State<ChildInfoSidebar> {
         ),
         const SizedBox(width: 6),
         Text(title, style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
-        if (demo) ...[
-          const SizedBox(width: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.secondaryContainer.withValues(alpha: 0.7),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              '演示数据',
-              style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSecondaryContainer),
-            ),
-          ),
-        ],
       ],
     );
   }
@@ -696,7 +699,7 @@ class _ChildInfoSidebarState extends State<ChildInfoSidebar> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _formatDate(exam.date),
+                    exam.date,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                     ),
@@ -706,14 +709,16 @@ class _ChildInfoSidebarState extends State<ChildInfoSidebar> {
                     exam.name,
                     style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    exam.result,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
-                      height: 1.4,
+                  if (exam.result.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      exam.result,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                        height: 1.4,
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
@@ -732,13 +737,5 @@ class _ChildInfoSidebarState extends State<ChildInfoSidebar> {
     } catch (_) {
       return null;
     }
-  }
-
-  /// 日期格式化（yyyy-MM-dd）。
-  String _formatDate(DateTime date) {
-    final year = date.year.toString().padLeft(4, '0');
-    final month = date.month.toString().padLeft(2, '0');
-    final day = date.day.toString().padLeft(2, '0');
-    return '$year-$month-$day';
   }
 }

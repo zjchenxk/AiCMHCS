@@ -340,10 +340,16 @@ CREATE TABLE CHILD_CHECK_RECORD (
   AGE_MONTH INTEGER NOT NULL,
   AGE_DAY INTEGER NOT NULL,
   CHECK_TYPE TEXT NOT NULL,
+  CHECK_FINDINGS TEXT,
+  CHECK_RESULT TEXT,
   DATA_SRC_NAME TEXT NOT NULL,
   DATA_SRC_ID TEXT NOT NULL,
   CREATOR_ID TEXT NOT NULL,
   CREATOR_NAME TEXT NOT NULL,
+  DEPT_ID TEXT,
+  DEPT_NAME TEXT,
+  CAMPUS_ID TEXT,
+  CAMPUS_NAME TEXT,
   HOSP_ID TEXT NOT NULL,
   HOSP_NAME TEXT NOT NULL,
   CREATE_TIME TEXT NOT NULL,
@@ -1248,5 +1254,59 @@ CREATE TABLE BASE_HIGH_RISK_FACTOR_EXCLUSION (
       hospId: '1',
     );
     expect(await service.listHighRiskFactors(childId, '1'), hasLength(2));
+  });
+
+  test('listCheckRecords：按儿童+医院返回检查记录，按检查日期倒序', () async {
+    Future<void> insert({
+      required String id,
+      required String childId,
+      required String date,
+      required String type,
+      String? result,
+      required String hospId,
+    }) async {
+      await db.execute(
+        'INSERT INTO CHILD_CHECK_RECORD (ID, CHILD_ID, CHECK_DATE, AGE_YEAR, '
+        'AGE_MONTH, AGE_DAY, CHECK_TYPE, CHECK_FINDINGS, CHECK_RESULT, '
+        'DATA_SRC_NAME, DATA_SRC_ID, CREATOR_ID, CREATOR_NAME, HOSP_ID, '
+        'HOSP_NAME, CREATE_TIME) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          id,
+          childId,
+          date,
+          '3',
+          '2',
+          '1',
+          type,
+          null,
+          result,
+          'ASD_INITIAL_SCREENING',
+          'SRC-$id',
+          'U1',
+          '张医生',
+          hospId,
+          '示例人民医院',
+          '2026-11-20 10:00:00',
+        ],
+      );
+    }
+
+    await insert(id: 'R1', childId: 'CHILD-1', date: '2026-06-01', type: '听力筛查', result: '双耳通过', hospId: '1');
+    await insert(id: 'R2', childId: 'CHILD-1', date: '2026-11-10', type: '孤独症初筛', result: '未见异常', hospId: '1');
+    // 其他医院的记录不应返回（按登录用户医院隔离）
+    await insert(id: 'R3', childId: 'CHILD-1', date: '2026-12-01', type: '其他医院记录', result: '不应返回', hospId: '2');
+
+    final records = await service.listCheckRecords('CHILD-1', '1');
+    expect(records, hasLength(2));
+    expect(records.first.id, 'R2');
+    expect(records.first.checkDate, '2026-11-10');
+    expect(records.first.checkType, '孤独症初筛');
+    expect(records.first.checkResult, '未见异常');
+    expect(records.first.ageYear, '3');
+    expect(records.last.id, 'R1');
+
+    // 医院为空 / 无记录儿童 → 空列表
+    expect(await service.listCheckRecords('CHILD-1', ' '), isEmpty);
+    expect(await service.listCheckRecords('CHILD-404', '1'), isEmpty);
   });
 }

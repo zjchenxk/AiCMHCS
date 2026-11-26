@@ -172,7 +172,20 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 - 表面装饰靠色彩与透明度区分层级（surface/primaryContainer/outlineVariant），不用 `BoxShadow` 堆叠；
 - 下拉菜单 `alignedDropdown: true`，与输入框对齐；
 - 功能菜单图标统一使用 **outlined 系列** Material 图标（如 `Icons.home_outlined`、`Icons.local_hospital_outlined`）；
-- **浏览态字段配色**：只读展示时下拉框只置 `onChanged: null`（`DropdownButtonFormField` 缺省 `enabled: null` 即沿用「onChanged null 即禁用」旧行为），**勿显式 `enabled: false`**——Material 会改用 `disabledColor` 变灰，与儿童建档浏览样式（全部黑色文字）不一致；`DropdownMenu` 组件禁用态也会变灰，浏览态改用只读 `TextFormField` 展示；自绘仿输入框的多选字段在浏览态保持 `onSurface` 正文字色，不做透明度弱化。**下拉的每个 `DropdownMenuItem` 内 `Text` 必须显式带 `style: theme.textTheme.bodyMedium`**——禁用态 DropdownButton 会把 `DefaultTextStyle` 置为 `disabledColor`，裸 `Text`（如 `const DropdownMenuItem(child: Text('无'))`）会跟着变灰，显式样式才能保持黑色（儿童建档页即此写法）。
+- **浏览态字段配色**：前台业务表单浏览态字段一律黑色正文色，细则见下节「前台业务表单浏览态样式（统一规范）」；后台设置类页面（`/system/` 开头）暂不适用。
+
+### 前台业务表单浏览态样式（统一规范）
+
+**适用范围**：前台业务功能页——以儿童/业务单据为中心的「新增-修改-浏览」表单，如儿童建档（`views/child/child_create_page.dart`、`child_basic_info_form.dart`）、孤独症初筛记录表（`views/asd/initial_screening_page.dart`）。**后台设置类功能页（`/system/` 开头，如医院/院区/科室/字典/高危因素/节假日管理）暂不适用本条**，其浏览态配色维持现状；后续如要求统一再另行改造。
+
+**核心要求**：浏览态下**所有文本输入框、下拉选择框、多选仿输入框、只读派生字段的文字一律为黑色正文色（`colorScheme.onSurface`）**，与儿童建档界面保持一致——仅按钮等操作控件按权限/前置条件灰化，**字段值不得显示为灰色**。新增前台业务表单时先抄儿童建档页写法，再按下述要点自查：
+
+1. **文本框只读展示**：`readOnly: true` + `enabled: false` + `style: theme.textTheme.bodyMedium`——值保持正文黑色（字段标签随主题弱化，与儿童建档一致）；
+2. **`DropdownButtonFormField`**：浏览态**勿传 `enabled: false`**（会改用 `disabledColor`），只把 `onChanged` 置 `null`（缺省 `enabled: null` 即沿用「onChanged null 即禁用」旧行为）；且**每个 `DropdownMenuItem` 内的 `Text` 必须显式带 `style: theme.textTheme.bodyMedium`**——禁用态会把内部 `DefaultTextStyle` 置为 `disabledColor`，裸 `Text`（如 `const DropdownMenuItem(child: Text('无'))`）会跟着变灰，显式样式才能保持黑色；
+3. **`DropdownMenu`（可输入下拉）**：禁用态同样会变灰，浏览态改用只读 `TextFormField` 展示（参照初筛页转诊医院/科室：录入态 `DropdownMenu`、浏览态只读框）；
+4. **自绘仿输入框**（`InputDecorator` + `InkWell`，如多选下拉字段）：浏览态正文用 `onSurface`、SuffixIcon 用 `onSurfaceVariant`，**不做透明度弱化**，仅把 `onTap` 置 `null`；
+5. **录入态联动灰化不受影响**：新增/修改态中按业务规则应禁用的字段（如【有无转诊】为「无」时灰化转诊医院/科室）仍按需求灰化，本规范只约束浏览态；
+6. **自检方法**：切到浏览态逐字段核对——文本、下拉选中值、多选摘要、只读派生值（实足年龄/操作人员等）均应为黑色；发现灰色先按上述 1~4 条排查（最常见原因是显式 `enabled: false` 或菜单项 `Text` 未带主题样式）。
 
 ### 背景与插画
 

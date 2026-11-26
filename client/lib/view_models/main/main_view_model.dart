@@ -124,7 +124,7 @@ class MainViewModel extends ChangeNotifier {
       actualAge: _formatAge(birth),
       phone: info.phone ?? '',
     );
-    // 基础信息立即可见；扩展档案与高危因素随后异步补全
+    // 基础信息立即可见；扩展档案/高危因素/检查记录随后异步补全
     _childSidebarData = ChildSidebarData.build(
       child: child,
       ext: null,
@@ -132,6 +132,9 @@ class MainViewModel extends ChangeNotifier {
       highRiskFactors: const [],
       factorsLoaded: false,
       factorsLoadFailed: false,
+      checkRecords: const [],
+      checkRecordsLoaded: false,
+      checkRecordsLoadFailed: false,
       now: _now(),
     );
     _childSidebarLoading = info.id.isNotEmpty;
@@ -139,11 +142,13 @@ class MainViewModel extends ChangeNotifier {
     unawaited(_loadChildSidebar(info.id));
   }
 
-  /// 并行加载侧边栏所需的扩展档案、最近一次拍照头像与已保存高危因素。
+  /// 并行加载侧边栏所需的扩展档案、最近一次拍照头像、已保存高危因素
+  /// 与检查记录汇总。
   ///
-  /// 三路请求各自捕获异常：单路失败不阻断其余数据展示；高危因素失败时
-  /// 以 [ChildSidebarData.factorsLoadFailed] 告知界面（提供重试），未完成
-  /// 前 [ChildSidebarData.factorsLoaded] 为 false。
+  /// 四路请求各自捕获异常：单路失败不阻断其余数据展示；高危因素/检查
+  /// 记录失败时分别以 [ChildSidebarData.factorsLoadFailed] /
+  /// [ChildSidebarData.examsLoadFailed] 告知界面（提供重试），未完成前
+  /// 对应的 Loaded 标志为 false。
   ///param childId: 当前儿童档案 ID（空串直接结束）
   Future<void> _loadChildSidebar(String childId) async {
     if (childId.isEmpty) {
@@ -162,12 +167,14 @@ class MainViewModel extends ChangeNotifier {
         _tryLoadArchive(service, childId),
         _tryLatestPhoto(service, childId),
         _tryHighRiskFactors(service, childId),
+        _tryCheckRecords(service, childId),
       ]);
       if (!_isCurrentSidebarRequest(requestId, childId)) return;
 
       final archive = results[0] as ChildArchive?;
       final photo = results[1] as ChildPhoto?;
       final factors = results[2] as List<ChildHighRiskFactor>?;
+      final checkRecords = results[3] as List<ChildCheckRecord>?;
       _childSidebarData = ChildSidebarData.build(
         child: child,
         ext: archive?.$2,
@@ -175,6 +182,9 @@ class MainViewModel extends ChangeNotifier {
         highRiskFactors: factors ?? const [],
         factorsLoaded: factors != null,
         factorsLoadFailed: factors == null,
+        checkRecords: checkRecords ?? const [],
+        checkRecordsLoaded: checkRecords != null,
+        checkRecordsLoadFailed: checkRecords == null,
         now: _now(),
       );
     } catch (e) {
@@ -215,6 +225,16 @@ class MainViewModel extends ChangeNotifier {
       return await service.highRiskFactors(childId);
     } catch (e) {
       unawaited(LogHelper.warn('client:MainViewModel._loadChildSidebar(highRisk)', content: '儿童高危因素加载失败：$e'));
+      return null;
+    }
+  }
+
+  /// 载入儿童检查记录汇总；失败记日志并返回 null（界面显示失败态）。
+  Future<List<ChildCheckRecord>?> _tryCheckRecords(ChildService service, String childId) async {
+    try {
+      return await service.checkRecords(childId);
+    } catch (e) {
+      unawaited(LogHelper.warn('client:MainViewModel._loadChildSidebar(checkRecord)', content: '儿童检查记录加载失败：$e'));
       return null;
     }
   }

@@ -190,6 +190,14 @@ class ChildService {
     return list.whereType<Map<String, dynamic>>().map(ChildHighRiskFactor.fromJson).toList();
   }
 
+  /// 查询儿童检查记录汇总（CHILD_CHECK_RECORD，按检查日期/ID 倒序），
+  /// 无记录返回空列表。
+  Future<List<ChildCheckRecord>> checkRecords(String childId) async {
+    final data = await _base.post('/api/child/checkRecordQuery', {'childId': childId});
+    final list = data['records'] as List<dynamic>? ?? const [];
+    return list.whereType<Map<String, dynamic>>().map(ChildCheckRecord.fromJson).toList();
+  }
+
   /// 移除儿童当天全部拍照记录，返回 (移除条数, 移除后的最近记录——null
   /// 表示已无任何记录，界面恢复空白占位)。
   Future<(int, ChildPhoto?)> removeTodayPhotos(String childId) async {

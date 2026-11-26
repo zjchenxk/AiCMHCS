@@ -823,6 +823,28 @@ class ChildService {
     return result.rowsAsMaps.map(_highRiskFactorFromRow).toList(growable: false);
   }
 
+  // ---------------- 儿童检查记录（CHILD_CHECK_RECORD） ----------------
+
+  /// 查询儿童检查记录汇总（初筛等来源联动写入），按检查日期/ID 倒序。
+  ///param childId: 儿童 ID
+  ///param hospId: 登录用户所属医院 ID（为空返回空列表）
+  ///returns: 检查记录列表（CHECK_DATE/CHECK_TYPE/CHECK_RESULT 等）
+  Future<List<ChildCheckRecord>> listCheckRecords(String childId, String hospId) async {
+    final scope = hospId.trim();
+    if (scope.isEmpty) {
+      return const [];
+    }
+    final result = await _db.query(
+      'SELECT ID, CHILD_ID, CHECK_DATE, AGE_YEAR, AGE_MONTH, AGE_DAY, '
+      'CHECK_TYPE, CHECK_FINDINGS, CHECK_RESULT, DATA_SRC_NAME, DATA_SRC_ID, '
+      'CREATOR_ID, CREATOR_NAME, DEPT_ID, DEPT_NAME, CAMPUS_ID, CAMPUS_NAME, '
+      'HOSP_ID, HOSP_NAME, CREATE_TIME, UPDATE_TIME FROM CHILD_CHECK_RECORD '
+      'WHERE CHILD_ID = ? AND HOSP_ID = ? ORDER BY CHECK_DATE DESC, ID DESC',
+      [childId, scope],
+    );
+    return result.rowsAsMaps.map(_checkRecordFromRow).toList(growable: false);
+  }
+
   /// 覆盖保存儿童勾选的高危因素集合（先删后插；随档案【保存】一并调用）。
   ///
   /// factorIds **先全量校验**高危因素字典行存在且属本院（跨院/缺失一律
@@ -950,6 +972,31 @@ class ChildService {
     riskLevel: row['RISK_LEVEL'],
     riskScore: row['RISK_SCORE'],
     remark: row['REMARK'],
+    creatorId: row['CREATOR_ID'] ?? '',
+    creatorName: row['CREATOR_NAME'] ?? '',
+    deptId: row['DEPT_ID'],
+    deptName: row['DEPT_NAME'],
+    campusId: row['CAMPUS_ID'],
+    campusName: row['CAMPUS_NAME'],
+    hospId: row['HOSP_ID'] ?? '',
+    hospName: row['HOSP_NAME'] ?? '',
+    createTime: row['CREATE_TIME'],
+    updateTime: row['UPDATE_TIME'],
+  );
+
+  /// 从数据库行解析儿童检查记录。
+  ChildCheckRecord _checkRecordFromRow(Map<String, String?> row) => ChildCheckRecord(
+    id: row['ID'],
+    childId: row['CHILD_ID'] ?? '',
+    checkDate: row['CHECK_DATE'] ?? '',
+    ageYear: row['AGE_YEAR'] ?? '',
+    ageMonth: row['AGE_MONTH'] ?? '',
+    ageDay: row['AGE_DAY'] ?? '',
+    checkType: row['CHECK_TYPE'] ?? '',
+    checkFindings: row['CHECK_FINDINGS'],
+    checkResult: row['CHECK_RESULT'],
+    dataSrcName: row['DATA_SRC_NAME'],
+    dataSrcId: row['DATA_SRC_ID'],
     creatorId: row['CREATOR_ID'] ?? '',
     creatorName: row['CREATOR_NAME'] ?? '',
     deptId: row['DEPT_ID'],

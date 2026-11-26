@@ -375,7 +375,7 @@ class _ChildAdvancedSearchDialogState extends State<_ChildAdvancedSearchDialog> 
           ),
           child: Text(
             hasSelection ? _selectedFactorSummary : '请选择高危因素（可多选，留空不过滤）',
-            style: theme.textTheme.bodyMedium?.copyWith(color: hasSelection ? theme.colorScheme.onSurface : theme.colorScheme.onSurface.withValues(alpha: 0.45)),
+            style: theme.textTheme.bodyMedium,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),

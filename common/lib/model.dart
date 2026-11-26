@@ -10,6 +10,7 @@ export 'models/basic/city.dart';
 export 'models/basic/county.dart';
 export 'models/basic/town.dart';
 export 'models/basic/village.dart';
+export 'models/child/child_check_record.dart';
 export 'models/child/child_ext_info.dart';
 export 'models/child/child_guardian_info.dart';
 export 'models/child/child_info.dart';
