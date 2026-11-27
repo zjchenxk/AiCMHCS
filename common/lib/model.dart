@@ -19,6 +19,7 @@ export 'models/child/child_photo.dart';
 export 'models/system/campus.dart';
 export 'models/system/department.dart';
 export 'models/system/dict.dart';
+export 'models/system/guidance_template.dart';
 export 'models/system/high_risk_factor.dart';
 export 'models/system/high_risk_factor_exclusion.dart';
 export 'models/system/holiday.dart';

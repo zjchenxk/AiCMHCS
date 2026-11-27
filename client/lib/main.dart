@@ -10,6 +10,7 @@ import 'package:client/services/campus_service.dart';
 import 'package:client/services/child_service.dart';
 import 'package:client/services/department_service.dart';
 import 'package:client/services/dict_service.dart';
+import 'package:client/services/guidance_template_service.dart';
 import 'package:client/services/high_risk_factor_exclusion_service.dart';
 import 'package:client/services/high_risk_factor_service.dart';
 import 'package:client/services/holiday_service.dart';
@@ -34,6 +35,7 @@ import 'package:client/view_models/system/dict_management_view_model.dart';
 import 'package:client/view_models/system/high_risk_factor_exclusion_management_view_model.dart';
 import 'package:client/view_models/system/high_risk_factor_management_view_model.dart';
 import 'package:client/view_models/system/holiday_management_view_model.dart';
+import 'package:client/view_models/system/guidance_template_management_view_model.dart';
 import 'package:client/view_models/system/hospital_management_view_model.dart';
 import 'package:client/view_models/system/menu_management_view_model.dart';
 import 'package:client/view_models/system/role_management_view_model.dart';
@@ -74,6 +76,7 @@ void setupServiceLocator() {
   getIt.registerLazySingleton<HighRiskFactorService>(() => HighRiskFactorService());
   getIt.registerLazySingleton<HighRiskFactorExclusionService>(() => HighRiskFactorExclusionService());
   getIt.registerLazySingleton<HolidayService>(() => HolidayService());
+  getIt.registerLazySingleton<GuidanceTemplateService>(() => GuidanceTemplateService());
   getIt.registerLazySingleton<ChildService>(() => ChildService());
   getIt.registerLazySingleton<InitialScreeningService>(() => InitialScreeningService());
   getIt.registerLazySingleton<MenuService>(() => MenuService());
@@ -128,6 +131,7 @@ void main() async {
         ChangeNotifierProvider(create: (context) => HighRiskFactorManagementViewModel()),
         ChangeNotifierProvider(create: (context) => HighRiskFactorExclusionManagementViewModel()),
         ChangeNotifierProvider(create: (context) => HolidayManagementViewModel()),
+        ChangeNotifierProvider(create: (context) => GuidanceTemplateManagementViewModel()),
         ChangeNotifierProvider(create: (context) => MenuManagementViewModel()),
         ChangeNotifierProvider(create: (context) => RoleManagementViewModel()),
         ChangeNotifierProvider(create: (context) => UserManagementViewModel()),

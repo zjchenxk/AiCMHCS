@@ -33,7 +33,7 @@ void main() {
 
   test('空库全量迁移：建表并记录版本', () async {
     final applied = await SchemaMigrator(db, fieldCipher: cipher).migrate();
-    expect(applied.map((m) => m.version), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]);
+    expect(applied.map((m) => m.version), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]);
 
     final tables = await tableNames();
     expect(
@@ -55,6 +55,8 @@ void main() {
         'BASE_HIGH_RISK_FACTOR',
         'BASE_HIGH_RISK_FACTOR_EXCLUSION',
         'BASE_HOLIDAY',
+        'BASE_GUIDANCE_TEMPLATE',
+        'BASE_GUIDANCE_TEMPLATE_ITEM',
       ]),
     );
 
@@ -93,6 +95,7 @@ void main() {
       ['29', contains('指导建议自定义模板')],
       ['30', contains('CHILD_REFERRAL 列重命名')],
       ['31', contains('CHILD_APPOINTMENT')],
+      ['32', contains('指导建议模板')],
     ]);
 
     // 新建库 v20 建表已含 REMARK，v22 条件补列应幂等跳过（列仍在且仅一列）

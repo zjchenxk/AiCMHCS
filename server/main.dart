@@ -13,6 +13,7 @@ import 'package:server/services/campus_service.dart';
 import 'package:server/services/child_service.dart';
 import 'package:server/services/department_service.dart';
 import 'package:server/services/dict_service.dart';
+import 'package:server/services/guidance_template_service.dart';
 import 'package:server/services/high_risk_factor_exclusion_service.dart';
 import 'package:server/services/high_risk_factor_service.dart';
 import 'package:server/services/holiday_service.dart';
@@ -50,6 +51,7 @@ Future<HttpServer> run(Handler handler, InternetAddress ip, int port) async {
   final highRiskFactors = HighRiskFactorService(db);
   final highRiskFactorExclusions = HighRiskFactorExclusionService(db);
   final holidays = HolidayService(db);
+  final guidanceTemplates = GuidanceTemplateService(db);
   final children = ChildService(db, cipher);
   final initialScreenings = InitialScreeningService(db);
   final screeningGuidances = InitialScreeningGuidanceService(db);
@@ -74,6 +76,7 @@ Future<HttpServer> run(Handler handler, InternetAddress ip, int port) async {
       .use(provider<HighRiskFactorService>((_) => highRiskFactors))
       .use(provider<HighRiskFactorExclusionService>((_) => highRiskFactorExclusions))
       .use(provider<HolidayService>((_) => holidays))
+      .use(provider<GuidanceTemplateService>((_) => guidanceTemplates))
       .use(provider<ChildService>((_) => children))
       .use(provider<InitialScreeningService>((_) => initialScreenings))
       .use(provider<InitialScreeningGuidanceService>((_) => screeningGuidances))

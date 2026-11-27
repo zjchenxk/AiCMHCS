@@ -6,6 +6,7 @@ import 'package:client/views/system/admin_division_management_page.dart';
 import 'package:client/views/system/campus_management_page.dart';
 import 'package:client/views/system/department_management_page.dart';
 import 'package:client/views/system/dictionary_management_page.dart';
+import 'package:client/views/system/guidance_template_management_page.dart';
 import 'package:common/model.dart';
 import 'package:client/views/home/home_page.dart';
 import 'package:client/views/system/hospital_management_page.dart';
@@ -38,6 +39,7 @@ Map<String, MenuPageBuilder> menuRoutes = {
   '/system/highRiskFactor': _buildPage(HighRiskFactorManagementPage.new),
   '/system/highRiskFactorExclusion': _buildPage(HighRiskFactorExclusionManagementPage.new),
   '/system/holiday': _buildPage(HolidayManagementPage.new),
+  '/system/guidance': _buildPage(GuidanceTemplateManagementPage.new),
   '/system/menu': _buildPage(MenuManagementPage.new),
   '/system/role': _buildPage(RoleManagementPage.new),
   '/system/user': _buildPage(UserManagementPage.new),
