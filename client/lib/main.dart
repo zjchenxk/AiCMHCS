@@ -57,6 +57,9 @@ late LoginUser? loginUser;
 ///注册服务
 final getIt = GetIt.instance;
 
+///全局导航 Key（打印等需要在 Overlay 挂载屏外内容的场景取根上下文）
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 void setupServiceLocator() {
   getIt.registerLazySingleton<BaseService>(() => BaseService());
   getIt.registerLazySingleton<AuthService>(() => AuthService());
@@ -201,6 +204,7 @@ class MyApp extends StatelessWidget {
     return Consumer<ThemeProvider>(
       builder: (context, themeProvider, child) {
         return MaterialApp(
+          navigatorKey: navigatorKey,
           // 全局中文本地化：日期选择器等 Material 组件按中文显示
           // （2026年11月、取消/确定等），系统界面语言固定中文；
           // delegates 为 material_ui 重导出的 Material+Widgets+Cupertino

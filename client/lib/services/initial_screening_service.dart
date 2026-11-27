@@ -49,6 +49,14 @@ class InitialScreeningService {
     await _base.post('/api/initialScreening/delete', {'id': id});
   }
 
+  /// 批量查询检查医生手写签名图（打印初筛记录表/转诊单用），返回
+  /// {doctorId: base64}（无签名/不存在的医生不含在映射内）。
+  Future<Map<String, String>> doctorSignatures(List<String> doctorIds) async {
+    final data = await _base.post('/api/initialScreening/doctorSignatures', {'doctorIds': doctorIds});
+    final map = data['signatures'] as Map<String, dynamic>? ?? const {};
+    return {for (final e in map.entries) e.key: e.value as String};
+  }
+
   /// 查询本院可见的指导建议模板（公共模板 + 本人个人模板，新建在前）。
   Future<List<GuidanceTemplate>> guidanceTemplates() async {
     final data = await _base.post('/api/initialScreening/guidanceQuery', const {});

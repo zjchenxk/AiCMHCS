@@ -70,6 +70,7 @@ Response onRequest(RequestContext context) {
           {'method': 'POST', 'path': '/api/initialScreening/guidanceUpdate', 'desc': '修改指导建议模板（仅限创建人本人）'},
           {'method': 'POST', 'path': '/api/initialScreening/guidanceDelete', 'desc': '删除指导建议模板（仅限创建人本人）'},
           {'method': 'POST', 'path': '/api/initialScreening/aiGuidance', 'desc': '按年龄段与初筛发现调用 DeepSeek 生成健康宣教与干预指导（200 字内；API Key 仅服务端持有）'},
+          {'method': 'POST', 'path': '/api/initialScreening/doctorSignatures', 'desc': '批量查询检查医生手写签名图（doctorIds；返回 {doctorId: base64}，供初筛记录表/转诊单打印）'},
           {'method': 'GET', 'path': '/api/time', 'desc': '全局时间服务（返回服务器当前时间，供客户端时钟校准，登录前明文可用）'},
           {'method': 'GET', 'path': '/health', 'desc': '健康检查（含数据库探活）'},
         ],

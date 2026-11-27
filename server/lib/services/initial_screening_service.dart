@@ -126,6 +126,27 @@ class InitialScreeningService {
     return result.rowsAsMaps.map(_itemFromRow).toList(growable: false);
   }
 
+  /// 批量查询检查医生手写签名图（打印初筛记录表/转诊单用）：按 ID 列表
+  /// 查本院 DOCTOR 的 SIGNATURE_IMAGE（base64，可为 null），返回
+  /// {doctorId: base64} 映射（无签名/不存在的医生不含在映射内）。
+  Future<Map<String, String>> listDoctorSignatures(List<String> doctorIds, String hospId) async {
+    final scope = hospId.trim();
+    final ids = doctorIds.map((e) => e.trim()).where((e) => e.isNotEmpty).toSet().toList();
+    if (scope.isEmpty || ids.isEmpty) {
+      return const {};
+    }
+    final placeholders = List.filled(ids.length, '?').join(', ');
+    final result = await _db.query(
+      'SELECT ID, SIGNATURE_IMAGE FROM SYS_USER '
+      "WHERE ID IN ($placeholders) AND HOSP_ID = ? AND USER_TYPE = 'DOCTOR'",
+      [...ids, scope],
+    );
+    return {
+      for (final row in result.rowsAsMaps)
+        if (row['SIGNATURE_IMAGE'] != null) row['ID'] ?? '': row['SIGNATURE_IMAGE']!,
+    };
+  }
+
   /// 查询指定科室的检查医生候选（同科室、USER_TYPE=DOCTOR、未停用的
   /// 用户，按登录账号排序；deptId 为空返回空列表）。
   Future<List<DoctorOption>> listDoctors(String deptId) async {

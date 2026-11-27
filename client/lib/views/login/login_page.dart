@@ -67,10 +67,7 @@ class _LoginPageState extends State<LoginPage> {
                       //卡片圆角
                       borderRadius: BorderRadius.circular(24.0), //
                       child: BackdropFilter(
-                        filter: ImageFilter.blur(
-                          sigmaX: 15,
-                          sigmaY: 15,
-                        ), //毛玻璃效果
+                        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15), //毛玻璃效果
                         child: Container(
                           width: 500,
                           padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 50),

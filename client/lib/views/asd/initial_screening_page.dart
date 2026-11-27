@@ -3,9 +3,13 @@ import 'package:client/models/current_child.dart';
 import 'package:client/services/holiday_service.dart';
 import 'package:client/services/initial_screening_service.dart';
 import 'package:client/utils/asd_check_flow.dart';
+import 'package:client/services/child_service.dart';
+import 'package:client/utils/asd_print_html.dart';
+import 'package:client/utils/asd_printing.dart';
 import 'package:client/utils/dict_options.dart';
 import 'package:client/utils/log_helper.dart';
 import 'package:client/utils/next_check_date.dart';
+import 'package:client/utils/web_print.dart';
 import 'package:client/view_models/asd/initial_screening_view_model.dart';
 import 'package:client/view_models/main/main_view_model.dart';
 import 'package:client/views/base/base_page.dart';
@@ -769,9 +773,8 @@ class _MonthFormPageState extends State<_MonthFormPage> with AutomaticKeepAliveC
     }
   }
 
-  /// 打印菜单（锚定按钮弹出，两项为占位）。
+  /// 打印菜单（锚定按钮弹出，两项）：打印初筛记录表 / 打印转诊单。
   Future<void> _showPrintMenu(BuildContext buttonContext) async {
-    final theme = Theme.of(context);
     final box = buttonContext.findRenderObject() as RenderBox?;
     final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
     if (box == null || overlay == null) return;
@@ -788,19 +791,67 @@ class _MonthFormPageState extends State<_MonthFormPage> with AutomaticKeepAliveC
       ],
     );
     if (selected == null || !mounted) return;
-    ScaffoldMessenger.of(context)
-      ..removeCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            '${selected == 'record' ? '打印初筛记录表' : '打印转诊单'}功能开发中，敬请期待',
-            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimary),
+    final theme = Theme.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    void toast(String message, {bool error = false}) {
+      messenger
+        ..removeCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(message, style: theme.textTheme.bodyMedium?.copyWith(color: error ? theme.colorScheme.onError : theme.colorScheme.onPrimary)),
+            backgroundColor: error ? theme.colorScheme.error : theme.colorScheme.primary,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
           ),
-          backgroundColor: theme.colorScheme.primary,
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
-        ),
+        );
+    }
+
+    final record = widget.viewModel.recordOf(widget.month);
+    // 需求 3.1 / 4.1：当前时段必须已录入且保存成功才能打印
+    if (record == null) {
+      toast('未录入初筛信息', error: true);
+      return;
+    }
+    // 需求 4.1：只有存在转诊时才能打印转诊单
+    if (selected == 'referral' && record.hasReferral != '1') {
+      toast('当前儿童无需转诊', error: true);
+      return;
+    }
+    try {
+      toast('正在准备打印数据…');
+      final bundle = await AsdPrinting.loadBundle(
+        childId: record.childId,
+        screeningService: _screeningService,
+        childService: getIt<ChildService>(),
       );
+      if (!mounted) return;
+      if (selected == 'record') {
+        await printHtml(
+          AsdPrintHtml.buildRecordSheetHtml(bundle: bundle, months: _monthsFor(widget.month), tableNo: widget.month <= 12 ? 2 : (widget.month <= 36 ? 3 : 4), stageTitle: _stageTitleFor(widget.month)),
+        );
+      } else {
+        await printHtml(AsdPrintHtml.buildReferralNoteHtml(bundle: bundle));
+      }
+    } catch (e, st) {
+      LogHelper.error('client:InitialScreeningPage._showPrintMenu', e, st);
+      if (!mounted) return;
+      toast('打印失败：${e.toString().replaceFirst(RegExp(r'^\w*(Exception|Error):\s*'), '')}', error: true);
+    }
+  }
+
+  /// 月龄所属组的月龄列表（婴儿期 [3,6,8,12] / 幼儿期 [18,24,30,36] /
+  /// 学龄前期 [48,60,72]，需求 3.2~3.4）。
+  List<int> _monthsFor(int month) {
+    if (month <= 12) return const [3, 6, 8, 12];
+    if (month <= 36) return const [18, 24, 30, 36];
+    return const [48, 60, 72];
+  }
+
+  /// 月龄所属组的阶段标题。
+  String _stageTitleFor(int month) {
+    if (month <= 12) return '婴儿期（0～1岁）';
+    if (month <= 36) return '幼儿期（1～3岁）';
+    return '学龄前期（4～6岁）';
   }
 
   String? _dictIdOf(List<DictItem>? items, String value) {
@@ -974,7 +1025,9 @@ class _MonthFormPageState extends State<_MonthFormPage> with AutomaticKeepAliveC
   Widget _buildHeader(ThemeData theme, InitialScreeningViewModel vm, InitialScreening? record) {
     final browsing = _mode == _FormMode.browse;
     final editing = _mode != _FormMode.browse;
-    final createReady = vm.canCreate && browsing && vm.hasChild && !vm.busy;
+    // 需求：一个年龄段只能新增一次——已有记录（浏览态）时新增灰化，
+    // 需重新录入须先【删除】该时段记录
+    final createReady = vm.canCreate && browsing && record == null && vm.hasChild && !vm.busy;
     final updateReady = vm.canUpdate && browsing && record != null && !vm.busy;
     final saveReady = vm.canSave && editing && vm.hasChild && !vm.busy;
     final deleteReady = vm.canDelete && browsing && record != null && !vm.busy;
@@ -1001,7 +1054,7 @@ class _MonthFormPageState extends State<_MonthFormPage> with AutomaticKeepAliveC
           icon: Icons.add_outlined,
           label: '新增',
           enabled: createReady,
-          tip: vm.canCreate ? '新增初筛记录' : '无新增操作权限',
+          tip: !vm.canCreate ? '无新增操作权限' : (record != null ? '该时段已录入初筛记录，须删除后方可重新新增' : '新增初筛记录'),
           onPressed: _startAdd,
         ),
         actionButton(
