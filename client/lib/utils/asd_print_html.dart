@@ -25,13 +25,14 @@ class AsdPrintHtml {
   /// HTML 转义（儿童姓名/保健号等用户数据防注入）。
   static String _esc(String value) => HtmlEscape().convert(value);
 
-  /// 打印页公共样式：A4 纵向、宋体/雅黑矢量文本、黑边框。
+  /// 打印页公共样式：A4 纵向、宋体/雅黑矢量文本、黑边框。表格经
+  /// `.fill` 撑到固定高（Chromium 把多余高度按行分摊），使整表充满 A4。
   static const String _commonStyle = '''
-  @page { size: A4 portrait; margin: 8mm 10mm; }
+  @page { size: A4 portrait; margin: 10mm; }
   * { box-sizing: border-box; }
   body { font-family: SimSun, "Microsoft YaHei", serif; font-size: 10.5pt;
          color: #000; margin: 0; }
-  h1, h2 { text-align: center; margin: 0 0 2mm 0; font-weight: bold; }
+  h1, h2 { text-align: center; margin: 0 0 3mm 0; font-weight: bold; }
   h1 { font-size: 14pt; }
   h2 { font-size: 12pt; }
   .sheet { width: 100%; }
@@ -40,14 +41,19 @@ class AsdPrintHtml {
                 text-align: center; font-size: 8pt; line-height: 4.6mm; }
   .u { display: inline-block; border-bottom: 1px solid #000;
        text-align: center; font-weight: bold; }
-  .row { margin: 2mm 0; }
-  table { width: 100%; border-collapse: collapse; }
-  td, th { border: 1px solid #000; padding: 1.2mm 1.6mm; vertical-align: top;
-           font-size: 9pt; text-align: left; }
-  th { text-align: center; font-size: 10pt; font-weight: bold; }
-  .opt { display: block; padding: 0.4mm 0; }
-  .opt .mark { display: inline-block; width: 6mm; }
-  .note { font-size: 8.5pt; margin-top: 2mm; }
+  .row { margin: 3mm 0; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  /* 外框 3px：表格右缘落在小数像素位置（内容宽 190mm≈718.11px），1px
+     细线会被拆分抗锯齿成淡发丝线；加粗后拆分仍有实心深色核心，同时
+     「粗外框 + 细内格」也更贴近国标样表的原有风格。 */
+  table.fill { height: 222mm; border: 3px solid #000; }
+  td, th { border: 1px solid #000; padding: 2mm 1.6mm; vertical-align: top;
+           font-size: 10.5pt; text-align: left; }
+  th { text-align: center; font-size: 12pt; font-weight: bold; height: 9mm; }
+  .lbl { text-align: center; vertical-align: middle; }
+  .opt { display: block; position: relative; padding: 1mm 0 1mm 6mm; }
+  .opt .mark { position: absolute; left: 0; top: 1.3mm; width: 6mm; }
+  .note { font-size: 8.5pt; margin-top: 3mm; line-height: 1.6; }
   .divider { border-top: 1px dashed #000; margin: 5mm 0; }
   .bold { font-weight: bold; }
 ''';
@@ -85,8 +91,9 @@ $body
   static String _optPlain(String label, bool checked) => _opt('', label, checked, withOrder: false);
 
   /// 下划线字段：标签 + 值（下划线上方居中加粗，与原件手写感一致）。
-  static String _uField(String label, String value, String width) {
-    return '<span style="margin-right:3mm">$label　<span class="u" '
+  static String _uField(String label, String value, String width, {bool bold = false}) {
+    final labelHtml = bold ? '<b>$label</b>' : label;
+    return '<span style="margin-right:3mm">$labelHtml　<span class="u" '
         'style="min-width:$width">$value</span></span>';
   }
 
@@ -95,22 +102,25 @@ $body
     return '<span class="u" style="min-width:$width">$value</span>';
   }
 
-  /// 编号行（17 格：HEALTH_NO 逐字符分格，空则空框）。
-  static String _noRow(String label, String healthNo) {
+  /// 编号行（17 格：HEALTH_NO 逐字符分格，空则空框；center 为真时整行
+  /// 居中——初筛记录表表头两行按国家样表居中排布）。
+  static String _noRow(String label, String healthNo, {bool center = false}) {
     final cells = StringBuffer();
     for (var i = 0; i < 17; i++) {
       final ch = i < healthNo.length ? _esc(healthNo[i]) : '';
       cells.write('<span>$ch</span>');
     }
-    return '<div class="row">$label　<span class="boxes">$cells</span></div>';
+    return '<div class="row"${center ? ' style="text-align:center"' : ''}>'
+        '<b>$label</b>　<span class="boxes">$cells</span></div>';
   }
 
-  /// 检查/填写日期：___年___月___日。
+  /// 检查/填写日期：___年___月___日（数字与年月日间不留空格、下划线按
+  /// 表格列宽收敛，保证单行不换行）。
   static String _dateLine(String? date) {
     final d = DateTime.tryParse(date ?? '');
-    return '${_uText(d == null ? '' : '${d.year}', '12mm')} 年 '
-        '${_uText(d == null ? '' : '${d.month}', '8mm')} 月 '
-        '${_uText(d == null ? '' : '${d.day}', '8mm')} 日';
+    return '${_uText(d == null ? '' : '${d.year}', '10mm')}年'
+        '${_uText(d == null ? '' : '${d.month}', '6mm')}月'
+        '${_uText(d == null ? '' : '${d.day}', '6mm')}日';
   }
 
   /// ===== 初筛记录表（表 2/3/4） =====
@@ -125,12 +135,10 @@ $body
 
   /// 初筛记录表打印 HTML。
   ///param months: 本表覆盖的月龄组（[3,6,8,12] / [18,24,30,36] / [48,60,72]）
-  ///param tableNo: 表号（2/3/4）
   ///param stageTitle: 阶段标题（婴儿期（0～1岁）等）
   static String buildRecordSheetHtml({
     required PrintBundle bundle,
     required List<int> months,
-    required int tableNo,
     required String stageTitle,
   }) {
     final child = bundle.child;
@@ -144,7 +152,7 @@ $body
       final value = bundle.recordOf(m)?.checkResult ?? '';
       return '<td>${_opt('1', '未见异常', value == '未见异常')}${_opt('2', '异常', value == '异常')}</td>';
     }).join();
-    final referralCells = months.map((m) => _referralBlock(bundle, m)).join();
+    final referralCells = months.map((m) => '<td>${_referralBlock(bundle, m)}</td>').join();
     final dateCells = months.map((m) {
       final date = bundle.recordOf(m)?.checkDate ?? '';
       return '<td>${_dateLine(date)}</td>';
@@ -153,7 +161,7 @@ $body
       final r = bundle.recordOf(m);
       final sig = r == null ? null : bundle.doctorSignatures[r.doctorId];
       final sigImg = (sig == null || sig.isEmpty) ? '' : '<img src="data:image/jpeg;base64,$sig" style="height:10mm;vertical-align:middle;margin-left:2mm">';
-      return '<td>${r == null ? '' : '${_esc(r.doctorName)}$sigImg'}</td>';
+      return '<td style="height:12mm">${r == null ? '' : '${_esc(r.doctorName)}$sigImg'}</td>';
     }).join();
     final hospitalCells = months.map((m) {
       final r = bundle.recordOf(m);
@@ -162,27 +170,28 @@ $body
 
     return _wrap('''
 <div class="sheet">
-  <h1>表$tableNo　0～6岁儿童心理行为发育初筛记录表</h1>
+  <h1>0～6岁儿童心理行为发育初筛记录表</h1>
   <h2>$stageTitle</h2>
-  ${_noRow('编号', child.healthNo ?? '')}
-  <div class="row">
-    ${_uField('儿童姓名', _esc(child.name), '32mm')}
-    ${_uField('性别', _sexLabel(child.sex), '20mm')}
-    <span style="margin-left:6mm">出生日期　${_uText(birth == null ? '' : '${birth.year}', '14mm')} 年 ${_uText(birth == null ? '' : '${birth.month}', '8mm')} 月 ${_uText(birth == null ? '' : '${birth.day}', '8mm')} 日</span>
+  ${_noRow('编号', child.healthNo ?? '', center: true)}
+  <div class="row" style="text-align:center">
+    ${_uField('儿童姓名', _esc(child.name), '30mm', bold: true)}
+    ${_uField('性别', _sexLabel(child.sex), '18mm', bold: true)}
+    <span><b>出生日期</b>　${_uText(birth == null ? '' : '${birth.year}', '12mm')} 年 ${_uText(birth == null ? '' : '${birth.month}', '8mm')} 月 ${_uText(birth == null ? '' : '${birth.day}', '8mm')} 日</span>
   </div>
-  <table>
-    <colgroup><col style="width:24mm">${months.map((_) => '<col>').join()}</colgroup>
-    <tr><th>项目</th>$headers</tr>
+  <table class="fill">
+    <colgroup><col style="width:8mm"><col style="width:17mm">${months.map((_) => '<col>').join()}</colgroup>
+    <tr><th colspan="2">项目</th>$headers</tr>
     <tr>
-      <td style="text-align:center;vertical-align:middle"><b>心理<br>行为<br>发育<br>初筛</b></td>
+      <td rowspan="2" style="text-align:center;vertical-align:middle"><b>心<br>理<br>行<br>为<br>发<br>育<br>初<br>筛</b></td>
+      <td class="lbl"><b>预警征象筛查</b></td>
       $warningCells
     </tr>
-    <tr><td></td>$languageCells</tr>
-    <tr><td><b>初筛结果</b></td>$resultCells</tr>
-    <tr><td><b>转诊建议</b></td>$referralCells</tr>
-    <tr><td><b>检查日期</b></td>$dateCells</tr>
-    <tr><td><b>医生签名</b></td>$signatureCells</tr>
-    <tr><td><b>医疗机构名称</b></td>$hospitalCells</tr>
+    <tr><td class="lbl"><b>语言功能和社会交往能力询问</b></td>$languageCells</tr>
+    <tr><td colspan="2" class="lbl"><b>初筛结果</b></td>$resultCells</tr>
+    <tr><td colspan="2" class="lbl"><b>转诊建议</b></td>$referralCells</tr>
+    <tr><td colspan="2" class="lbl"><b>检查日期</b></td>$dateCells</tr>
+    <tr><td colspan="2" class="lbl"><b>医生签名</b></td>$signatureCells</tr>
+    <tr><td colspan="2" class="lbl"><b>医疗机构<br>名称</b></td>$hospitalCells</tr>
   </table>
   <div class="note">注：心理行为发育初筛“预警征象筛查”、“语言功能和社会交往能力询问”、“初筛结果”以及“转诊建议”部分，检查时发现相应情况在“□”内打“√”。检查日期介于两个月龄段之间的按最近的小月龄内容进行测查和记录。</div>
 </div>''');
@@ -211,13 +220,19 @@ $body
     ].join();
   }
 
-  /// 转诊建议块（需求 3.13）：无 / 有（勾选 + 机构名下划线）。
+  /// 转诊建议块（需求 3.13）：无 / 有 + 机构名下划线（下划线为样表常显
+  /// 栏——未转诊时留空待手写；协议中无转诊时 referralHospName 存「无」，
+  /// 不回显到下划线上）。未录入的时段整栏留空，不勾选任何项。
   static String _referralBlock(PrintBundle bundle, int month) {
     final record = bundle.recordOf(month);
-    final has = record?.hasReferral == '1';
-    final hosp = record?.referralHospName ?? '';
+    if (record == null) {
+      return '${_opt('1', '无', false)}${_opt('2', '有，上转接诊医疗机构名称', false)}'
+          '<div style="margin:2mm 0 0 6mm">${_uText('', '30mm')}</div>';
+    }
+    final has = record.hasReferral == '1';
+    final hosp = has ? record.referralHospName : '';
     return '${_opt('1', '无', !has)}${_opt('2', '有，上转接诊医疗机构名称', has)}'
-        '${has ? '<div style="margin:1mm 0 0 10mm">${_uText(_esc(hosp), '40mm')}</div>' : ''}';
+        '<div style="margin:2mm 0 0 6mm">${_uText(_esc(hosp), '30mm')}</div>';
   }
 
   /// ===== 初筛转诊单（附件 3，上下两联） =====

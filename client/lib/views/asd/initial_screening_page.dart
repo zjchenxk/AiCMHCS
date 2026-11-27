@@ -828,7 +828,7 @@ class _MonthFormPageState extends State<_MonthFormPage> with AutomaticKeepAliveC
       if (!mounted) return;
       if (selected == 'record') {
         await printHtml(
-          AsdPrintHtml.buildRecordSheetHtml(bundle: bundle, months: _monthsFor(widget.month), tableNo: widget.month <= 12 ? 2 : (widget.month <= 36 ? 3 : 4), stageTitle: _stageTitleFor(widget.month)),
+          AsdPrintHtml.buildRecordSheetHtml(bundle: bundle, months: _monthsFor(widget.month), stageTitle: _stageTitleFor(widget.month)),
         );
       } else {
         await printHtml(AsdPrintHtml.buildReferralNoteHtml(bundle: bundle));
