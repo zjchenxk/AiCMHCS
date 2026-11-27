@@ -302,6 +302,30 @@ class _MonthFormPageState extends State<_MonthFormPage> with AutomaticKeepAliveC
 
   String? _hydratedKey;
 
+  /// 上次所见儿童展示签名（出生日期 + 孕周/孕天）：外部修改档案（如儿童
+  /// 建档页改出生日期保存）后 VM 快照刷新，据此重算实足/纠正年龄等派生
+  /// 显示字段。
+  String? _childDisplaySignature;
+
+  String _childDisplaySignatureOf() {
+    final child = widget.viewModel.child;
+    return '${child?.id ?? ''}|${child?.birthDate.millisecondsSinceEpoch}|${widget.viewModel.extSignature ?? ''}';
+  }
+
+  /// 儿童出生日期/孕产数据被外部修改后重算派生显示：实足/纠正年龄为
+  /// 只读派生字段直接刷新；新增态下次检查日期按出生日期推导、一并重算；
+  /// 不改三态与已录入内容（修改态半程编辑保留）。
+  void _refreshIfChildDisplayChanged() {
+    final signature = _childDisplaySignatureOf();
+    if (signature == _childDisplaySignature) return;
+    _childDisplaySignature = signature;
+    if (_mode == _FormMode.add) {
+      _recomputeNextCheckDate();
+    }
+    _refreshDisplayFields();
+    setState(() {});
+  }
+
   DateTime? _checkDate;
   DateTime? _nextCheckDate;
 
@@ -330,6 +354,7 @@ class _MonthFormPageState extends State<_MonthFormPage> with AutomaticKeepAliveC
     _loadDictItems();
     _loadHolidays();
     _hydrate(force: true);
+    _childDisplaySignature = _childDisplaySignatureOf();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) widget.viewModel.ensureScaleItems(widget.month);
     });
@@ -387,6 +412,7 @@ class _MonthFormPageState extends State<_MonthFormPage> with AutomaticKeepAliveC
 
   void _onViewModelChanged() {
     if (!mounted) return;
+    _refreshIfChildDisplayChanged();
     _hydrate(force: false);
     if (_mode != _FormMode.browse && _doctorId == null && widget.viewModel.doctorsLoaded) {
       final fallback = _defaultDoctorId();

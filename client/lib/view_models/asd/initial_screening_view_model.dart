@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:client/main.dart';
 import 'package:client/models/current_child.dart';
 import 'package:client/services/child_service.dart';
@@ -151,6 +153,10 @@ class InitialScreeningViewModel extends ChangeNotifier {
   /// 扩展档案（早产矫正年龄依据：出生孕周/孕天）。
   ChildExtInfo? _ext;
 
+  /// 扩展档案展示签名（孕周/孕天，纠正年龄依据；null 表示未装载）——
+  /// 页面据此感知外部档案修改后重算纠正年龄等派生显示。
+  String? get extSignature => _ext == null ? null : '${_ext!.gestationalWeek ?? ''}|${_ext!.gestationalDay ?? ''}';
+
   /// 装载完成后的静默失败提示（记录/医生加载失败时界面给出可重试提示）。
   bool _loadFailed = false;
 
@@ -158,11 +164,27 @@ class InitialScreeningViewModel extends ChangeNotifier {
   bool get loadFailed => _loadFailed;
 
   /// 同步当前儿童（按 ID 幂等去重；儿童变化即清空状态并重载）。
+  ///
+  /// 同一儿童但档案字段被修改（如儿童建档页改出生日期保存后经
+  /// MainViewModel.setCurrentChild 重新下发，ID 不变）时，快照有变仍需
+  /// 替换——工具栏摘要、实足年龄、自动 TAB 推算均由快照派生；初筛记录
+  /// 与医生候选不随档案字段变化、不重载，孕周/孕天（纠正年龄依据）单独
+  /// 重载扩展档案。
   ///param selected: 主界面顶部搜索选定的儿童（null 表示未选定，清空）
   Future<void> syncChild(CurrentChild? selected) async {
     final nextId = selected?.id ?? '';
     final currentId = _child?.id ?? '';
     if (nextId == currentId) {
+      if (nextId.isEmpty) {
+        return;
+      }
+      final current = _child!;
+      if (current.name == selected!.name && current.gender == selected.gender && current.birthDate == selected.birthDate) {
+        return;
+      }
+      _child = selected;
+      notifyListeners();
+      unawaited(_reloadExt());
       return;
     }
     _child = selected;
@@ -172,6 +194,26 @@ class InitialScreeningViewModel extends ChangeNotifier {
       return;
     }
     await _loadChildData(nextId);
+  }
+
+  /// 重载扩展档案（出生孕周/孕天，早产纠正年龄依据；可在儿童建档页修改）。
+  /// 静默失败——保留旧值，仅影响纠正年龄口径。
+  Future<void> _reloadExt() async {
+    final childId = _child?.id ?? '';
+    if (childId.isEmpty) {
+      return;
+    }
+    try {
+      final ext = await _childService.load(childId).then<ChildExtInfo?>((archive) => archive.$2);
+      // 儿童已切换时丢弃过期响应
+      if (_child?.id != childId) {
+        return;
+      }
+      _ext = ext;
+      notifyListeners();
+    } catch (e, st) {
+      LogHelper.error('client:InitialScreeningViewModel.reloadExt', e, st);
+    }
   }
 
   /// 重载当前儿童整页数据（装载失败的界面重试入口）。
