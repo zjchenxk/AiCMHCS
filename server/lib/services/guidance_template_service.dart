@@ -204,7 +204,9 @@ class GuidanceTemplateService {
 
   // ---------------- 项目：查询 ----------------
 
-  /// 查询指定模板下的全部项目（按创建时间正序，先录入的在前）。
+  /// 查询指定模板下的全部项目（公用查询：按 GUIDANCE_TYPE 类别升序排
+  /// 序、空类别默认排最后——CASE 写法三方言通用，同类别内按创建时间
+  /// 正序；初筛页指导建议选择与管理页项目列表共用）。
   ///
   /// 模板须存在且属本院（跨院模板 ID 按不存在处理）。
   Future<List<BaseGuidanceTemplateItem>> listItemsByTemplate(String templateId, String hospId) async {
@@ -212,7 +214,9 @@ class GuidanceTemplateService {
     final template = await _requireTemplateRow(templateId, scopeHosp);
     final result = await _db.query(
       'SELECT $_itemColumns FROM BASE_GUIDANCE_TEMPLATE_ITEM '
-      'WHERE TEMPLATE_ID = ? AND HOSP_ID = ? ORDER BY CREATE_TIME ASC, ID ASC',
+      'WHERE TEMPLATE_ID = ? AND HOSP_ID = ? '
+      'ORDER BY CASE WHEN GUIDANCE_TYPE IS NULL THEN 1 ELSE 0 END, '
+      'GUIDANCE_TYPE ASC, CREATE_TIME ASC, ID ASC',
       [template['ID'], scopeHosp],
     );
     return result.rowsAsMaps.map(_itemFromRow).toList(growable: false);

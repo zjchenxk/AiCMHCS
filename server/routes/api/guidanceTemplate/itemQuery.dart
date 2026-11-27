@@ -4,9 +4,11 @@ import 'package:server/services/auth_service.dart';
 import 'package:server/services/guidance_template_service.dart';
 
 /// POST /api/guidanceTemplate/itemQuery
-/// 请求体：{templateId, id?}——无 id 返回指定模板下的全部项目（按创
-/// 建时间正序，模板须属本院）；带 id 查项目详情（医院隔离，跨院 ID 按
-/// 不存在处理）。医院从令牌会话推导（不信任客户端上报）。
+/// 请求体：{templateId, id?}——无 id 返回指定模板下的全部项目（公用
+/// 查询：按 GUIDANCE_TYPE 类别升序、空类别排最后，同类别内按创建时
+/// 间正序；初筛页指导建议选择与管理页项目列表共用，模板须属本院）；
+/// 带 id 查项目详情（医院隔离，跨院 ID 按不存在处理）。医院从令牌会
+/// 话推导（不信任客户端上报）。
 Future<Response> onRequest(RequestContext context) async {
   if (context.request.method != HttpMethod.post) {
     return _error(405, 40500, '该接口仅支持 POST 请求');

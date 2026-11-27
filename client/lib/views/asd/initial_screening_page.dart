@@ -570,9 +570,10 @@ class _MonthFormPageState extends State<_MonthFormPage> with AutomaticKeepAliveC
     });
   }
 
-  /// 选择模板：打开模板对话框，选定回填指导建议。
+  /// 选择模板：打开指导建议对话框，选定回填指导建议（数据源为指导
+  /// 建议模板项目表默认模板，对话框内部经 GuidanceTemplateService 查询）。
   Future<void> _pickGuidanceTemplate() async {
-    final picked = await GuidanceTemplateDialog.show(context, service: _screeningService);
+    final picked = await GuidanceTemplateDialog.show(context);
     if (picked == null || !mounted) return;
     setState(() => _guidanceCtrl.text = picked);
   }

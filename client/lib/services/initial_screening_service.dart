@@ -57,44 +57,6 @@ class InitialScreeningService {
     return {for (final e in map.entries) e.key: e.value as String};
   }
 
-  /// 查询本院可见的指导建议模板（公共模板 + 本人个人模板，新建在前）。
-  Future<List<GuidanceTemplate>> guidanceTemplates() async {
-    final data = await _base.post('/api/initialScreening/guidanceQuery', const {});
-    final list = data['templates'] as List<dynamic>? ?? const [];
-    return list.whereType<Map<String, dynamic>>().map(GuidanceTemplate.fromJson).toList();
-  }
-
-  /// 新增指导建议模板（归属与创建人由服务端从会话推导）。
-  Future<GuidanceTemplate> addGuidanceTemplate({required String guidance, required String guidanceType, required String isPersonal}) async {
-    final data = await _base.post('/api/initialScreening/guidanceAdd', {
-      'guidance': guidance,
-      'guidanceType': guidanceType,
-      'isPersonal': isPersonal,
-    });
-    return GuidanceTemplate.fromJson(data['template'] as Map<String, dynamic>);
-  }
-
-  /// 修改指导建议模板（仅限创建人本人，服务端校验）。
-  Future<GuidanceTemplate> updateGuidanceTemplate({
-    required String id,
-    required String guidance,
-    required String guidanceType,
-    required String isPersonal,
-  }) async {
-    final data = await _base.post('/api/initialScreening/guidanceUpdate', {
-      'id': id,
-      'guidance': guidance,
-      'guidanceType': guidanceType,
-      'isPersonal': isPersonal,
-    });
-    return GuidanceTemplate.fromJson(data['template'] as Map<String, dynamic>);
-  }
-
-  /// 删除指导建议模板（仅限创建人本人，服务端校验）。
-  Future<void> deleteGuidanceTemplate(String id) async {
-    await _base.post('/api/initialScreening/guidanceDelete', {'id': id});
-  }
-
   /// 调用服务端 AI 接口生成初筛建议（DeepSeek Key 仅服务端持有）。
   ///param month: 当前初筛年龄段
   ///param sex: 儿童性别码值（1-男，2-女）

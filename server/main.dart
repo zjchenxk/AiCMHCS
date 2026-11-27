@@ -18,7 +18,6 @@ import 'package:server/services/high_risk_factor_exclusion_service.dart';
 import 'package:server/services/high_risk_factor_service.dart';
 import 'package:server/services/holiday_service.dart';
 import 'package:server/services/hospital_service.dart';
-import 'package:server/services/initial_screening_guidance_service.dart';
 import 'package:server/services/initial_screening_service.dart';
 import 'package:server/services/menu_service.dart';
 import 'package:server/services/operation_log_service.dart';
@@ -54,7 +53,6 @@ Future<HttpServer> run(Handler handler, InternetAddress ip, int port) async {
   final guidanceTemplates = GuidanceTemplateService(db);
   final children = ChildService(db, cipher);
   final initialScreenings = InitialScreeningService(db);
-  final screeningGuidances = InitialScreeningGuidanceService(db);
   final aiGuidance = AiGuidanceService(config);
   final menus = MenuService(db);
   final roles = RoleService(db);
@@ -79,7 +77,6 @@ Future<HttpServer> run(Handler handler, InternetAddress ip, int port) async {
       .use(provider<GuidanceTemplateService>((_) => guidanceTemplates))
       .use(provider<ChildService>((_) => children))
       .use(provider<InitialScreeningService>((_) => initialScreenings))
-      .use(provider<InitialScreeningGuidanceService>((_) => screeningGuidances))
       .use(provider<AiGuidanceService>((_) => aiGuidance))
       .use(provider<MenuService>((_) => menus))
       .use(provider<RoleService>((_) => roles))

@@ -1,20 +1,20 @@
 import 'package:client/view_models/system/guidance_template_management_view_model.dart';
 import 'package:client/views/base/base_page.dart';
 import 'package:client/views/system/guidance_item_form_dialog.dart';
-import 'package:client/views/system/guidance_template_form_dialog.dart';
 import 'package:client/widgets/glass_panel.dart';
 import 'package:common/model.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 // =====================================================================
-// 指导建议模板管理页：左侧为模板列表（显示顺序非空在前按值升序，每
-// 行展示「模板名称 + 显示顺序 + 创建人/时间」），右侧为选中模板的项
-// 目列表（每行展示「类别 + 是否个人 + 指导建议内容 + 创建人/时间」）。
-// 布局与法定节假日管理同构（左右双 Card，各带 60px primaryContainer
-// 面板头）；模板增删改按操作权限 9912010001/9912010002/9912010003、
-// 项目增删改按 9912020001/9912020002/9912020003 灰化控制（表单经毛
-// 玻璃对话框录入；删除模板时服务端连带删除其全部项目）。
+// 指导建议模板管理页：左侧为模板列表（只读数据源——模板新增/修改/
+// 删除操作已于 2026-11-27 取消，模板由运维侧按医院录入；显示顺序非空
+// 在前按值升序，每行展示「模板名称 + 显示顺序 + 创建人/时间」），右
+// 侧为选中模板的项目列表（每行展示「类别 + 是否个人 + 指导建议内容 +
+// 创建人/时间」）。布局与法定节假日管理同构（左右双 Card，各带 60px
+// primaryContainer 面板头）；项目增删改按操作权限 9912000001/
+// 9912000002/9912000003 灰化控制（表单经公用 GuidanceItemFormDialog
+// 毛玻璃对话框录入）。
 // =====================================================================
 class GuidanceTemplateManagementPage extends BasePage {
   const GuidanceTemplateManagementPage({super.key, required super.loginUser, required super.child});
@@ -93,7 +93,7 @@ class _GuidanceTemplateManagementPageState extends State<GuidanceTemplateManagem
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // 左侧：指导建议模板列表
+        // 左侧：指导建议模板列表（只读，点击选中）
         Expanded(
           flex: 4,
           child: Card(
@@ -105,27 +105,16 @@ class _GuidanceTemplateManagementPageState extends State<GuidanceTemplateManagem
                   theme: theme,
                   title: '指导建议模板',
                   icon: Icons.assignment_outlined,
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // 新增按钮按「新增指导建议模板」操作权限灰化
-                      IconButton(
-                        tooltip: viewModel.canTemplateCreate ? '新增指导建议模板' : '无新增操作权限',
-                        icon: const Icon(Icons.add_circle_outline, size: 20),
-                        onPressed: viewModel.loading || viewModel.busy || !viewModel.canTemplateCreate ? null : () => _showTemplateForm(viewModel, null),
-                      ),
-                      IconButton(
-                        tooltip: '刷新',
-                        icon: const Icon(Icons.refresh_outlined, size: 20),
-                        // 手动整表重拉（进入页面时 loadData 已自动重拉）
-                        onPressed: viewModel.loading || viewModel.busy ? null : viewModel.loadData,
-                      ),
-                    ],
+                  trailing: IconButton(
+                    tooltip: '刷新',
+                    icon: const Icon(Icons.refresh_outlined, size: 20),
+                    // 手动整表重拉（进入页面时 loadData 已自动重拉）
+                    onPressed: viewModel.loading ? null : viewModel.loadData,
                   ),
                 ),
                 Expanded(
                   child: viewModel.isEmpty
-                      ? const Center(child: Text('暂无指导建议模板，请新增'))
+                      ? const Center(child: Text('暂无指导建议模板'))
                       : ListView.separated(
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           itemCount: viewModel.templates.length,
@@ -143,7 +132,7 @@ class _GuidanceTemplateManagementPageState extends State<GuidanceTemplateManagem
           ),
         ),
 
-        // 右侧：选中模板的指导建议项目列表
+        // 右侧：选中模板的指导建议项目列表（增删改）
         Expanded(
           flex: 6,
           child: Card(
@@ -242,10 +231,9 @@ class _GuidanceTemplateManagementPageState extends State<GuidanceTemplateManagem
     );
   }
 
-  // ---------------- 左侧：模板列表 ----------------
+  // ---------------- 左侧：模板列表（只读） ----------------
 
-  /// 单条模板：名称 + 显示顺序 + 创建人/时间，行尾编辑/删除按钮
-  ///（按操作权限灰化）。
+  /// 单条模板：名称 + 显示顺序 + 创建人/时间（点击选中，无行级操作）。
   Widget _buildTemplateTile(
     BuildContext context,
     GuidanceTemplateManagementViewModel viewModel,
@@ -258,7 +246,7 @@ class _GuidanceTemplateManagementPageState extends State<GuidanceTemplateManagem
       child: InkWell(
         onTap: () => viewModel.selectTemplate(template),
         child: Padding(
-          padding: const EdgeInsets.only(left: 12, top: 10, bottom: 10, right: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -302,13 +290,6 @@ class _GuidanceTemplateManagementPageState extends State<GuidanceTemplateManagem
                   ],
                 ),
               ),
-              _buildRowActions(
-                theme: theme,
-                editTooltip: viewModel.canTemplateUpdate ? '编辑模板' : '无修改操作权限',
-                editOnPressed: viewModel.canTemplateUpdate && !viewModel.busy ? () => _showTemplateForm(viewModel, template) : null,
-                deleteTooltip: viewModel.canTemplateDelete ? '删除模板' : '无删除操作权限',
-                deleteOnPressed: viewModel.canTemplateDelete && !viewModel.busy ? () => _confirmDeleteTemplate(viewModel, template) : null,
-              ),
             ],
           ),
         ),
@@ -316,7 +297,7 @@ class _GuidanceTemplateManagementPageState extends State<GuidanceTemplateManagem
     );
   }
 
-  // ---------------- 右侧：项目列表 ----------------
+  // ---------------- 右侧：项目列表（增删改） ----------------
 
   /// 单条项目：类别 + 是否个人标签 + 内容预览 + 创建人/时间，行尾编辑/
   /// 删除按钮（按操作权限灰化）。
@@ -393,7 +374,7 @@ class _GuidanceTemplateManagementPageState extends State<GuidanceTemplateManagem
     );
   }
 
-  /// 行尾编辑/删除按钮组（删除图标与文字用 error 色）。
+  /// 行尾编辑/删除按钮组（删除图标用 error 色）。
   Widget _buildRowActions({
     required ThemeData theme,
     required String editTooltip,
@@ -421,83 +402,48 @@ class _GuidanceTemplateManagementPageState extends State<GuidanceTemplateManagem
 
   // ---------------- 表单与删除确认 ----------------
 
-  /// 新增/编辑模板（毛玻璃对话框；编辑目标 null 为新增）。
-  Future<void> _showTemplateForm(GuidanceTemplateManagementViewModel viewModel, BaseGuidanceTemplate? template) async {
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => GuidanceTemplateFormDialog(viewModel: viewModel, template: template),
-    );
+  /// 项目保存回调：经 ViewModel 落库（新增挂选中模板），返回错误信息
+  /// （null = 成功；失败取 VM errorMsg 内联展示于表单对话框并防页面
+  /// SnackBar 重复弹出）。
+  Future<String?> _saveItem(
+    GuidanceTemplateManagementViewModel viewModel,
+    BaseGuidanceTemplate template,
+    BaseGuidanceTemplateItem? item, {
+    String? guidanceType,
+    required String guidance,
+    required bool personal,
+  }) async {
+    final isPersonal = personal ? BaseGuidanceTemplateItem.personalYes : BaseGuidanceTemplateItem.personalNo;
+    final ok = item == null
+        ? await viewModel.createItem(
+            templateId: template.id,
+            guidanceType: guidanceType,
+            guidance: guidance,
+            isPersonal: isPersonal,
+          )
+        : await viewModel.updateItem(item.id, {
+            'guidanceType': guidanceType,
+            'guidance': guidance,
+            'isPersonal': isPersonal,
+          });
+    if (ok) return null;
+    final message = viewModel.errorMsg ?? '保存失败，请重试';
+    viewModel.clearError();
+    return message;
   }
 
-  /// 新增/编辑指导建议（毛玻璃对话框；编辑目标 null 为新增）。
+  /// 新增/编辑指导建议（公用毛玻璃对话框；编辑目标 null 为新增）。
   Future<void> _showItemForm(
     GuidanceTemplateManagementViewModel viewModel,
     BaseGuidanceTemplate template,
     BaseGuidanceTemplateItem? item,
   ) async {
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => GuidanceItemFormDialog(viewModel: viewModel, template: template, item: item),
+    await GuidanceItemFormDialog.show(
+      context,
+      templateName: template.templateName,
+      item: item,
+      onSave: ({String? guidanceType, required String guidance, required bool personal}) => _saveItem(viewModel, template, item, guidanceType: guidanceType, guidance: guidance, personal: personal),
     );
-  }
-
-  /// 删除模板（毛玻璃确认；服务端连带删除其全部项目）。
-  Future<void> _confirmDeleteTemplate(GuidanceTemplateManagementViewModel viewModel, BaseGuidanceTemplate template) async {
-    final theme = Theme.of(context);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: GlassPanel(
-            blur: 24,
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.delete_outline, color: theme.colorScheme.error, size: 22),
-                      const SizedBox(width: 10),
-                      Text('删除确认', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    '确定删除指导建议模板「${template.templateName}」吗？\n其下全部指导建议项目将一并删除。',
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-                      const SizedBox(width: 12),
-                      FilledButton(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: theme.colorScheme.error,
-                          foregroundColor: theme.colorScheme.onError,
-                        ),
-                        onPressed: () => Navigator.pop(ctx, true),
-                        child: const Text('删除'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-    final ok = await viewModel.deleteTemplate(template);
-    if (!mounted) return;
-    if (ok) _showResultSnackBar('删除成功');
   }
 
   /// 删除指导建议（毛玻璃确认）。

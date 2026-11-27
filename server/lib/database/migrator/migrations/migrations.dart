@@ -45,6 +45,7 @@ import 'package:server/database/migrator/migrations/migration_202611251010.dart'
 import 'package:server/database/migrator/migrations/migration_202611251020.dart';
 import 'package:server/database/migrator/migrations/migration_202611251030.dart';
 import 'package:server/database/migrator/migrations/migration_202611271419.dart';
+import 'package:server/database/migrator/migrations/migration_202611271723.dart';
 
 /// 结构迁移注册表：按版本号严格递增，已发布的迁移不可修改，只能追加新版本。
 const dbMigrations = <DbMigration>[
@@ -80,4 +81,5 @@ const dbMigrations = <DbMigration>[
   dbMigration_202611251020,
   dbMigration_202611251030,
   dbMigration_202611271419,
+  dbMigration_202611271723,
 ];

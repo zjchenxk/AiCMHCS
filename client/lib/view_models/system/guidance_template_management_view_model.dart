@@ -5,34 +5,25 @@ import 'package:client/utils/log_helper.dart';
 import 'package:common/model.dart';
 import 'package:material_ui/material_ui.dart';
 
-/// 指导建议模板管理 ViewModel：左侧模板列表，右侧为选中模板的项目
-/// 列表，两侧各自增删改。
+/// 指导建议模板管理 ViewModel：左侧模板列表（只读数据源——模板新增/
+/// 修改/删除操作已于 2026-11-27 取消，模板由运维侧按医院录入），右侧
+/// 为选中模板的项目列表，支持增删改。
 ///
 /// 每次进入页面 loadData 都强制重拉模板与当前登录角色的操作权限编码
 /// （/api/menu/operations，角色经会话服务端推导、切换角色后重进即生
-/// 效），按钮级灰化经 canTemplateXxx / canItemXxx getter 判定。选中
-/// 模板后按需加载其项目；删除模板时服务端连带删除其全部项目，客户端
-/// 清空右侧列表。
+/// 效），按钮级灰化经 canItemXxx getter 判定。选中模板后按需加载其项
+/// 目（itemQuery 公用查询：按指导建议类别升序、空类别排最后）。
 class GuidanceTemplateManagementViewModel extends ChangeNotifier {
-  // ---------------- 操作权限（模板 9912010001-3 / 项目 9912020001-3） ----------------
-
-  /// 操作权限：新增指导建议模板。
-  static const String opTemplateCreate = '9912010001';
-
-  /// 操作权限：修改指导建议模板。
-  static const String opTemplateUpdate = '9912010002';
-
-  /// 操作权限：删除指导建议模板。
-  static const String opTemplateDelete = '9912010003';
+  // ---------------- 操作权限（项目 9912000001-3） ----------------
 
   /// 操作权限：新增指导建议项目。
-  static const String opItemCreate = '9912020001';
+  static const String opItemCreate = '9912000001';
 
   /// 操作权限：修改指导建议项目。
-  static const String opItemUpdate = '9912020002';
+  static const String opItemUpdate = '9912000002';
 
   /// 操作权限：删除指导建议项目。
-  static const String opItemDelete = '9912020003';
+  static const String opItemDelete = '9912000003';
 
   /// 构造函数：注入模板与菜单服务（缺省从服务定位器取，测试可覆写；
   /// 菜单服务仅用于拉取角色操作权限编码）。
@@ -50,18 +41,17 @@ class GuidanceTemplateManagementViewModel extends ChangeNotifier {
   BaseGuidanceTemplate? _selected;
   bool _loading = false;
   bool _itemsLoading = false;
-  bool _busy = false;
   bool _itemBusy = false;
   bool _loaded = false;
   String? _errorMsg;
 
-  /// 本院全部指导建议模板（显示顺序非空在前按值升序）。
+  /// 本院全部指导建议模板（显示顺序非空在前按值升序；只读数据源）。
   List<BaseGuidanceTemplate> get templates => _templates;
 
   /// 当前选中的模板（null = 未选中，右侧显示空态引导）。
   BaseGuidanceTemplate? get selected => _selected;
 
-  /// 选中模板下的全部项目（按创建时间正序）。
+  /// 选中模板下的全部项目（按指导建议类别升序、空类别排最后）。
   List<BaseGuidanceTemplateItem> get items => _items;
 
   /// 首屏加载中。
@@ -69,9 +59,6 @@ class GuidanceTemplateManagementViewModel extends ChangeNotifier {
 
   /// 右侧项目列表加载中（切选模板时）。
   bool get itemsLoading => _itemsLoading;
-
-  /// 增删改操作进行中（防重复提交）。
-  bool get busy => _busy;
 
   /// 项目增删改操作进行中（防重复提交）。
   bool get itemBusy => _itemBusy;
@@ -82,15 +69,6 @@ class GuidanceTemplateManagementViewModel extends ChangeNotifier {
   bool get isEmpty => _loaded && _templates.isEmpty;
 
   // ---------------- 操作权限 ----------------
-
-  /// 是否拥有「新增指导建议模板」权限。
-  bool get canTemplateCreate => _operationCodes.contains(opTemplateCreate);
-
-  /// 是否拥有「修改指导建议模板」权限。
-  bool get canTemplateUpdate => _operationCodes.contains(opTemplateUpdate);
-
-  /// 是否拥有「删除指导建议模板」权限。
-  bool get canTemplateDelete => _operationCodes.contains(opTemplateDelete);
 
   /// 是否拥有「新增指导建议项目」权限。
   bool get canItemCreate => _operationCodes.contains(opItemCreate);
@@ -158,7 +136,7 @@ class GuidanceTemplateManagementViewModel extends ChangeNotifier {
       ..addAll(items);
   }
 
-  // ---------------- 模板交互 ----------------
+  // ---------------- 模板交互（只读） ----------------
 
   /// 选中左侧模板（右侧加载其项目列表）。
   Future<void> selectTemplate(BaseGuidanceTemplate template) async {
@@ -189,81 +167,6 @@ class GuidanceTemplateManagementViewModel extends ChangeNotifier {
       _errorMsg = _messageOf(e);
     } finally {
       _itemsLoading = false;
-      notifyListeners();
-    }
-  }
-
-  /// 新增模板，成功后整表重拉并选中新模板。
-  Future<bool> createTemplate({required String templateName, int? displayOrder}) async {
-    _busy = true;
-    _errorMsg = null;
-    notifyListeners();
-    try {
-      final created = await _service.createTemplate(templateName: templateName, displayOrder: displayOrder);
-      final templates = await _service.queryTemplates();
-      _templates
-        ..clear()
-        ..addAll(templates);
-      _selected = _findTemplate(created.id) ?? created;
-      await _refreshItems();
-      return true;
-    } catch (e, st) {
-      LogHelper.error('client:GuidanceTemplateManagementViewModel.createTemplate', e, st);
-      _errorMsg = _messageOf(e);
-      return false;
-    } finally {
-      _busy = false;
-      notifyListeners();
-    }
-  }
-
-  /// 修改模板（changes 键同后端契约：templateName / displayOrder），
-  /// 成功后整表重拉并刷新选中项引用。
-  Future<bool> updateTemplate(String id, Map<String, Object?> changes) async {
-    _busy = true;
-    _errorMsg = null;
-    notifyListeners();
-    try {
-      await _service.updateTemplate(id, changes);
-      final templates = await _service.queryTemplates();
-      _templates
-        ..clear()
-        ..addAll(templates);
-      _selected = _findTemplate(id);
-      return true;
-    } catch (e, st) {
-      LogHelper.error('client:GuidanceTemplateManagementViewModel.updateTemplate', e, st);
-      _errorMsg = _messageOf(e);
-      return false;
-    } finally {
-      _busy = false;
-      notifyListeners();
-    }
-  }
-
-  /// 删除模板（服务端连带删除其全部项目），成功后整表重拉；删除选中
-  /// 项时右侧回退空态。
-  Future<bool> deleteTemplate(BaseGuidanceTemplate template) async {
-    _busy = true;
-    _errorMsg = null;
-    notifyListeners();
-    try {
-      await _service.deleteTemplate(template.id);
-      if (_selected?.id == template.id) {
-        _selected = null;
-        _items.clear();
-      }
-      final templates = await _service.queryTemplates();
-      _templates
-        ..clear()
-        ..addAll(templates);
-      return true;
-    } catch (e, st) {
-      LogHelper.error('client:GuidanceTemplateManagementViewModel.deleteTemplate', e, st);
-      _errorMsg = _messageOf(e);
-      return false;
-    } finally {
-      _busy = false;
       notifyListeners();
     }
   }

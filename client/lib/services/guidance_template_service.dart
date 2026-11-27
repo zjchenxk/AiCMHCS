@@ -4,13 +4,18 @@ import 'package:common/model.dart';
 
 /// 指导建议模板服务：基于 BaseService 走后端 /api/guidanceTemplate/*
 /// （自动加解密信封、携带 token）。数据按医院隔离，医院与创建人及科
-/// 室/院区归属由服务端从登录会话推导，客户端无需传入。模板名同医院
-/// 内唯一、GUIDANCE 内容按 UTF-8 字节数限长均由服务端兜底校验。
+/// 室/院区归属由服务端从登录会话推导，客户端无需传入。
+///
+/// 模板列表为只读数据源（新增/修改/删除操作已于 2026-11-27 取消，模
+/// 板由运维侧按医院录入）；模板项目按 [defaultTemplateId]（初筛页指
+/// 导建议选择的默认模板）或管理页选中的模板 ID 查询——itemQuery 即
+/// 公用查询方法（服务端按 GUIDANCE_TYPE 类别升序、空类别排最后）。
 class GuidanceTemplateService {
+  /// 初筛页指导建议选择的默认指导建议模板 ID（需求 2026-11-27 指定）。
+  static const String defaultTemplateId = '01a21bb5-b4df-7000-bb50-bbb3c24a025d';
+
   /// 经服务定位器取加密客户端（登录后才可用；构造期不取，便于测试覆写）。
   BaseService get _base => getIt<BaseService>();
-
-  // ---------------- 模板 ----------------
 
   /// 查询登录用户所属医院的全部指导建议模板（显示顺序非空在前按值升
   /// 序，空值按创建时间续后）。
@@ -20,44 +25,9 @@ class GuidanceTemplateService {
     return list.map((e) => BaseGuidanceTemplate.fromJson(e as Map<String, dynamic>)).toList();
   }
 
-  /// 按 ID 查询模板详情。
-  ///param id: 模板 ID
-  Future<BaseGuidanceTemplate> queryTemplate(String id) async {
-    final data = await _base.post('/api/guidanceTemplate/query', {'id': id});
-    return BaseGuidanceTemplate.fromJson(data['template'] as Map<String, dynamic>);
-  }
-
-  /// 新增指导建议模板，返回新增后的模板（含服务端生成的主键）。
-  ///param templateName: 模板名称（必填，同医院内唯一）
-  ///param displayOrder: 显示顺序（可空，小值在前）
-  Future<BaseGuidanceTemplate> createTemplate({required String templateName, int? displayOrder}) async {
-    final data = await _base.post('/api/guidanceTemplate/add', {
-      'templateName': templateName,
-      'displayOrder': displayOrder,
-    });
-    return BaseGuidanceTemplate.fromJson(data['template'] as Map<String, dynamic>);
-  }
-
-  /// 修改指导建议模板。
-  ///param id: 模板 ID
-  ///param changes: 要修改的字段集合（键为 templateName / displayOrder，
-  /// 仅传本次要修改的字段）
-  Future<void> updateTemplate(String id, Map<String, Object?> changes) async {
-    await _base.post('/api/guidanceTemplate/update', {'id': id, ...changes});
-  }
-
-  /// 删除指导建议模板（服务端连带删除其全部项目）。
-  ///param id: 模板 ID
-  ///returns: 删除的模板行数
-  Future<int> deleteTemplate(String id) async {
-    final data = await _base.post('/api/guidanceTemplate/delete', {'id': id});
-    return data['deleted'] as int;
-  }
-
-  // ---------------- 模板项目 ----------------
-
-  /// 查询指定模板下的全部项目（按创建时间正序，先录入的在前）。
-  ///param templateId: 模板 ID
+  /// 查询指定模板下的全部项目（公用查询：按指导建议类别升序、空类别
+  /// 排最后，同类别内按创建时间正序）。
+  ///param templateId: 指导建议模板 ID（初筛页传 [defaultTemplateId]）
   Future<List<BaseGuidanceTemplateItem>> queryItems(String templateId) async {
     final data = await _base.post('/api/guidanceTemplate/itemQuery', {'templateId': templateId});
     final list = data['items'] as List<dynamic>? ?? const [];
