@@ -53,8 +53,17 @@ class AsdPrintHtml {
   .lbl { text-align: center; vertical-align: middle; }
   .opt { display: block; position: relative; padding: 1mm 0 1mm 6mm; }
   .opt .mark { position: absolute; left: 0; top: 1.3mm; width: 6mm; }
+  /* 转诊单（附件 3）作用域：行距放宽至 1.8，使上下两联如样表般充满一页
+     A4。1.9 实测在有医生签名图（10mm 高）时总高超内容区 ~4mm 会溢出
+     第二页，1.8 连同签名图约 270mm，仍留 ~5mm 防溢出保险。 */
+  .slip { line-height: 1.8; }
+  /* 上联容器高度定值：裁切虚线落位 A4 对折线——纸面中线 148.5mm，
+     减页边距 10mm、减分割线上边距 5mm，得内容区 133.5mm。顶部留
+     10mm 抬头边距（border-box 定高不影响落位），上联内容自然高度约
+     100~110mm，长条目换行仍有余量不会溢出容器。 */
+  .slip-fold { height: 133.5mm; padding-top: 10mm; }
   .note { font-size: 8.5pt; margin-top: 3mm; line-height: 1.6; }
-  .divider { border-top: 1px dashed #000; margin: 5mm 0; }
+  .divider { border-top: 1px dashed #000; margin: 5mm 0 10mm 0; }
   .bold { font-weight: bold; }
 ''';
 
@@ -80,20 +89,17 @@ $body
 </html>''';
 
   /// 勾选标记：checked 为真显示 ☑（方框内勾），否则 □；order 非空时显示
-  /// 「序号 名称」，为空仅显示名称（转诊单选项无序号）。
+  /// 「序号 名称」，为空仅显示名称（记录表各栏选项）。
   static String _opt(String order, String label, bool checked, {bool withOrder = true}) {
     final mark = checked ? '☑' : '□';
     final num = (withOrder && order.isNotEmpty) ? '$order ' : '';
     return '<span class="opt"><span class="mark">$mark</span>$num$label</span>';
   }
 
-  /// 无序号勾选（转诊单选项）。
-  static String _optPlain(String label, bool checked) => _opt('', label, checked, withOrder: false);
-
   /// 下划线字段：标签 + 值（下划线上方居中加粗，与原件手写感一致）。
   static String _uField(String label, String value, String width, {bool bold = false}) {
     final labelHtml = bold ? '<b>$label</b>' : label;
-    return '<span style="margin-right:3mm">$labelHtml　<span class="u" '
+    return '<span style="margin-right:1.5mm">$labelHtml　<span class="u" '
         'style="min-width:$width">$value</span></span>';
   }
 
@@ -114,13 +120,13 @@ $body
         '<b>$label</b>　<span class="boxes">$cells</span></div>';
   }
 
-  /// 检查/填写日期：___年___月___日（数字与年月日间不留空格、下划线按
-  /// 表格列宽收敛，保证单行不换行）。
+  /// 检查/填写日期：___年___月___日（数字与年月日间不留空格、下划线收窄，
+  /// 保证转诊单底部行单行不换行）。
   static String _dateLine(String? date) {
     final d = DateTime.tryParse(date ?? '');
-    return '${_uText(d == null ? '' : '${d.year}', '10mm')}年'
-        '${_uText(d == null ? '' : '${d.month}', '6mm')}月'
-        '${_uText(d == null ? '' : '${d.day}', '6mm')}日';
+    return '${_uText(d == null ? '' : '${d.year}', '8mm')}年'
+        '${_uText(d == null ? '' : '${d.month}', '4mm')}月'
+        '${_uText(d == null ? '' : '${d.day}', '4mm')}日';
   }
 
   /// ===== 初筛记录表（表 2/3/4） =====
@@ -245,10 +251,11 @@ $body
       '（第二联 由家长携带至县级接诊机构）',
       extraNote: '备注：就诊时须携带本转诊单',
     );
-    return _wrap('$slip1<div class="divider"></div>$slip2');
+    return _wrap('<div class="slip-fold">$slip1</div><div class="divider"></div>$slip2');
   }
 
-  /// 单联转诊单。
+  /// 单联转诊单（附件 3 样式：转诊原因左右两栏对齐、「异常」具体项目
+  /// 紧跟行内下划线、语言询问三项同行；上下两联须同在一页 A4）。
   static String _slip(PrintBundle bundle, String subtitle, {String? extraNote}) {
     final child = bundle.child;
     final guardian = bundle.preferredGuardian;
@@ -258,54 +265,56 @@ $body
     final birth = DateTime.tryParse(child.birthDate);
     final cert = child.certificateNo?.trim() ?? '';
 
-    // 转诊原因：预警征象筛查结果（未见异常勾首项，否则勾「异常」并注明全部异常项）
+    // 转诊原因：预警征象筛查结果（未见异常勾首项，否则勾「异常」并在行内
+    // 下划线注明全部未通过项目）；语言功能及社会交往功能询问三项同行勾选。
     final warning = record?.warningSignResult.trim() ?? '';
     final warningNormal = warning == '未见异常';
-    // 语言功能及社会交往功能询问三项
     final language = record?.languageSocialCommunicationResult.trim() ?? '';
+    // 无序号行内勾选项（间距对齐样表的三项横排）。
+    String opt(String label, bool checked) => '<span style="margin-right:7mm">${checked ? '☑' : '□'} $label</span>';
 
     return '''
-<div class="sheet">
+<div class="sheet slip">
   <h1>0～6岁儿童心理行为发育初筛转诊单</h1>
   <h2>$subtitle</h2>
-  ${extraNote == null ? '' : '<div style="text-align:center">$extraNote</div>'}
+  ${extraNote == null ? '' : '<div style="text-align:center"><b>$extraNote</b></div>'}
   ${_noRow('编　　号', child.healthNo ?? '')}
   <div class="row">
-    ${_uField('儿童姓名', _esc(child.name), '28mm')}
-    ${_uField('性别', _sexLabel(child.sex), '24mm')}
-    <span>出生日期　${_uText(birth == null ? '' : '${birth.year}', '12mm')} 年 ${_uText(birth == null ? '' : '${birth.month}', '8mm')} 月 ${_uText(birth == null ? '' : '${birth.day}', '8mm')} 日</span>
+    ${_uField('儿童姓名', _esc(child.name), '26mm', bold: true)}
+    ${_uField('性别', _sexLabel(child.sex), '26mm', bold: true)}
+    <span><b>出生日期</b>　${_uText(birth == null ? '' : '${birth.year}', '12mm')} 年 ${_uText(birth == null ? '' : '${birth.month}', '8mm')} 月 ${_uText(birth == null ? '' : '${birth.day}', '8mm')} 日</span>
   </div>
-  <div class="row">身份证号<span class="boxes">${[
+  <div class="row"><b>身份证号</b>　<span class="boxes">${[
       for (var i = 0; i < 18; i++) '<span>${i < cert.length ? _esc(cert[i]) : ''}</span>',
     ].join()}</span></div>
   <div class="row">
-    ${_uField('家长姓名', _esc(guardian?.name ?? ''), '26mm')}
-    ${_uField('联系电话', _esc(phone), '34mm')}
+    ${_uField('家长姓名', _esc(guardian?.name ?? ''), '26mm', bold: true)}
+    ${_uField('联系电话', _esc(phone), '30mm', bold: true)}
   </div>
   <div class="row">
-    转诊原因　<div style="margin-left:12mm">
-      1 预警征象筛查结果<br>
-      <span style="margin-left:6mm">${_optPlain('未见异常', warningNormal)}</span><br>
-      <span style="margin-left:6mm">${_optPlain('异常，具体注明未通过项目', !warningNormal)}${warningNormal ? '' : _uText(_esc(warning), '52mm')}</span><br>
-      <span style="margin-left:6mm">2 语言功能及社会交往功能询问</span><br>
-      <span style="margin-left:6mm">${_optPlain('未见异常', language.contains('未见异常'))}　${_optPlain('语言功能障碍或倒退', language.contains('语言功能障碍或倒退'))}　${_optPlain('社会交往能力障碍或倒退', language.contains('社会交往能力障碍或倒退'))}</span>
-    </div>
+    <b style="display:inline-block;width:24mm">转诊原因</b><span style="display:inline-block;width:56mm">1 预警征象筛查结果</span>${opt('未见异常', warningNormal)}
+    <div style="padding-left:80mm">${opt('异常，具体注明未通过项目', !warningNormal)}${_uText(_esc(warningNormal ? '' : warning), '36mm')}</div>
+    <div style="padding-left:24mm">2 语言功能及社会交往功能询问</div>
+    <div style="padding-left:30mm">${opt('未见异常', language.contains('未见异常'))}${opt('语言功能障碍或倒退', language.contains('语言功能障碍或倒退'))}${opt('社会交往能力障碍或倒退', language.contains('社会交往能力障碍或倒退'))}</div>
   </div>
-  <div class="row bold">儿童存在以上情况，建议转诊到<span class="u" style="min-width:44mm">${_esc(record?.referralHospName ?? '')}</span>医疗机构进一步接受复筛。</div>
+  <div class="row bold">儿童存在以上情况，建议转诊到 <span class="u" style="min-width:40mm">${_esc(record?.referralHospName ?? '')}</span> 医疗机构进一步接受复筛。</div>
   <div class="row">
-    ${_uField('医疗机构', _esc(record?.hospName ?? ''), '34mm')}
-    医生签字　<span class="u" style="min-width:26mm">${_esc(record?.doctorName ?? '')}</span>${_signatureImg(record, bundle)}
-    <span>填写日期　${_dateLine(record?.checkDate)}</span>
+    ${_uField('医疗机构', _esc(record?.hospName ?? ''), '20mm', bold: true)}
+    <span style="margin-right:1.5mm"><b>医生签字</b>　<span class="u" style="min-width:32mm;text-align:left;position:relative">${record == null ? '' : _esc(record.doctorName)}${_signatureImg(record, bundle)}</span></span>
+    <span><b>填写日期</b>　${_dateLine(record?.checkDate)}</span>
   </div>
 </div>''';
   }
 
-  /// 签名图（内联 base64 图片）。
+  /// 签名图（内联 base64 图片）：绝对定位浮于下划线右段（姓名左对齐、
+  /// 签名靠右，中间自然留白互不遮挡）；不占行内空间，不撑高所在行。
+  /// max-width 限宽防超宽签名图左移压到姓名。
   static String _signatureImg(InitialScreening? record, PrintBundle bundle) {
     if (record == null) return '';
     final base64 = bundle.doctorSignatures[record.doctorId];
     if (base64 == null || base64.isEmpty) return '';
-    return '<img src="data:image/jpeg;base64,$base64" style="height:10mm;vertical-align:middle;margin-left:2mm">';
+    return '<img src="data:image/jpeg;base64,$base64" '
+        'style="position:absolute;height:10mm;max-width:18mm;right:0;bottom:-2mm;object-fit:contain">';
   }
 
   /// 性别码值转汉字（1-男，2-女）。
