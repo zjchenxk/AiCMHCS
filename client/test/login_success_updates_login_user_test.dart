@@ -188,7 +188,7 @@ void main() {
     expect(mainViewModel.menus.first.children.single.route, '/system/hospital');
   });
 
-  test('未设置归属的账号：工作副本保持真实值，未设置字段为 null', () {
+  test('未设置归属的账号：工作副本保持真实值，未设置字段为 null；侧边栏默认收起', () {
     loginUser = const LoginUser(
       id: '3',
       userCode: 'teacher01',
@@ -205,5 +205,7 @@ void main() {
     expect(vm.loginUser.campusName, isNull);
     expect(vm.loginUser.deptId, isNull);
     expect(vm.loginUser.deptName, isNull);
+    // 登录成功后右侧侧边栏默认收起（需要时经活动条图标展开）
+    expect(vm.childSidebarCollapsed, isTrue);
   });
 }

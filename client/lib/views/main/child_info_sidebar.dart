@@ -1,28 +1,68 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:client/main.dart';
 import 'package:client/models/child_sidebar.dart';
+import 'package:client/services/child_service.dart';
+import 'package:client/services/time_service.dart';
+import 'package:client/utils/asd_check_flow.dart';
+import 'package:client/utils/log_helper.dart';
 import 'package:client/utils/risk_color.dart';
+import 'package:client/view_models/asd/initial_screening_view_model.dart';
+import 'package:client/view_models/main/initial_screening_list_view_model.dart';
 import 'package:client/view_models/main/main_view_model.dart';
 import 'package:client/widgets/glass_panel.dart';
+import 'package:common/model.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+/// 右侧侧边栏垂直 TAB（参照 VS Code 活动条：最右缘 5 个图标位，选中
+/// 项高亮；内容区随 TAB 切换）。
+enum _SidebarTab {
+  current('当前儿童', Icons.child_care_outlined),
+  initial('初筛儿童', Icons.fact_check_outlined),
+  rescreen('复筛儿童', Icons.event_repeat_outlined),
+  diagnosis('诊断儿童', Icons.monitor_heart_outlined),
+  intervention('干预儿童', Icons.volunteer_activism_outlined);
+
+  const _SidebarTab(this.title, this.icon);
+
+  /// TAB 标题（标题栏靠右展示）。
+  final String title;
+
+  /// 活动条图标（outlined 系列）。
+  final IconData icon;
+}
+
 /// 主界面右侧儿童信息侧边栏。
 ///
-/// 展示当前儿童（MainViewModel.child）的头像、基本信息、五色高危分级、
-/// 高危因素列表与历次检查时间轴：未选定儿童时整体隐藏；展开宽度 280，
-/// 收起后为 48 宽的竖条，内容区独立上下滚动。扩展信息/头像由
-/// MainViewModel 随当前儿童变化异步加载，加载失败时保留基础信息与
-/// 演示数据（见 models/child_sidebar.dart）。
+/// 在显示当前儿童信息（MainViewModel.child）的基础上集成初筛/复筛/
+/// 诊断/干预儿童列表：最右缘为 5 个垂直 TAB 图标（VS Code 活动条样式），
+/// 标题栏收起/展开按钮在最左端、标题文字靠右。
+///
+/// - 当前儿童 TAB：头像、基本信息、五色高危分级（CHILD_HIGH_RISK_FACTOR）、
+///   高危因素列表（REMARK 显示在名称下方）与历次检查时间轴
+///   （CHILD_CHECK_RECORD）；未选定儿童时显示指引占位。
+/// - 初筛儿童 TAB：按检查日期区间分页查询 ASD_INITIAL_SCREENING（服务端
+///   解密儿童姓名），双击记录切换当前儿童并打开初筛记录表定位到对应
+///   月龄 TAB 浏览。
+/// - 复筛/诊断/干预儿童 TAB：界面结构与初筛一致，取数与双击暂缓开放。
+///
+/// 侧边栏常驻显示（列表 TAB 不依赖当前儿童）；收起后仅保留活动条竖排
+/// 图标，点 TAB 图标展开并激活对应页。展开宽度 320（含活动条），内容区
+/// 独立滚动。
 class ChildInfoSidebar extends StatefulWidget {
   /// 构造函数。
   const ChildInfoSidebar({super.key});
 
-  /// 展开宽度（需求范围 250-300）。
-  static const double expandedWidth = 280;
+  /// 展开总宽度（含最右缘活动条；内容区 = 总宽 − 44 活动条）。
+  static const double expandedWidth = 320;
 
-  /// 收起宽度（仅保留展开按钮与头像）。
+  /// 收起宽度（仅保留活动条竖排 TAB 与展开按钮）。
   static const double collapsedWidth = 48;
+
+  /// 最右缘活动条宽度。
+  static const double activityRailWidth = 44;
 
   @override
   State<ChildInfoSidebar> createState() => _ChildInfoSidebarState();
@@ -35,9 +75,21 @@ class _ChildInfoSidebarState extends State<ChildInfoSidebar> {
   /// 日志「The Scrollbar's ScrollController has no ScrollPosition attached」）。
   final ScrollController _scrollController = ScrollController();
 
+  // 初筛列表查询条件输入框（只读，点按弹日期选择器）
+  final TextEditingController _startDateCtrl = TextEditingController();
+  final TextEditingController _endDateCtrl = TextEditingController();
+
+  /// 当前激活的内容 TAB。
+  _SidebarTab _activeTab = _SidebarTab.current;
+
+  /// 正在打开初筛记录（防双击重入）。
+  bool _openingRecord = false;
+
   @override
   void dispose() {
     _scrollController.dispose();
+    _startDateCtrl.dispose();
+    _endDateCtrl.dispose();
     super.dispose();
   }
 
@@ -45,12 +97,6 @@ class _ChildInfoSidebarState extends State<ChildInfoSidebar> {
   Widget build(BuildContext context) {
     return Consumer<MainViewModel>(
       builder: (context, mainViewModel, _) {
-        final data = mainViewModel.childSidebarData;
-        // 未选择当前儿童时不占位，保持主界面原布局
-        if (mainViewModel.child.id.isEmpty || data == null) {
-          return const SizedBox.shrink();
-        }
-
         final theme = Theme.of(context);
         return AnimatedContainer(
           duration: const Duration(milliseconds: 250),
@@ -60,7 +106,7 @@ class _ChildInfoSidebarState extends State<ChildInfoSidebar> {
           child: GlassPanel(
             borderRadius: 16,
             child: mainViewModel.childSidebarCollapsed
-                ? _buildCollapsedRail(theme, mainViewModel, data)
+                ? _buildCollapsedRail(theme, mainViewModel)
                 // 固定内容宽度：收起动画期间内容被面板裁切，不因宽度收缩
                 // 触发文字换行/溢出报错（与左侧功能菜单同一处理）
                 : OverflowBox(
@@ -69,7 +115,7 @@ class _ChildInfoSidebarState extends State<ChildInfoSidebar> {
                     maxWidth: ChildInfoSidebar.expandedWidth - 1,
                     child: SizedBox(
                       width: ChildInfoSidebar.expandedWidth - 1,
-                      child: _buildExpandedPanel(theme, mainViewModel, data),
+                      child: _buildExpandedPanel(theme, mainViewModel),
                     ),
                   ),
           ),
@@ -78,13 +124,15 @@ class _ChildInfoSidebarState extends State<ChildInfoSidebar> {
     );
   }
 
-  /// 收起态：展开按钮 + 头像 + 竖向「当前儿童」文字。
-  Widget _buildCollapsedRail(ThemeData theme, MainViewModel mainViewModel, ChildSidebarData data) {
+  // ---------------- 骨架（活动条 / 标题栏 / 收起态） ----------------
+
+  /// 收起态：展开按钮 + 竖排 5 个 TAB 图标（点图标展开并激活对应页）。
+  Widget _buildCollapsedRail(ThemeData theme, MainViewModel mainViewModel) {
     return Column(
       children: [
         const SizedBox(height: 8),
         Tooltip(
-          message: '展开儿童信息',
+          message: '展开侧边栏',
           child: InkWell(
             borderRadius: BorderRadius.circular(10),
             hoverColor: theme.colorScheme.primary.withValues(alpha: 0.10),
@@ -101,132 +149,46 @@ class _ChildInfoSidebarState extends State<ChildInfoSidebar> {
             ),
           ),
         ),
+        // TAB 图标保持居顶（与展开态活动条同布局，避免展开时
+        // 「居中→居顶」的位移动画）
         const SizedBox(height: 8),
-        CircleAvatar(
-          radius: 16,
-          backgroundColor: theme.colorScheme.primaryContainer,
-          foregroundImage: _decodeAvatar(data.avatarBase64),
-          child: Icon(Icons.child_care_outlined, size: 18, color: theme.colorScheme.primary),
-        ),
-        const SizedBox(height: 10),
-        Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) => SingleChildScrollView(
-              // 竖排「当前儿童」后追加儿童姓名（主题色加粗便于辨识）；
-              // 姓名较长超出栏高时允许上下滚动，短时保持垂直居中
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                child: IntrinsicHeight(
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        for (final char in '当前儿童'.characters)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 2),
-                            child: Text(
-                              char,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                              ),
-                            ),
-                          ),
-                        if (data.name.trim().isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          for (final char in data.name.trim().characters)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 2),
-                              child: Text(
-                                char,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.primary,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
+        for (final tab in _SidebarTab.values) _buildRailButton(theme, tab),
       ],
     );
   }
 
-  /// 展开态：固定标题栏 + 独立滚动内容区。
-  Widget _buildExpandedPanel(ThemeData theme, MainViewModel mainViewModel, ChildSidebarData data) {
-    return Column(
+  /// 展开态：标题栏（收起钮最左、标题靠右）+ 加载进度条 + 内容区 +
+  /// 最右缘活动条。
+  Widget _buildExpandedPanel(ThemeData theme, MainViewModel mainViewModel) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildHeader(theme, mainViewModel),
-        // 扩展档案/头像加载中的细进度条（不遮挡已展示的基础信息）
-        if (mainViewModel.childSidebarLoading)
-          LinearProgressIndicator(
-            minHeight: 2,
-            color: theme.colorScheme.primary,
-            backgroundColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-          ),
         Expanded(
-          child: Scrollbar(
-            controller: _scrollController,
-            child: SingleChildScrollView(
-              controller: _scrollController,
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildProfile(theme, data),
-                  const SizedBox(height: 18),
-                  // 数据未就绪时展示加载/失败状态，避免把「未加载」误显示为「无高危因素」
-                  if (data.factorsLoaded) _buildRiskScale(theme, data) else _buildRiskStatusSection(theme, mainViewModel, data),
-                  const SizedBox(height: 18),
-                  _buildBasicMetrics(theme, data),
-                  if (data.factorsLoaded) ...[
-                    const SizedBox(height: 18),
-                    _buildSectionTitle(theme, '高危因素'),
-                    const SizedBox(height: 8),
-                    ..._buildFactorTiles(theme, data),
-                  ],
-                  const SizedBox(height: 18),
-                  _buildSectionTitle(theme, '历次检查'),
-                  const SizedBox(height: 10),
-                  if (data.examsLoaded)
-                    _buildTimeline(theme, data)
-                  else
-                    _buildStatusBox(
-                      theme,
-                      data.examsLoadFailed ? '检查记录加载失败' : '正在加载检查记录…',
-                      onRetry: data.examsLoadFailed ? mainViewModel.refreshChildSidebar : null,
-                    ),
-                ],
-              ),
-            ),
+          child: Column(
+            children: [
+              _buildHeader(theme, mainViewModel),
+              // 扩展档案/头像/列表加载中的细进度条（不遮挡已展示内容）
+              if (mainViewModel.childSidebarLoading)
+                LinearProgressIndicator(
+                  minHeight: 2,
+                  color: theme.colorScheme.primary,
+                  backgroundColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                ),
+              Expanded(child: _buildTabContent(theme, mainViewModel)),
+            ],
           ),
         ),
+        _buildActivityRail(theme),
       ],
     );
   }
 
-  /// 标题栏（标题 + 收起按钮）。
+  /// 标题栏：收起/展开按钮在最左端，标题文字靠右。
   Widget _buildHeader(ThemeData theme, MainViewModel mainViewModel) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 8, 6),
+      padding: const EdgeInsets.fromLTRB(8, 10, 12, 6),
       child: Row(
         children: [
-          //Icon(Icons.child_care_outlined, size: 18, color: theme.colorScheme.primary),
-          //const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              '当前儿童',
-              style: theme.textTheme.bodyLarge?.copyWith(
-                color: theme.colorScheme.primary,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
           Tooltip(
             message: '收起',
             child: InkWell(
@@ -245,10 +207,476 @@ class _ChildInfoSidebarState extends State<ChildInfoSidebar> {
               ),
             ),
           ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              _activeTab.title,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.bold,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ),
     );
   }
+
+  /// 最右缘活动条：5 个垂直 TAB 图标（选中项主题色高亮）。
+  Widget _buildActivityRail(ThemeData theme) {
+    return Container(
+      width: ChildInfoSidebar.activityRailWidth,
+      decoration: BoxDecoration(
+        border: Border(left: BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3), width: 0.5)),
+      ),
+      child: Column(
+        children: [
+          const SizedBox(height: 8),
+          for (final tab in _SidebarTab.values) _buildRailButton(theme, tab),
+        ],
+      ),
+    );
+  }
+
+  /// 活动条单个 TAB 按钮（收起/展开两态同几何，切换时不产生尺寸形变）。
+  Widget _buildRailButton(ThemeData theme, _SidebarTab tab) {
+    final active = _activeTab == tab;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Tooltip(
+        message: tab.title,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          hoverColor: theme.colorScheme.primary.withValues(alpha: 0.10),
+          highlightColor: theme.colorScheme.primary.withValues(alpha: 0.16),
+          onTap: () => _selectTab(tab),
+          child: Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: active ? theme.colorScheme.primary.withValues(alpha: 0.14) : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              tab.icon,
+              size: 20,
+              color: active ? theme.colorScheme.primary : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 切换 TAB（收起态点图标同时展开面板；进入初筛列表时惰性加载）。
+  void _selectTab(_SidebarTab tab) {
+    setState(() => _activeTab = tab);
+    final mainViewModel = context.read<MainViewModel>();
+    if (mainViewModel.childSidebarCollapsed) {
+      mainViewModel.toggleChildSidebar();
+    }
+    if (tab == _SidebarTab.initial) {
+      unawaited(context.read<InitialScreeningListViewModel>().ensureLoaded());
+    }
+  }
+
+  /// 内容区按激活 TAB 分发。
+  Widget _buildTabContent(ThemeData theme, MainViewModel mainViewModel) {
+    return switch (_activeTab) {
+      _SidebarTab.current => _buildCurrentChildContent(theme, mainViewModel),
+      _SidebarTab.initial => _buildInitialScreeningTab(theme),
+      _ => _buildDeferredListTab(theme, _activeTab),
+    };
+  }
+
+  // ---------------- TAB：当前儿童 ----------------
+
+  /// 当前儿童内容（未选定儿童时显示指引占位）。
+  Widget _buildCurrentChildContent(ThemeData theme, MainViewModel mainViewModel) {
+    final data = mainViewModel.childSidebarData;
+    if (data == null) {
+      return _buildEmptyHint(theme, '未选定儿童', '请先在顶部搜索框精确检索并选定儿童');
+    }
+    return Scrollbar(
+      controller: _scrollController,
+      child: SingleChildScrollView(
+        controller: _scrollController,
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildProfile(theme, data),
+            const SizedBox(height: 18),
+            // 数据未就绪时展示加载/失败状态，避免把「未加载」误显示为「无高危因素」
+            if (data.factorsLoaded) _buildRiskScale(theme, data) else _buildRiskStatusSection(theme, mainViewModel, data),
+            const SizedBox(height: 18),
+            _buildBasicMetrics(theme, data),
+            if (data.factorsLoaded) ...[
+              const SizedBox(height: 18),
+              _buildSectionTitle(theme, '高危因素'),
+              const SizedBox(height: 8),
+              ..._buildFactorTiles(theme, data),
+            ],
+            const SizedBox(height: 18),
+            _buildSectionTitle(theme, '历次检查'),
+            const SizedBox(height: 10),
+            if (data.examsLoaded)
+              _buildTimeline(theme, data)
+            else
+              _buildStatusBox(
+                theme,
+                data.examsLoadFailed ? '检查记录加载失败' : '正在加载检查记录…',
+                onRetry: data.examsLoadFailed ? mainViewModel.refreshChildSidebar : null,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---------------- TAB：初筛儿童（真实取数） ----------------
+
+  /// 初筛列表 TAB：日期区间查询栏 + 分页列表（双击记录打开初筛记录表）。
+  Widget _buildInitialScreeningTab(ThemeData theme) {
+    return Consumer<InitialScreeningListViewModel>(
+      builder: (context, viewModel, _) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildQueryBar(
+              theme,
+              onSearch: () => viewModel.search(start: _startDateCtrl.text, end: _endDateCtrl.text),
+              onReset: _resetScreeningFilter,
+            ),
+            Expanded(
+              child: viewModel.loading && viewModel.records.isEmpty
+                  ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                  : viewModel.loadFailed
+                  ? ListView(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                      children: [
+                        _buildStatusBox(theme, '初筛记录加载失败', onRetry: viewModel.refresh),
+                      ],
+                    )
+                  : viewModel.records.isEmpty
+                  ? ListView(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                      children: [
+                        _buildStatusBox(theme, viewModel.loaded ? '暂无初筛记录' : '点击【查询】加载初筛记录'),
+                      ],
+                    )
+                  : Scrollbar(
+                      controller: _scrollController,
+                      child: ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                        itemCount: viewModel.records.length,
+                        itemBuilder: (context, index) => _buildScreeningTile(theme, viewModel.records[index]),
+                      ),
+                    ),
+            ),
+            _buildPager(theme, viewModel),
+          ],
+        );
+      },
+    );
+  }
+
+  /// 单条初筛记录（儿童姓名 + 月龄标签 + 检查日期/初筛结果；双击打开）。
+  Widget _buildScreeningTile(ThemeData theme, InitialScreeningListItem item) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Tooltip(
+        message: '双击打开该儿童的初筛记录表',
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          hoverColor: theme.colorScheme.primary.withValues(alpha: 0.08),
+          highlightColor: theme.colorScheme.primary.withValues(alpha: 0.14),
+          onDoubleTap: () => unawaited(_openScreeningRecord(item)),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.30),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35), width: 0.5),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        item.childName.isEmpty ? '（未命名儿童）' : item.childName,
+                        style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        _monthLabel(item.checkMonth),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Row(
+                  children: [
+                    Icon(Icons.calendar_today_outlined, size: 12, color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
+                    const SizedBox(width: 4),
+                    Text(
+                      item.checkDate,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      item.checkResult,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: item.checkResult == AsdCheckFlow.abnormal ? theme.colorScheme.error : theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 初筛列表双击记录：切换当前儿童 → 打开初筛记录表 → 定位到该记录
+  /// 的月龄 TAB（浏览态由页面按已录入记录自动进入）。
+  Future<void> _openScreeningRecord(InitialScreeningListItem item) async {
+    if (_openingRecord) return;
+    _openingRecord = true;
+    // await 前取齐界面依赖（跨异步不持 BuildContext）
+    final messenger = ScaffoldMessenger.of(context);
+    final theme = Theme.of(context);
+    try {
+      final archive = await getIt<ChildService>().load(item.childId);
+      if (!mounted) return;
+      final mainViewModel = context.read<MainViewModel>();
+      // 先登记待打开时段再切儿童/导航：初筛页 _tryApplyAutoTab 取走后
+      // 切到对应月龄 TAB（记录加载完成后该 TAB 自动进入浏览态）
+      context.read<InitialScreeningViewModel>().requestOpenMonth(item.checkMonth);
+      mainViewModel.setCurrentChild(archive.$1);
+      mainViewModel.openMenuByRoute('/asd/initialScreening');
+    } catch (e, st) {
+      LogHelper.error('client:ChildInfoSidebar.openScreeningRecord', e, st);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('打开初筛记录失败，请稍后重试', style: TextStyle(color: theme.colorScheme.onError)),
+          backgroundColor: theme.colorScheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      _openingRecord = false;
+    }
+  }
+
+  /// 重置初筛查询条件并重新查询全部记录。
+  Future<void> _resetScreeningFilter() async {
+    _startDateCtrl.clear();
+    _endDateCtrl.clear();
+    await context.read<InitialScreeningListViewModel>().search();
+  }
+
+  // ---------------- TAB：复筛/诊断/干预（取数暂缓） ----------------
+
+  /// 暂缓开放的列表 TAB：查询栏 + 列头占位 + 提示（取数与双击暂缓）。
+  Widget _buildDeferredListTab(ThemeData theme, _SidebarTab tab) {
+    final (dateLabel, resultLabel) = switch (tab) {
+      _SidebarTab.intervention => ('管理日期', '康复效果'),
+      _ => ('检查日期', tab == _SidebarTab.rescreen ? '复筛结果' : '诊断结果'),
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildQueryBar(
+          theme,
+          onSearch: () => _toastDeferred('${tab.title}查询'),
+          onReset: () => _toastDeferred('${tab.title}查询'),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+          child: Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: Text('儿童姓名', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.55))),
+              ),
+              Expanded(
+                child: Text(dateLabel, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.55))),
+              ),
+              Expanded(
+                child: Text(
+                  resultLabel,
+                  textAlign: TextAlign.right,
+                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.55)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          child: _buildStatusBox(theme, '${tab.title}查询功能暂缓开放'),
+        ),
+      ],
+    );
+  }
+
+  /// 暂缓 TAB 的查询/重置提示。
+  void _toastDeferred(String action) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$action暂缓开放'), behavior: SnackBarBehavior.floating),
+    );
+  }
+
+  // ---------------- 列表公共部件 ----------------
+
+  /// 查询条件栏：起始/截止日期（只读框点按弹选择器）+ 查询/重置。
+  Widget _buildQueryBar(ThemeData theme, {required VoidCallback onSearch, required VoidCallback onReset}) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(child: _buildDateField(theme, _startDateCtrl, '起始日期')),
+              const SizedBox(width: 6),
+              Expanded(child: _buildDateField(theme, _endDateCtrl, '截止日期')),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              FilledButton.tonalIcon(
+                onPressed: onSearch,
+                // 高度随全局统一按钮主题（勿加 visualDensity，会改变高度）
+                style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12)),
+                icon: const Icon(Icons.search, size: 14),
+                label: const Text('查询'),
+              ),
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: onReset,
+                style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10)),
+                child: const Text('重置'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 只读日期输入框（点按弹日期选择器，选定后回写文本）。
+  Widget _buildDateField(ThemeData theme, TextEditingController controller, String hint) {
+    return TextFormField(
+      controller: controller,
+      readOnly: true,
+      style: theme.textTheme.bodyMedium,
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.45)),
+        // 约束为 0 后图标默认贴框；图标距框左缘 6px，与文本间距 6px
+        // （由 contentPadding.left 承担、不再叠加右侧内距）
+        prefixIcon: Padding(
+          padding: const EdgeInsets.only(left: 6),
+          child: Icon(Icons.date_range_outlined, size: 14, color: theme.colorScheme.onSurface.withValues(alpha: 0.55)),
+        ),
+        prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+        isDense: true,
+        contentPadding: const EdgeInsets.only(left: 6, right: 8, top: 9, bottom: 9),
+        filled: true,
+        fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: theme.colorScheme.primary),
+        ),
+      ),
+      onTap: () => unawaited(_pickDate(controller)),
+    );
+  }
+
+  /// 弹日期选择器并回写到输入框（yyyy-MM-dd）。
+  Future<void> _pickDate(TextEditingController controller) async {
+    final now = getIt<TimeService>().now();
+    final initial = DateTime.tryParse(controller.text) ?? now;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null) {
+      controller.text = '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+    }
+  }
+
+  /// 分页脚标：上一页/页码信息/下一页。
+  Widget _buildPager(ThemeData theme, InitialScreeningListViewModel viewModel) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
+      child: Row(
+        children: [
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.chevron_left, size: 18),
+            tooltip: '上一页',
+            onPressed: viewModel.page > 1 ? () => unawaited(viewModel.goToPage(viewModel.page - 1)) : null,
+          ),
+          Expanded(
+            child: Text(
+              '第 ${viewModel.page} / ${viewModel.totalPages} 页 · 共 ${viewModel.total} 条',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+            ),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.chevron_right, size: 18),
+            tooltip: '下一页',
+            onPressed: viewModel.page < viewModel.totalPages ? () => unawaited(viewModel.goToPage(viewModel.page + 1)) : null,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 检查时段标签（复用初筛页 TAB 定义；未定义时段回退「N月龄」）。
+  String _monthLabel(int month) {
+    for (final tab in screeningTabs) {
+      if (tab.$1 == month) return tab.$2;
+    }
+    return '$month月龄';
+  }
+
+  // ---------------- 当前儿童 TAB 内容（原有实现） ----------------
 
   /// 头像 + 姓名 + 性别图标 + 年龄（岁/月/天）。
   Widget _buildProfile(ThemeData theme, ChildSidebarData data) {
@@ -330,7 +758,6 @@ class _ChildInfoSidebarState extends State<ChildInfoSidebar> {
                         spacing: 3,
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          //Icon(Icons.update, size: 13, color: theme.colorScheme.primary),
                           Text(
                             '矫正年龄 ${data.correctedAgeText}',
                             style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary),
@@ -395,6 +822,29 @@ class _ChildInfoSidebarState extends State<ChildInfoSidebar> {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  /// 空态指引（标题 + 说明，当前儿童未选定时显示）。
+  Widget _buildEmptyHint(ThemeData theme, String title, String hint) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.child_care_outlined, size: 44, color: theme.colorScheme.primary.withValues(alpha: 0.35)),
+            const SizedBox(height: 12),
+            Text(title, style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            Text(
+              hint,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.55)),
+            ),
+          ],
+        ),
       ),
     );
   }

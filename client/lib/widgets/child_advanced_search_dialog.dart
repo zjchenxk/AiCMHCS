@@ -659,22 +659,22 @@ class _ChildAdvancedSearchDialogState extends State<_ChildAdvancedSearchDialog> 
         const Spacer(),
         TextButton(
           onPressed: _page > 1 && !_loading ? () => _runQuery(page: 1) : null,
-          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+          style: TextButton.styleFrom(),
           child: const Text('首页'),
         ),
         TextButton(
           onPressed: _page > 1 && !_loading ? () => _runQuery(page: _page - 1) : null,
-          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+          style: TextButton.styleFrom(),
           child: const Text('上一页'),
         ),
         TextButton(
           onPressed: _page < totalPages && !_loading ? () => _runQuery(page: _page + 1) : null,
-          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+          style: TextButton.styleFrom(),
           child: const Text('下一页'),
         ),
         TextButton(
           onPressed: _page < totalPages && !_loading ? () => _runQuery(page: totalPages) : null,
-          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+          style: TextButton.styleFrom(),
           child: const Text('末页'),
         ),
       ],

@@ -163,6 +163,26 @@ class InitialScreeningViewModel extends ChangeNotifier {
   /// 整页数据装载是否失败（提供重试入口）。
   bool get loadFailed => _loadFailed;
 
+  /// 待打开的检查时段（侧边栏「初筛儿童」列表双击记录设置，页面
+  /// `_tryApplyAutoTab` 取走并切到该月龄 TAB 后清空；优先于按年龄自动
+  /// 推算的 TAB，同儿童重复双击也能再次定位）。
+  int? _pendingOpenMonth;
+
+  /// 请求打开指定检查时段 TAB（初筛列表双击记录后、打开初筛页前调用；
+  /// 立即通知监听者——页面已挂载时即时切换 TAB，未挂载时进页后消费）。
+  ///param month: 检查时段（CHECK_MONTH，如 12 表示 12 月龄）
+  void requestOpenMonth(int month) {
+    _pendingOpenMonth = month;
+    notifyListeners();
+  }
+
+  /// 取走待打开的检查时段（取走即清空；无待处理请求返回 null）。
+  int? consumePendingOpenMonth() {
+    final month = _pendingOpenMonth;
+    _pendingOpenMonth = null;
+    return month;
+  }
+
   /// 同步当前儿童（按 ID 幂等去重；儿童变化即清空状态并重载）。
   ///
   /// 同一儿童但档案字段被修改（如儿童建档页改出生日期保存后经

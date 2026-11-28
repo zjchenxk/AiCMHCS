@@ -101,6 +101,17 @@ class _InitialScreeningPageState extends State<InitialScreeningPage> with Single
   }
 
   void _tryApplyAutoTab() {
+    // 侧边栏初筛列表双击记录指定的时段优先（取走即清空；同儿童重复
+    // 双击也能再次定位，不受「每儿童一次」守卫限制）
+    final pending = _viewModel.consumePendingOpenMonth();
+    if (pending != null) {
+      _autoTabAppliedChildId = _viewModel.child?.id ?? '';
+      final index = screeningTabs.indexWhere((tab) => tab.$1 == pending);
+      if (index >= 0 && index != _tabController.index) {
+        _tabController.animateTo(index);
+      }
+      return;
+    }
     final childId = _viewModel.child?.id ?? '';
     if (childId.isEmpty || _autoTabAppliedChildId == childId) {
       return;

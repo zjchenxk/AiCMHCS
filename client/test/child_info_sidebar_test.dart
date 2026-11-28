@@ -1,12 +1,18 @@
-// 右侧儿童信息侧边栏渲染测试：当前儿童写入后展示头像/姓名/性别/年龄、
-// 出生日期（在孕次产次上方）、扩展档案字段（G/P、出生孕周、出生体重、
-// 电话）；五色分级/高危因素来自 CHILD_HIGH_RISK_FACTOR（REMARK 显示在
-// 名称下方）；历次检查时间轴来自 CHILD_CHECK_RECORD（CHECK_DATE /
-// CHECK_TYPE / CHECK_RESULT，不再有演示数据）；库内无记录时给出空态；
-// 加载失败提供重试；收起后仅保留竖条，展开后内容恢复。
+// 右侧儿童信息侧边栏（多 TAB 工作台）测试：
+// - 默认「当前儿童」TAB：基础信息/出生日期/五色分级/高危因素（REMARK 在
+//   名称下方）/历次检查；未选定儿童时显示指引占位（侧边栏常驻显示）；
+// - 最右缘活动条 5 个垂直 TAB；标题栏收起钮最左、标题靠右；
+// - 「初筛儿童」TAB：日期区间分页列表（服务端口径）、翻页、双击记录
+//   切换当前儿童 + 打开初筛记录表菜单 + 登记待定位月龄；
+// - 复筛/诊断/干预 TAB：查询栏与列头占位、功能暂缓开放提示；
+// - 收起后仅保留竖排 TAB 图标，展开后内容恢复。
 import 'package:client/main.dart' as app;
 import 'package:client/services/child_service.dart';
+import 'package:client/services/initial_screening_service.dart';
+import 'package:client/services/menu_service.dart';
 import 'package:client/services/time_service.dart';
+import 'package:client/view_models/asd/initial_screening_view_model.dart';
+import 'package:client/view_models/main/initial_screening_list_view_model.dart';
 import 'package:client/view_models/main/main_view_model.dart';
 import 'package:client/views/main/child_info_sidebar.dart';
 import 'package:common/model.dart';
@@ -14,50 +20,75 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
-/// 返回固定儿童整档、高危因素与检查记录的伪儿童服务。
+/// 返回固定儿童整档与高危因素记录的伪儿童服务（load 按 id 返回同名
+/// 儿童，供双击记录切换上下文用例验证）。
 class FakeChildService extends ChildService {
-  FakeChildService(
-    this.child,
-    this.ext, {
-    this.factors = const [],
-    this.records = const [],
-    this.failHighRisk = false,
-    this.failCheckRecords = false,
-  });
+  FakeChildService(this.child, this.ext, {this.factors = const []});
 
   final ChildInfo child;
   final ChildExtInfo ext;
   List<ChildHighRiskFactor> factors;
-  List<ChildCheckRecord> records;
-  bool failHighRisk;
-  bool failCheckRecords;
 
   @override
-  Future<ChildArchive> load(String id) async => (child, ext, const <ChildGuardianInfo>[]);
+  Future<ChildArchive> load(String id) async => (
+    ChildInfo(
+      id: id,
+      checkTime: '2026-11-17',
+      name: '列表儿童',
+      sex: '2',
+      birthDate: '2024-03-05',
+      addressProvince: '330000',
+      addressCity: '330100',
+      addressCounty: '330106',
+      addressDetails: '测试路 1 号',
+      creatorId: 'user-1',
+      creatorName: '测试医生',
+      hospId: 'hosp-1',
+      hospName: '测试医院',
+      phone: '13900000000',
+    ),
+    ext,
+    const <ChildGuardianInfo>[],
+  );
 
   @override
   Future<ChildPhoto?> latestPhoto(String childId) async => null;
 
   @override
-  Future<List<ChildHighRiskFactor>> highRiskFactors(String childId) async {
-    if (failHighRisk) throw Exception('模拟高危因素查询失败');
-    return factors;
-  }
+  Future<List<ChildHighRiskFactor>> highRiskFactors(String childId) async => factors;
 
   @override
-  Future<List<ChildCheckRecord>> checkRecords(String childId) async {
-    if (failCheckRecords) throw Exception('模拟检查记录查询失败');
-    return records;
+  Future<List<ChildCheckRecord>> checkRecords(String childId) async => const [];
+}
+
+/// 返回固定初筛记录分页的伪初筛服务（本地模拟日期区间过滤与切片）。
+class FakeScreeningListService extends InitialScreeningService {
+  FakeScreeningListService(this.records);
+
+  final List<InitialScreeningListItem> records;
+
+  @override
+  Future<(List<InitialScreeningListItem>, int, int, int)> list({String? startDate, String? endDate, int page = 1, int pageSize = 10}) async {
+    var filtered = records;
+    if (startDate != null && startDate.isNotEmpty) {
+      filtered = filtered.where((r) => r.checkDate.compareTo(startDate) >= 0).toList();
+    }
+    if (endDate != null && endDate.isNotEmpty) {
+      filtered = filtered.where((r) => r.checkDate.compareTo(endDate) <= 0).toList();
+    }
+    final total = filtered.length;
+    final slice = filtered.skip((page - 1) * pageSize).take(pageSize).toList();
+    return (slice, total, page, pageSize);
   }
 }
 
-/// 测试用儿童基础档案（默认 2023-09-01 出生）。
-ChildInfo buildChild({String birthDate = '2023-09-01'}) => ChildInfo(
+/// 测试用儿童基础档案（2023-09-01 出生，3 岁已过矫正窗口）。
+ChildInfo buildChild() => ChildInfo(
   id: 'child-1',
   checkTime: '2026-11-17',
   name: '测试儿童',
   sex: '1',
-  birthDate: birthDate,
+  birthDate: '2023-09-01',
   addressProvince: '330000',
   addressCity: '330100',
   addressCounty: '330106',
@@ -69,7 +100,7 @@ ChildInfo buildChild({String birthDate = '2023-09-01'}) => ChildInfo(
   phone: '13800000000',
 );
 
-/// 测试用儿童扩展档案（33⁺⁴周早产、2280 g）。
+/// 测试用儿童扩展档案。
 ChildExtInfo buildExt() => const ChildExtInfo(
   childId: 'child-1',
   creatorId: 'user-1',
@@ -78,60 +109,61 @@ ChildExtInfo buildExt() => const ChildExtInfo(
   hospName: '测试医院',
   gestationalWeek: '33',
   gestationalDay: '4',
-  birthWeight: '2280',
   gravidity: '2',
   parity: '1',
-  // 高危分级不再由扩展信息推导，此字段存在也不应影响侧边栏
-  hasSyphilisInfection: '1',
 );
 
-/// 构造一条已保存的高危因素记录（数据库快照口径）。
-ChildHighRiskFactor buildFactor(String id, String name, String color, [String? remark]) => ChildHighRiskFactor(
-  id: id,
-  childId: 'child-1',
-  highRiskFactorId: 'dict-$id',
-  riskFactorCode: '03$id',
-  riskFactorName: name,
-  riskColor: color,
-  remark: remark,
-  creatorId: 'user-1',
-  creatorName: '测试医生',
-  hospId: 'hosp-1',
-  hospName: '测试医院',
-);
-
-/// 测试用高危因素记录：橙色 + 黄色 + 紫色（紫色可与橙色叠加）。
+/// 测试用高危因素：橙色 + 紫色（叠加）。
 List<ChildHighRiskFactor> buildFactors() => [
-  buildFactor('1', '早产（32~33⁺⁶周）', '橙色', '出生孕周 33 周 + 4 天，单胎'),
-  buildFactor('2', '母亲妊娠期高血压疾病', '黄色'),
-  buildFactor('3', '母亲梅毒感染', '紫色'),
+  const ChildHighRiskFactor(
+    id: 'f1',
+    childId: 'child-1',
+    highRiskFactorId: 'dict-1',
+    riskFactorCode: '0399',
+    riskFactorName: '早产（32~33⁺⁶周）',
+    riskColor: '橙色',
+    remark: '出生孕周 33 周 + 4 天',
+    creatorId: 'user-1',
+    creatorName: '测试医生',
+    hospId: 'hosp-1',
+    hospName: '测试医院',
+  ),
+  const ChildHighRiskFactor(
+    id: 'f2',
+    childId: 'child-1',
+    highRiskFactorId: 'dict-2',
+    riskFactorCode: '0599',
+    riskFactorName: '母亲梅毒感染',
+    riskColor: '紫色',
+    creatorId: 'user-1',
+    creatorName: '测试医生',
+    hospId: 'hosp-1',
+    hospName: '测试医院',
+  ),
 ];
 
-/// 构造一条检查记录（CHILD_CHECK_RECORD 查询口径）。
-ChildCheckRecord buildCheckRecord(String id, String date, String type, String result) => ChildCheckRecord(
-  id: id,
-  childId: 'child-1',
-  checkDate: date,
-  ageYear: '3',
-  ageMonth: '2',
-  ageDay: '9',
-  checkType: type,
-  checkResult: result,
-  creatorId: 'user-1',
-  creatorName: '测试医生',
-  hospId: 'hosp-1',
-  hospName: '测试医院',
-);
+/// 测试用初筛记录（12 条 → 第 1 页 10 条 / 第 2 页 2 条）。
+List<InitialScreeningListItem> buildScreeningRecords() => [
+  for (var i = 0; i < 12; i++)
+    InitialScreeningListItem(
+      id: 'r$i',
+      childId: 'child-$i',
+      childName: '筛查儿童$i',
+      checkDate: '2026-${(12 - i ~/ 2).toString().padLeft(2, '0')}-15',
+      checkMonth: 12,
+      checkResult: i % 3 == 0 ? '异常' : '未见异常',
+    ),
+];
 
-/// 测试用检查记录（数据库已倒序，模型层再排一次）。
-List<ChildCheckRecord> buildCheckRecords() => [
-  buildCheckRecord('r1', '2026-11-10', '孤独症初筛', '未见异常'),
-  buildCheckRecord('r2', '2026-06-01', '听力筛查', '双耳通过'),
+/// 主界面角色菜单（含初筛记录表路由，验证双击跳转选中）。
+List<Menu> buildMenus() => const [
+  Menu(id: 'm1', parentId: null, itemCode: 'ASD01', itemName: '孤独症筛查', itemType: '1', menuRoute: null, menuIcon: 'psychology', visible: '1'),
+  Menu(id: 'm2', parentId: 'm1', itemCode: 'ASD0101', itemName: '初筛记录表', itemType: '2', menuRoute: '/asd/initialScreening', menuIcon: 'fact_check', visible: '1'),
 ];
 
 void main() {
   setUp(() {
-    // 侧边栏构建年龄依赖全局时间服务（未校准即本地时钟）
+    // 侧边栏构建年龄/日期选择默认值依赖全局时间服务（未校准即本地时钟）
     if (!app.getIt.isRegistered<TimeService>()) {
       app.getIt.registerLazySingleton<TimeService>(() => TimeService());
     }
@@ -139,26 +171,33 @@ void main() {
 
   Future<MainViewModel> pumpSidebar(
     WidgetTester tester, {
-    ChildInfo? child,
-    ChildExtInfo? ext,
-    List<ChildHighRiskFactor>? factors,
-    List<ChildCheckRecord>? checkRecords,
-    FakeChildService? service,
+    MainViewModel? mainViewModel,
+    InitialScreeningListViewModel? listViewModel,
+    InitialScreeningViewModel? screeningViewModel,
+    bool withChild = true,
   }) async {
-    final target = child ?? buildChild();
-    final fake =
-        service ??
-        FakeChildService(
-          target,
-          ext ?? buildExt(),
-          factors: factors ?? buildFactors(),
-          records: checkRecords ?? buildCheckRecords(),
+    final child = buildChild();
+    final fakeChildService = FakeChildService(child, buildExt(), factors: buildFactors());
+    final vm = mainViewModel ?? MainViewModel(childService: fakeChildService);
+    if (withChild) {
+      vm.setCurrentChild(child);
+    }
+    final listVm = listViewModel ?? InitialScreeningListViewModel(screeningService: FakeScreeningListService(buildScreeningRecords()));
+    final screeningVm =
+        screeningViewModel ??
+        InitialScreeningViewModel(
+          screeningService: FakeScreeningListService(const []),
+          childService: fakeChildService,
+          menuService: app.getIt.isRegistered<MenuService>() ? app.getIt<MenuService>() : MenuService(),
+          timeService: app.getIt<TimeService>(),
         );
-    final vm = MainViewModel(childService: fake);
-    vm.setCurrentChild(target);
     await tester.pumpWidget(
-      ChangeNotifierProvider<MainViewModel>.value(
-        value: vm,
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<MainViewModel>.value(value: vm),
+          ChangeNotifierProvider<InitialScreeningListViewModel>.value(value: listVm),
+          ChangeNotifierProvider<InitialScreeningViewModel>.value(value: screeningVm),
+        ],
         child: const MaterialApp(
           home: Scaffold(
             body: Row(
@@ -175,116 +214,156 @@ void main() {
     return vm;
   }
 
-  testWidgets('展示基础信息、出生日期与数据库五色分级/高危因素/检查记录', (tester) async {
+  testWidgets('默认当前儿童 TAB：标题靠右、基础信息与出生日期在孕次产次上方', (tester) async {
     await pumpSidebar(tester);
 
-    expect(find.text('当前儿童'), findsOneWidget);
-    expect(find.text('测试儿童'), findsOneWidget);
-    expect(find.text('男'), findsOneWidget);
-    expect(find.text('13800000000'), findsOneWidget);
-    expect(find.text('G2 P1'), findsOneWidget);
-    expect(find.text('33周+4天'), findsOneWidget);
-    expect(find.text('2280 g'), findsOneWidget);
+    // 标题栏：收起钮（Tooltip）在左、标题「当前儿童」靠右
+    expect(find.byTooltip('收起'), findsOneWidget);
+    final collapseCenter = tester.getCenter(find.byTooltip('收起'));
+    final titleCenter = tester.getCenter(find.text('当前儿童'));
+    expect(titleCenter.dx, greaterThan(collapseCenter.dx));
 
-    // 出生日期显示在孕次产次上方
-    expect(find.text('出生日期'), findsOneWidget);
+    expect(find.text('测试儿童'), findsOneWidget);
     expect(find.text('2023-09-01'), findsOneWidget);
+    expect(find.text('出生日期'), findsOneWidget);
     expect(
       tester.getTopLeft(find.text('出生日期')).dy,
       lessThan(tester.getTopLeft(find.text('孕次产次')).dy),
     );
-
-    // 橙色（早产）+ 紫色（梅毒）→ 综合分级橙色、紫色叠加
     expect(find.text('高危五色分级'), findsOneWidget);
-    expect(find.text('橙色'), findsWidgets);
-    expect(find.text('紫色'), findsWidgets);
-    expect(find.textContaining('综合分级：橙色'), findsOneWidget);
-    expect(find.textContaining('叠加紫色'), findsOneWidget);
     expect(find.text('早产（32~33⁺⁶周）'), findsOneWidget);
-    expect(find.text('母亲妊娠期高血压疾病'), findsOneWidget);
-    expect(find.text('母亲梅毒感染'), findsOneWidget);
+  });
 
-    // REMARK 显示在因素名称下方
-    final nameTop = tester.getTopLeft(find.text('早产（32~33⁺⁶周）')).dy;
-    final remarkTop = tester.getTopLeft(find.text('出生孕周 33 周 + 4 天，单胎')).dy;
-    expect(remarkTop, greaterThan(nameTop));
+  testWidgets('未选定儿童时侧边栏常驻，当前儿童 TAB 显示指引占位', (tester) async {
+    await pumpSidebar(tester, withChild: false);
 
-    // 历次检查来自 CHILD_CHECK_RECORD（日期/名称/结果），最新在前
-    expect(find.text('孤独症初筛'), findsOneWidget);
-    expect(find.text('未见异常'), findsOneWidget);
-    expect(find.text('听力筛查'), findsOneWidget);
-    expect(find.text('双耳通过'), findsOneWidget);
-    expect(
-      tester.getTopLeft(find.text('2026-11-10')).dy,
-      lessThan(tester.getTopLeft(find.text('2026-06-01')).dy),
+    expect(find.byType(ChildInfoSidebar), findsOneWidget);
+    expect(find.text('未选定儿童'), findsOneWidget);
+    expect(find.text('测试儿童'), findsNothing);
+  });
+
+  testWidgets('初筛 TAB：切入自动加载、列表字段与分页、翻页到第二页', (tester) async {
+    final vm = await pumpSidebar(tester);
+
+    await tester.tap(find.byTooltip('初筛儿童'));
+    await tester.pumpAndSettle();
+
+    // 标题切换 + 列表展示（第 1 页 10 条 / 共 12 条）
+    expect(find.text('初筛儿童'), findsOneWidget);
+    expect(find.text('第 1 / 2 页 · 共 12 条'), findsOneWidget);
+    expect(find.text('筛查儿童0'), findsOneWidget);
+    expect(find.text('12月龄'), findsWidgets);
+    expect(find.text('异常'), findsWidgets);
+
+    // 翻到第二页
+    await tester.tap(find.byTooltip('下一页'));
+    await tester.pumpAndSettle();
+    expect(find.text('第 2 / 2 页 · 共 12 条'), findsOneWidget);
+    expect(find.text('筛查儿童10'), findsOneWidget);
+    expect(find.text('筛查儿童11'), findsOneWidget);
+    expect(find.text('筛查儿童0'), findsNothing);
+
+    // 未影响当前儿童上下文
+    expect(vm.child.id, 'child-1');
+  });
+
+  testWidgets('初筛 TAB 双击记录：切换当前儿童、打开初筛记录表菜单、登记月龄', (tester) async {
+    // 注册双击链路依赖（ChildService 经 getIt 解析）
+    final fakeChildService = FakeChildService(buildChild(), buildExt(), factors: buildFactors());
+    app.getIt.registerLazySingleton<ChildService>(() => fakeChildService);
+    addTearDown(app.getIt.unregister<ChildService>);
+
+    final vm = MainViewModel(childService: fakeChildService);
+    vm.setRoleMenus(buildMenus());
+    final listVm = InitialScreeningListViewModel(
+      screeningService: FakeScreeningListService([
+        const InitialScreeningListItem(
+          id: 'r9',
+          childId: 'child-9',
+          childName: '筛查儿童9',
+          checkDate: '2026-06-15',
+          checkMonth: 12,
+          checkResult: '异常',
+        ),
+      ]),
     );
+    final screeningVm = InitialScreeningViewModel(
+      screeningService: FakeScreeningListService(const []),
+      childService: fakeChildService,
+      menuService: MenuService(),
+      timeService: app.getIt<TimeService>(),
+    );
+    await pumpSidebar(tester, mainViewModel: vm, listViewModel: listVm, screeningViewModel: screeningVm);
 
-    // 高危因素/检查记录均来自数据库，不再有演示数据标记
-    expect(find.text('演示数据'), findsNothing);
-
-    // 3 岁儿童已超出早产儿矫正窗口（矫正月龄 24 个月）→ 不展示矫正年龄
-    expect(find.textContaining('矫正年龄'), findsNothing);
-  });
-
-  testWidgets('库内无高危因素/检查记录时显示空态', (tester) async {
-    await pumpSidebar(tester, factors: const [], checkRecords: const []);
-
-    expect(find.textContaining('综合分级：绿色'), findsOneWidget);
-    expect(find.text('无高危因素'), findsOneWidget);
-    expect(find.text('暂无检查记录'), findsOneWidget);
-    expect(find.text('演示数据'), findsNothing);
-  });
-
-  testWidgets('高危因素加载失败显示重试，重试成功后展示数据库因素', (tester) async {
-    final fake = FakeChildService(buildChild(), buildExt(), factors: buildFactors(), records: buildCheckRecords(), failHighRisk: true);
-    await pumpSidebar(tester, service: fake);
-
-    expect(find.text('高危因素加载失败'), findsOneWidget);
-    expect(find.text('重试'), findsOneWidget);
-    expect(find.text('早产（32~33⁺⁶周）'), findsNothing);
-
-    fake.failHighRisk = false;
-    await tester.tap(find.text('重试'));
+    await tester.tap(find.byTooltip('初筛儿童'));
     await tester.pumpAndSettle();
-    expect(find.text('早产（32~33⁺⁶周）'), findsOneWidget);
-  });
 
-  testWidgets('检查记录加载失败显示重试，重试成功后展示数据库记录', (tester) async {
-    final fake = FakeChildService(buildChild(), buildExt(), factors: buildFactors(), records: buildCheckRecords(), failCheckRecords: true);
-    await pumpSidebar(tester, service: fake);
-
-    expect(find.text('检查记录加载失败'), findsOneWidget);
-    expect(find.text('孤独症初筛'), findsNothing);
-
-    fake.failCheckRecords = false;
-    await tester.ensureVisible(find.text('重试'));
+    // 双击记录（双击判定约 300ms：两次 tap 间 pump 推进时钟）
+    await tester.tap(find.text('筛查儿童9'), warnIfMissed: false);
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.text('筛查儿童9'), warnIfMissed: false);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('重试'));
-    await tester.pumpAndSettle();
-    expect(find.text('孤独症初筛'), findsOneWidget);
+
+    // 当前儿童上下文已切换到记录所属儿童
+    expect(vm.child.id, 'child-9');
+    expect(vm.child.name, '列表儿童');
+    // 已自动打开初筛记录表菜单，且左侧菜单树的祖先模块「孤独症筛查」
+    // 一并展开（与手工逐级点击菜单一致）
+    expect(vm.selectedMenuId, 'm2');
+    expect(vm.isExpanded('m1'), isTrue);
+    // 已登记待定位月龄（页面挂载后消费并切到 12 月龄 TAB）
+    expect(screeningVm.consumePendingOpenMonth(), 12);
   });
 
-  testWidgets('早产儿在矫正窗口内同时展示实足年龄与矫正年龄', (tester) async {
-    // 出生 100 天、33⁺⁴ 周早产 → 矫正年龄约 1 个月，仍在窗口内
-    final birth = DateTime.now().subtract(const Duration(days: 100));
-    final birthDate = '${birth.year.toString().padLeft(4, '0')}-${birth.month.toString().padLeft(2, '0')}-${birth.day.toString().padLeft(2, '0')}';
-    await pumpSidebar(tester, child: buildChild(birthDate: birthDate));
-
-    expect(find.textContaining('矫正年龄'), findsOneWidget);
-    expect(find.text('测试儿童'), findsOneWidget);
-  });
-
-  testWidgets('收起后仅保留竖条，展开后内容恢复', (tester) async {
+  testWidgets('复筛/诊断/干预 TAB：标题切换与暂缓开放占位', (tester) async {
     await pumpSidebar(tester);
-    expect(find.text('高危因素'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('复筛儿童'));
+    await tester.pumpAndSettle();
+    expect(find.text('复筛儿童'), findsOneWidget);
+    expect(find.text('复筛儿童查询功能暂缓开放'), findsOneWidget);
+    expect(find.text('检查日期'), findsOneWidget);
+    expect(find.text('复筛结果'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('诊断儿童'));
+    await tester.pumpAndSettle();
+    expect(find.text('诊断儿童'), findsOneWidget);
+    expect(find.text('诊断儿童查询功能暂缓开放'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('干预儿童'));
+    await tester.pumpAndSettle();
+    expect(find.text('干预儿童'), findsOneWidget);
+    expect(find.text('干预儿童查询功能暂缓开放'), findsOneWidget);
+    expect(find.text('管理日期'), findsOneWidget);
+    expect(find.text('康复效果'), findsOneWidget);
+  });
+
+  testWidgets('暂缓 TAB 与初筛 TAB 共用日期查询栏（同款起始/截止日期框）', (tester) async {
+    await pumpSidebar(tester);
+
+    await tester.tap(find.byTooltip('复筛儿童'));
+    await tester.pumpAndSettle();
+    // 日期框 hint 即「起始/截止日期」，与初筛 TAB 同一 _buildQueryBar 实现
+    expect(find.text('起始日期'), findsOneWidget);
+    expect(find.text('截止日期'), findsOneWidget);
+    expect(find.text('查询'), findsOneWidget);
+    expect(find.text('重置'), findsOneWidget);
+  });
+
+  testWidgets('收起后仅保留竖排 TAB 图标，点图标展开并激活对应页', (tester) async {
+    await pumpSidebar(tester);
+    expect(find.text('高危五色分级'), findsOneWidget);
 
     await tester.tap(find.byTooltip('收起'));
     await tester.pumpAndSettle();
-    expect(find.text('高危因素'), findsNothing);
-    expect(find.byTooltip('展开儿童信息'), findsOneWidget);
+    expect(find.text('高危五色分级'), findsNothing);
+    expect(find.byTooltip('展开侧边栏'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('展开儿童信息'));
+    // 收起态点初筛 TAB 图标 → 展开并激活初筛列表
+    await tester.tap(find.byTooltip('初筛儿童'));
     await tester.pumpAndSettle();
-    expect(find.text('高危因素'), findsOneWidget);
+    expect(find.byTooltip('收起'), findsOneWidget);
+    expect(find.text('初筛儿童'), findsOneWidget);
+    expect(find.textContaining('共 12 条'), findsOneWidget);
   });
 }

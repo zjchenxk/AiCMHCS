@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:common/model.dart';
 import 'package:server/database/engine/sqlite/sqlite_gateway.dart';
 import 'package:server/services/initial_screening_service.dart';
+import 'package:server/utils/field_cipher.dart';
 import 'package:test/test.dart';
 
 // 种子数据固定 UUID（固定值便于跨行引用）。
@@ -555,5 +558,87 @@ CREATE TABLE SYS_USER (
     final recordAfter = await db.query('SELECT CHECK_RESULT FROM CHILD_CHECK_RECORD WHERE DATA_SRC_ID = ?', [screeningId]);
     expect(recordAfter.rows, hasLength(1));
     expect(recordAfter.rowsAsMaps.single['CHECK_RESULT'], '异常');
+  });
+
+  test('listForSidebar：医院隔离 + 日期区间 + 分页 + 儿童姓名解密', () async {
+    // setUp 最小 CHILD_INFO 结构无 NAME 列（已种子 child1Id/child2Id），
+    // 补列后为 child1 写入加密姓名
+    await db.executeDirect('ALTER TABLE CHILD_INFO ADD COLUMN NAME TEXT');
+    final cipher = FieldCipher.fromMasterKeyBase64(base64Encode(utf8.encode('0123456789abcdef0123456789abcdef')));
+    final nameCipher = await cipher.seal(FieldCipher.childNamePurpose, '王小明');
+    await db.execute('UPDATE CHILD_INFO SET NAME = ? WHERE ID = ?', [nameCipher, child1Id]);
+
+    Future<void> insertScreening({
+      required String id,
+      required String childId,
+      required String date,
+      required int month,
+      required String result,
+      required String hospId,
+    }) => db.execute(
+      'INSERT INTO ASD_INITIAL_SCREENING (ID, CHILD_ID, CHECK_DATE, AGE_YEAR, '
+      'AGE_MONTH, AGE_DAY, CHECK_MONTH, WARNING_SIGN_RESULT, '
+      'LANGUAGE_SOCIAL_COMMUNICATION_RESULT, CHECK_RESULT, HAS_REFERRAL, '
+      'REFERRAL_HOSP_NAME, DOCTOR_ID, DOCTOR_NAME, CREATOR_ID, CREATOR_NAME, '
+      'HOSP_ID, HOSP_NAME, CREATE_TIME) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        id,
+        childId,
+        date,
+        1,
+        2,
+        3,
+        month,
+        '未见异常',
+        '未见异常',
+        result,
+        '0',
+        '无',
+        doctor1Id,
+        '王医生',
+        operator1Id,
+        '张医生',
+        hospId,
+        hospId == hosp1Id ? '示例人民医院' : '示例儿童医院',
+        '2026-11-24 09:00:00',
+      ],
+    );
+
+    await insertScreening(id: 'S1', childId: child1Id, date: '2026-01-10', month: 3, result: '未见异常', hospId: hosp1Id);
+    await insertScreening(id: 'S2', childId: child1Id, date: '2026-06-20', month: 6, result: '异常', hospId: hosp1Id);
+    // 儿童档案已删除（无 CHILD_INFO 行）→ 姓名显示「（已删除）」
+    await insertScreening(id: 'S3', childId: 'c0000000-0000-0000-0000-000000000099', date: '2026-08-01', month: 12, result: '未见异常', hospId: hosp1Id);
+    // 其他医院记录不应返回（按登录用户医院隔离）
+    await insertScreening(id: 'S4', childId: child2Id, date: '2026-09-01', month: 18, result: '未见异常', hospId: hosp2Id);
+
+    // 无日期区间 → 返回本院全部，按检查日期倒序；姓名已解密
+    final (records, total, page, pageSize) = await service.listForSidebar(hospId: hosp1Id, page: 1, pageSize: 10, cipher: cipher);
+    expect(total, 3);
+    expect(page, 1);
+    expect(pageSize, 10);
+    expect(records.map((r) => r.id), ['S3', 'S2', 'S1']);
+    expect(records[1].childName, '王小明');
+    expect(records[1].childId, child1Id);
+    expect(records[1].checkDate, '2026-06-20');
+    expect(records[1].checkMonth, 6);
+    expect(records[1].checkResult, '异常');
+    expect(records[0].childName, '（已删除）');
+
+    // 日期区间过滤
+    final (june, juneTotal, _, _) = await service.listForSidebar(hospId: hosp1Id, startDate: '2026-06-01', endDate: '2026-06-30', page: 1, pageSize: 10, cipher: cipher);
+    expect(juneTotal, 1);
+    expect(june.single.id, 'S2');
+
+    // 分页：每页 1 条，第 2 页为 S2；越界页为空
+    final (page2, page2Total, _, _) = await service.listForSidebar(hospId: hosp1Id, page: 2, pageSize: 1, cipher: cipher);
+    expect(page2Total, 3);
+    expect(page2.single.id, 'S2');
+    final (beyond, _, _, _) = await service.listForSidebar(hospId: hosp1Id, page: 9, pageSize: 1, cipher: cipher);
+    expect(beyond, isEmpty);
+
+    // 医院为空 → 空结果
+    final (empty, emptyTotal, _, _) = await service.listForSidebar(hospId: ' ', page: 1, pageSize: 10, cipher: cipher);
+    expect(empty, isEmpty);
+    expect(emptyTotal, 0);
   });
 }

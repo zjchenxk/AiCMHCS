@@ -39,11 +39,13 @@ class MainViewModel extends ChangeNotifier {
     roleId: '',
   );
 
-  /// 登录成功后以全局 loginUser 刷新工作副本
+  /// 登录成功后以全局 loginUser 刷新工作副本；同时把右侧侧边栏复位为
+  /// 收起态（登录后默认收起，需要时经活动条图标展开）。
   void syncLoginUser() {
     final user = app.loginUser;
     if (user == null) return;
     loginUser = user;
+    _childSidebarCollapsed = true;
     notifyListeners();
   }
 
@@ -525,26 +527,39 @@ class MainViewModel extends ChangeNotifier {
   /// 叶子菜单并按侧边栏点击同口径选中（含面包屑）；角色未授权首页菜单
   /// 时不动，内容区维持「请从左侧选择功能菜单」占位。
   void openDefaultMenu() {
+    openMenuByRoute('/home');
+  }
+
+  /// 按路由打开功能菜单（递归搜索角色已授权菜单树，命中叶子菜单即选中
+  /// 并刷新内容区，同时展开其全部祖先模块——与手工逐级点击菜单一致，
+  /// 供侧边栏初筛列表双击记录等编程式导航使用；未授权/未找到时保持
+  /// 当前内容区不变）。
+  ///param route: 菜单路由（如 '/asd/initialScreening'）
+  void openMenuByRoute(String route) {
     MenuItem? found;
     var path = <String>[];
+    var ancestors = <String>[];
 
-    void search(List<MenuItem> list, List<String> parentPath) {
+    void search(List<MenuItem> list, List<String> parentPath, List<String> parentIds) {
       for (final menu in list) {
         if (found != null) return;
         final p = [...parentPath, menu.title];
         if (menu.children.isEmpty) {
-          if (menu.route == '/home') {
+          if (menu.route == route) {
             found = menu;
             path = p;
+            ancestors = parentIds;
           }
         } else {
-          search(menu.children, p);
+          search(menu.children, p, [...parentIds, menu.id]);
         }
       }
     }
 
-    search(menus, []);
+    search(menus, [], []);
     if (found == null) return;
+    // 展开祖先模块（已展开的重复加入无害；子菜单可见性由搜索态兜底）
+    _expandedIds.addAll(ancestors);
     selectMenu(found!, path);
   }
 }

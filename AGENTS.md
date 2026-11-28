@@ -173,6 +173,10 @@ cd client && flutter analyze && dart format --set-exit-if-changed . && flutter t
 - 表面装饰靠色彩与透明度区分层级（surface/primaryContainer/outlineVariant），不用 `BoxShadow` 堆叠；
 - 下拉菜单 `alignedDropdown: true`，与输入框对齐；
 - 功能菜单图标统一使用 **outlined 系列** Material 图标（如 `Icons.home_outlined`、`Icons.local_hospital_outlined`）；
+- **统一按钮高度**：全局操作按钮（FilledButton / ElevatedButton / OutlinedButton / TextButton 及各 `.icon` 变体）统一**最小尺寸 64×36**，由 `main.dart` 的 `_unifiedButtonStyle` 在浅色/深色两套四类按钮主题中统一设置（字号随 FontProvider 缩放）——业务代码**勿再逐按钮指定高度**（此前 34/40/48 混用导致同屏按钮高度不一致），新按钮直接使用默认主题即可与全站对齐。**两个关键机制**（改样式前务必理解，否则高度会失控）：
+  1. `tapTargetSize: MaterialTapTargetSize.shrinkWrap`——M3 默认 `padded` 会把按钮最小高度抬到 48 触达尺寸，`minimumSize(36)` 会被盖掉，必须在主题里显式 shrinkWrap；
+  2. `visualDensity: VisualDensity.standard`——visualDensity 会按密度直接增减按钮最小约束（`compact` 使高度变 28），**业务代码禁止在四类按钮上设置 `visualDensity`**（IconButton / Checkbox / Dropdown 不受此约束，可按需 compact）；按钮要紧凑间距用 `padding` 调整。
+  确需例外（紧凑行内文字钮、展示型大按钮、菜单项等）必须显式覆盖 `minimumSize` 并在代码注释说明原因，现状例外：主界面菜单 `MenuItemButton` 44（触达面积）、状态块内「重试」28（文字级行内钮）、关于对话框「关闭」40（展示型大按钮）；新增例外前先确认是否真有必要，保持全站高度一致是默认要求；
 - **浏览态字段配色**：前台业务表单浏览态字段一律黑色正文色，细则见下节「前台业务表单浏览态样式（统一规范）」；后台设置类页面（`/system/` 开头）暂不适用。
 
 ### 前台业务表单浏览态样式（统一规范）

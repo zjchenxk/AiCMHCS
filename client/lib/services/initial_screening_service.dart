@@ -20,6 +20,30 @@ class InitialScreeningService {
     return list.whereType<Map<String, dynamic>>().map(InitialScreening.fromJson).toList();
   }
 
+  /// 侧边栏「初筛儿童」分页列表：本院全部初筛记录按检查日期倒序（含
+  /// 解密后的儿童姓名）；日期区间为空串/null 时不限制。
+  ///returns: (记录列表, 总条数, 服务端实际页码, 服务端实际页大小)
+  Future<(List<InitialScreeningListItem>, int, int, int)> list({
+    String? startDate,
+    String? endDate,
+    int page = 1,
+    int pageSize = 10,
+  }) async {
+    final data = await _base.post('/api/initialScreening/list', {
+      'startDate': startDate,
+      'endDate': endDate,
+      'page': page,
+      'pageSize': pageSize,
+    });
+    final records = ((data['records'] as List<dynamic>? ?? const []).whereType<Map<String, dynamic>>()).map(InitialScreeningListItem.fromJson).toList();
+    return (
+      records,
+      data['total'] as int? ?? 0,
+      data['page'] as int? ?? page,
+      data['pageSize'] as int? ?? pageSize,
+    );
+  }
+
   /// 查询指定月龄的预警征象条目（SCALE_WSCMBD 基础数据，按条目序号
   /// 升序；无条目表示字典未录入）。
   Future<List<WscmbdItem>> wscmbdItems(int month) async {

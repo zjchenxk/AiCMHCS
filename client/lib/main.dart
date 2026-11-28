@@ -27,6 +27,7 @@ import 'package:client/view_models/child/child_create_view_model.dart';
 import 'package:client/view_models/child/photo_management_view_model.dart';
 import 'package:client/view_models/home/home_view_model.dart';
 import 'package:client/view_models/main/main_view_model.dart';
+import 'package:client/view_models/main/initial_screening_list_view_model.dart';
 import 'package:client/view_models/login/login_view_model.dart';
 import 'package:client/view_models/system/admin_division_management_view_model.dart';
 import 'package:client/view_models/system/campus_management_view_model.dart';
@@ -123,6 +124,8 @@ void main() async {
         ChangeNotifierProvider(create: (context) => FontProvider()),
         ChangeNotifierProvider(create: (context) => LoginViewModel()),
         ChangeNotifierProvider(create: (context) => MainViewModel()),
+        // 右侧侧边栏「初筛儿童」分页列表（复筛/诊断/干预取数暂缓）
+        ChangeNotifierProvider(create: (context) => InitialScreeningListViewModel()),
         ChangeNotifierProvider(create: (context) => HomeViewModel()),
         ChangeNotifierProvider(create: (context) => HospitalManagementViewModel()),
         ChangeNotifierProvider(create: (context) => CampusManagementViewModel()),
@@ -144,6 +147,23 @@ void main() async {
     ),
   );
 }
+
+/// 四类按钮（Filled/Elevated/Outlined/Text）统一主题：文字随 FontProvider
+/// 缩放 + 统一最小尺寸 64×36（全局操作按钮高度一致，见 AGENTS.md
+/// 「统一按钮高度」；紧凑/展示型场景需在业务代码显式覆盖并注明原因）。
+///
+/// `tapTargetSize: shrinkWrap` 取消 M3 默认 padded 的 48 触达下限——
+/// 否则 minimumSize(36) 会被抬到 48；`visualDensity: standard` 钉死
+/// 密度——visualDensity 会按密度直接增减最小约束（compact 使高度
+/// 变 28），按钮上禁用业务侧 density，紧凑间距用 padding 调整。
+ButtonStyle _unifiedButtonStyle(double fontScale, ThemeData baseTheme) => ButtonStyle(
+  textStyle: WidgetStatePropertyAll<TextStyle>(
+    TextStyle(fontSize: (baseTheme.textTheme.bodyMedium?.fontSize ?? 14) * fontScale),
+  ),
+  minimumSize: const WidgetStatePropertyAll<Size>(Size(64, 36)),
+  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+  visualDensity: VisualDensity.standard,
+);
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -228,81 +248,17 @@ class MyApp extends StatelessWidget {
           title: 'AiCMHCS智慧儿童孤独症管理系统',
           theme: baseTheme.copyWith(
             textTheme: textTheme,
-            filledButtonTheme: FilledButtonThemeData(
-              style: ButtonStyle(
-                textStyle: WidgetStatePropertyAll<TextStyle>(
-                  TextStyle(
-                    fontSize: (baseTheme.textTheme.bodyMedium?.fontSize ?? 14) * fontScale,
-                  ),
-                ),
-              ),
-            ),
-            elevatedButtonTheme: ElevatedButtonThemeData(
-              style: ButtonStyle(
-                textStyle: WidgetStatePropertyAll<TextStyle>(
-                  TextStyle(
-                    fontSize: (baseTheme.textTheme.bodyMedium?.fontSize ?? 14) * fontScale,
-                  ),
-                ),
-              ),
-            ),
-            outlinedButtonTheme: OutlinedButtonThemeData(
-              style: ButtonStyle(
-                textStyle: WidgetStatePropertyAll<TextStyle>(
-                  TextStyle(
-                    fontSize: (baseTheme.textTheme.bodyMedium?.fontSize ?? 14) * fontScale,
-                  ),
-                ),
-              ),
-            ),
-            textButtonTheme: TextButtonThemeData(
-              style: ButtonStyle(
-                textStyle: WidgetStatePropertyAll<TextStyle>(
-                  TextStyle(
-                    fontSize: (baseTheme.textTheme.bodyMedium?.fontSize ?? 14) * fontScale,
-                  ),
-                ),
-              ),
-            ),
+            filledButtonTheme: FilledButtonThemeData(style: _unifiedButtonStyle(fontScale, baseTheme)),
+            elevatedButtonTheme: ElevatedButtonThemeData(style: _unifiedButtonStyle(fontScale, baseTheme)),
+            outlinedButtonTheme: OutlinedButtonThemeData(style: _unifiedButtonStyle(fontScale, baseTheme)),
+            textButtonTheme: TextButtonThemeData(style: _unifiedButtonStyle(fontScale, baseTheme)),
           ),
           darkTheme: baseTheme.copyWith(
             textTheme: textTheme,
-            filledButtonTheme: FilledButtonThemeData(
-              style: ButtonStyle(
-                textStyle: WidgetStatePropertyAll<TextStyle>(
-                  TextStyle(
-                    fontSize: (baseTheme.textTheme.bodyMedium?.fontSize ?? 14) * fontScale,
-                  ),
-                ),
-              ),
-            ),
-            elevatedButtonTheme: ElevatedButtonThemeData(
-              style: ButtonStyle(
-                textStyle: WidgetStatePropertyAll<TextStyle>(
-                  TextStyle(
-                    fontSize: (baseTheme.textTheme.bodyMedium?.fontSize ?? 14) * fontScale,
-                  ),
-                ),
-              ),
-            ),
-            outlinedButtonTheme: OutlinedButtonThemeData(
-              style: ButtonStyle(
-                textStyle: WidgetStatePropertyAll<TextStyle>(
-                  TextStyle(
-                    fontSize: (baseTheme.textTheme.bodyMedium?.fontSize ?? 14) * fontScale,
-                  ),
-                ),
-              ),
-            ),
-            textButtonTheme: TextButtonThemeData(
-              style: ButtonStyle(
-                textStyle: WidgetStatePropertyAll<TextStyle>(
-                  TextStyle(
-                    fontSize: (baseTheme.textTheme.bodyMedium?.fontSize ?? 14) * fontScale,
-                  ),
-                ),
-              ),
-            ),
+            filledButtonTheme: FilledButtonThemeData(style: _unifiedButtonStyle(fontScale, baseTheme)),
+            elevatedButtonTheme: ElevatedButtonThemeData(style: _unifiedButtonStyle(fontScale, baseTheme)),
+            outlinedButtonTheme: OutlinedButtonThemeData(style: _unifiedButtonStyle(fontScale, baseTheme)),
+            textButtonTheme: TextButtonThemeData(style: _unifiedButtonStyle(fontScale, baseTheme)),
           ),
           themeMode: ThemeMode.system,
           home: const LoginPage(),

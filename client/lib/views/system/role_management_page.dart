@@ -195,9 +195,6 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
         ),
         const SizedBox(width: 4),
         FilledButton.icon(
-          style: FilledButton.styleFrom(
-            visualDensity: VisualDensity.compact,
-          ),
           onPressed: enabled && viewModel.permDirty ? viewModel.savePermissions : null,
           icon: viewModel.permBusy
               ? const SizedBox(

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:common/model.dart';
 import 'package:server/database/engine/database_gateway.dart';
+import 'package:server/utils/field_cipher.dart';
 import 'package:server/utils/uuid_util.dart';
 
 /// 孤独症初筛业务异常：httpStatus / code / message 直接映射到 HTTP 响应
@@ -113,6 +114,80 @@ class InitialScreeningService {
       [childId.trim(), scope],
     );
     return result.rowsAsMaps.map(_fromRow).toList(growable: false);
+  }
+
+  /// 侧边栏「初筛儿童」列表：本院全部初筛记录按检查日期倒序分页，经
+  /// CHILD_ID LEFT JOIN CHILD_INFO 取儿童姓名（NAME 为 FieldCipher 密文，
+  /// 逐一解密明文下发；儿童档案缺失时显示「（已删除）」）。日期区间
+  /// 均不传时查询全部记录。
+  ///param hospId: 登录用户所属医院 ID（为空返回空结果）
+  ///param startDate: 起始日期（yyyy-MM-dd，可空）
+  ///param endDate: 截止日期（yyyy-MM-dd，可空）
+  ///param page: 页码（1 基，小于 1 按 1 处理）
+  ///param pageSize: 每页条数（夹取 1-100）
+  ///param cipher: 字段加密工具（解密儿童姓名）
+  ///returns: (记录列表, 总条数, 实际页码, 实际页大小)
+  Future<(List<InitialScreeningListItem>, int, int, int)> listForSidebar({
+    required String hospId,
+    String? startDate,
+    String? endDate,
+    required int page,
+    required int pageSize,
+    required FieldCipher cipher,
+  }) async {
+    final scope = hospId.trim();
+    final safePageSize = pageSize.clamp(1, 100);
+    final safePage = page < 1 ? 1 : page;
+    if (scope.isEmpty) {
+      return (<InitialScreeningListItem>[], 0, safePage, safePageSize);
+    }
+    final offset = (safePage - 1) * safePageSize;
+
+    final conditions = <String>['S.HOSP_ID = ?'];
+    final params = <Object?>[scope];
+    if (startDate != null && startDate.isNotEmpty) {
+      conditions.add('S.CHECK_DATE >= ?');
+      params.add(startDate);
+    }
+    if (endDate != null && endDate.isNotEmpty) {
+      conditions.add('S.CHECK_DATE <= ?');
+      params.add(endDate);
+    }
+    final where = conditions.join(' AND ');
+
+    final countResult = await _db.query(
+      'SELECT COUNT(*) AS CNT FROM ASD_INITIAL_SCREENING S WHERE $where',
+      params,
+    );
+    final total = int.tryParse(countResult.rowsAsMaps.first['CNT']?.trim() ?? '') ?? 0;
+
+    // 页码为服务端夹取后的整数（无注入面），LIMIT/OFFSET 直接内联：
+    // 达梦对 LIMIT 子句绑定参数无验证先例，内联整数在达梦 / SQLite /
+    // PostgreSQL 三方言下语义确定一致（同 ChildService.advancedQuery）。
+    final result = await _db.query(
+      'SELECT S.ID, S.CHILD_ID, C.NAME AS CHILD_NAME_CIPHER, S.CHECK_DATE, '
+      'S.CHECK_MONTH, S.CHECK_RESULT FROM ASD_INITIAL_SCREENING S '
+      'LEFT JOIN CHILD_INFO C ON C.ID = S.CHILD_ID '
+      'WHERE $where ORDER BY S.CHECK_DATE DESC, S.ID DESC '
+      'LIMIT $safePageSize OFFSET $offset',
+      params,
+    );
+    final records = <InitialScreeningListItem>[];
+    for (final row in result.rowsAsMaps) {
+      final cipherText = row['CHILD_NAME_CIPHER'];
+      final name = cipherText == null || cipherText.isEmpty ? '（已删除）' : (await cipher.open(FieldCipher.childNamePurpose, cipherText)) ?? '';
+      records.add(
+        InitialScreeningListItem(
+          id: row['ID'] ?? '',
+          childId: row['CHILD_ID'] ?? '',
+          childName: name,
+          checkDate: row['CHECK_DATE'] ?? '',
+          checkMonth: int.tryParse(row['CHECK_MONTH']?.trim() ?? '') ?? 0,
+          checkResult: row['CHECK_RESULT'] ?? '',
+        ),
+      );
+    }
+    return (records, total, safePage, safePageSize);
   }
 
   /// 查询指定月龄的预警征象条目（按条目序号升序；基础数据由运维侧

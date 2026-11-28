@@ -122,7 +122,7 @@ class _ChildQuickSearchFieldState extends State<ChildQuickSearchField> {
                 style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer),
               ),
               style: OutlinedButton.styleFrom(
-                visualDensity: VisualDensity.compact,
+                // 高度随全局统一按钮主题（勿加 visualDensity，会改变高度）
                 side: BorderSide(color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.4)),
               ),
             ),
